@@ -12,3 +12,5 @@ Rôle : **O** = observateur, **I** = implémenteur (voir `docs/CLEAN_ROOM.md`, s
 | 2026-10-13 | Manuel Resolume 4 en PDF, présent dans le dossier de travail initial | Public, protégé ; exclu du dépôt | Non ouvert par Claude Code. À confirmer par l'observateur : consulté ou non | @ouimarcelin (O) |
 | 2026-10-13 | `docs/SPEC.md` | Projet | Base de la mise en place du dépôt | Claude Code (I) |
 | 2026-10-13 | Textes de licence MIT et Apache 2.0, API GitHub `licenses` | Textes de licence standard | `LICENSE-MIT`, `LICENSE-APACHE` | Claude Code (I) |
+| 2026-10-13 | W3C *Compositing and Blending Level 1* (formules générales, connues de mémoire, non relues en ligne) | Spécification publique du W3C | Formules de mixage de `crates/render` (ADR 0004) | Claude Code (I) |
+| 2026-10-13 | Code source de la crate `wgpu` 26 et `wgpu-types` 26 (registre Cargo local) | MIT / Apache 2.0 | Signatures de l'API (`PollType`, `RenderPassColorAttachment`) | Claude Code (I) |
