@@ -10,7 +10,8 @@ use prism_core::{
 };
 use prism_render::reference::{self, Rgba};
 use prism_render::{
-    Compositor, Gpu, LayerInput, WORKING_FORMAT, plan_layers, read_texture, solid_color_texture,
+    Compositor, Gpu, LayerInput, Transition, WORKING_FORMAT, plan_layers, read_texture,
+    solid_color_texture,
 };
 
 /// Half-float precision on values up to 2.0.
@@ -50,11 +51,7 @@ fn layer(gpu: &Gpu, color: Rgba, opacity: f32, blend_mode: BlendMode) -> Layer {
 fn assert_composite(gpu: &Gpu, layers: &[Layer], expected: Rgba) {
     let inputs: Vec<_> = layers
         .iter()
-        .map(|layer| LayerInput {
-            texture: &layer.view,
-            opacity: layer.opacity,
-            blend_mode: layer.blend_mode,
-        })
+        .map(|layer| LayerInput::new(&layer.view, layer.opacity, layer.blend_mode))
         .collect();
     let mut compositor = Compositor::new(&gpu.device, SIZE);
     let output = compositor.render(&gpu.device, &gpu.queue, &inputs);
@@ -196,10 +193,9 @@ fn composition_state_drives_the_mix() {
     let plan = plan_layers(&comp);
     let inputs: Vec<_> = plan
         .iter()
-        .map(|p| LayerInput {
-            texture: if p.slot.layer == ids[0] { &red } else { &blue },
-            opacity: p.opacity,
-            blend_mode: p.blend_mode,
+        .map(|p| {
+            let texture = if p.slot.layer == ids[0] { &red } else { &blue };
+            LayerInput::new(texture, p.opacity, p.blend_mode)
         })
         .collect();
     let mut compositor = Compositor::new(&gpu.device, SIZE);
@@ -213,5 +209,41 @@ fn composition_state_drives_the_mix() {
             (pixel[channel] - expected[channel]).abs() < TOLERANCE,
             "expected {expected:?}, got {pixel:?}"
         );
+    }
+}
+
+#[test]
+fn transition_mixes_previous_and_new_clip_before_blending() {
+    let Some(gpu) = gpu() else { return };
+    let base = layer(&gpu, BASE, 1.0, BlendMode::Normal);
+    let previous = layer(&gpu, [1.0, 0.0, 0.0, 1.0], 1.0, BlendMode::Normal);
+    let current = layer(&gpu, [0.0, 0.0, 1.0, 1.0], 1.0, BlendMode::Normal);
+    for (progress, mode, opacity) in [
+        (0.25, BlendMode::Normal, 1.0),
+        (0.5, BlendMode::Multiply, 0.8),
+        (0.0, BlendMode::Screen, 1.0),
+    ] {
+        let inputs = [
+            LayerInput::new(&base.view, 1.0, BlendMode::Normal),
+            LayerInput {
+                transition: Some(Transition {
+                    previous: &previous.view,
+                    progress,
+                }),
+                ..LayerInput::new(&current.view, opacity, mode)
+            },
+        ];
+        let mut compositor = Compositor::new(&gpu.device, SIZE);
+        let output = compositor.render(&gpu.device, &gpu.queue, &inputs);
+        let pixel = read_texture(&gpu.device, &gpu.queue, output).unwrap()[0];
+
+        let mixed = reference::transition([1.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 1.0], progress);
+        let expected = reference(&[(BASE, 1.0, BlendMode::Normal), (mixed, opacity, mode)]);
+        for channel in 0..4 {
+            assert!(
+                (pixel[channel] - expected[channel]).abs() < TOLERANCE,
+                "progress {progress}: expected {expected:?}, got {pixel:?}"
+            );
+        }
     }
 }

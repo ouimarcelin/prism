@@ -30,6 +30,15 @@ fn blend(cb: f32, cs: f32, mode: BlendMode) -> f32 {
     }
 }
 
+/// Layer color during a transition: `previous` mixed with `current`.
+pub fn transition(previous: Rgba, current: Rgba, progress: f32) -> Rgba {
+    let mut out = [0.0; 4];
+    for i in 0..4 {
+        out[i] = previous[i] * (1.0 - progress) + current[i] * progress;
+    }
+    out
+}
+
 /// Composites `layer`, scaled by `opacity`, over `below`.
 pub fn composite(below: Rgba, layer: Rgba, opacity: f32, mode: BlendMode) -> Rgba {
     let alpha_s = layer[3] * opacity;

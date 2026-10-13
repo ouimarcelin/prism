@@ -7,14 +7,16 @@
 struct LayerParams {
     opacity: f32,
     blend_mode: u32,
-    _pad0: u32,
-    _pad1: u32,
+    // Transition from the previous clip: 1.0 when there is none.
+    progress: f32,
+    _pad: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: LayerParams;
 @group(0) @binding(1) var below_texture: texture_2d<f32>;
 @group(0) @binding(2) var layer_texture: texture_2d<f32>;
 @group(0) @binding(3) var layer_sampler: sampler;
+@group(0) @binding(4) var previous_texture: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -64,7 +66,9 @@ fn blend(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let below = textureLoad(below_texture, vec2<i32>(in.position.xy), 0);
-    let layer = textureSample(layer_texture, layer_sampler, in.uv);
+    let current = textureSample(layer_texture, layer_sampler, in.uv);
+    let previous = textureSample(previous_texture, layer_sampler, in.uv);
+    let layer = mix(previous, current, params.progress);
 
     let alpha_s = layer.a * params.opacity;
     let alpha_b = below.a;

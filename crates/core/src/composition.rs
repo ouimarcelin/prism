@@ -429,6 +429,7 @@ impl Composition {
             return Ok(false);
         }
         layer.active = Some(slot.column);
+        layer.trigger_count += 1;
         Ok(true)
     }
 
@@ -438,6 +439,9 @@ impl Composition {
         let column = self.column_index(id).ok_or(ModelError::UnknownColumn(id))?;
         for layer in &mut self.layers {
             layer.active = layer.clips[column].as_ref().map(|_| id);
+            if layer.active.is_some() {
+                layer.trigger_count += 1;
+            }
         }
         Ok(())
     }
@@ -680,6 +684,24 @@ mod tests {
         comp.trigger_column(second).unwrap();
         let active: Vec<_> = comp.layers().iter().map(Layer::active_column).collect();
         assert_eq!(active, [Some(second), None, Some(second)]);
+    }
+
+    #[test]
+    fn every_start_increases_the_trigger_count() {
+        let mut comp = grid(2, 2);
+        let s = slot(&comp, 0, 0);
+        comp.set_clip(s, Some(Clip::from_file("/a.mov"))).unwrap();
+        assert_eq!(comp.layers()[0].trigger_count(), 0);
+        comp.trigger_clip(s).unwrap();
+        comp.trigger_clip(s).unwrap();
+        assert_eq!(comp.layers()[0].trigger_count(), 2);
+        comp.trigger_column(s.column).unwrap();
+        assert_eq!(comp.layers()[0].trigger_count(), 3);
+        // The second layer has no clip in this column: nothing starts.
+        assert_eq!(comp.layers()[1].trigger_count(), 0);
+        // An empty slot starts nothing either.
+        comp.trigger_clip(slot(&comp, 0, 1)).unwrap();
+        assert_eq!(comp.layers()[0].trigger_count(), 3);
     }
 
     #[test]
