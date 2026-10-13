@@ -73,10 +73,12 @@ impl Gpu {
             })
             .await
             .map_err(GpuError::NoAdapter)?;
+        // HAP frames are uploaded block-compressed when the GPU allows it.
+        let required_features = adapter.features() & wgpu::Features::TEXTURE_COMPRESSION_BC;
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("prism"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 // Large compositions need the adapter's real texture limits.
                 required_limits: adapter.limits(),
                 ..Default::default()
@@ -87,6 +89,15 @@ impl Gpu {
             device,
             queue,
         })
+    }
+}
+
+impl Gpu {
+    /// Whether BC1/BC3/BC4/BC7 textures can be uploaded as is.
+    pub fn supports_block_compression(&self) -> bool {
+        self.device
+            .features()
+            .contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
     }
 }
 
