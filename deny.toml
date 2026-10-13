@@ -3,6 +3,13 @@
 
 [graph]
 all-features = true
+# Platforms Prism ships on (docs/SPEC.md): macOS first, Windows next.
+# Linux-only dependencies are checked once Linux becomes a target.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
 
 [advisories]
 yanked = "deny"

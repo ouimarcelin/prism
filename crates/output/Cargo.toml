@@ -1,0 +1,20 @@
+[package]
+name = "prism-output"
+description = "Prism outputs: presentation of the program image to windows."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+prism-engine = { path = "../engine" }
+prism-render = { path = "../render" }
+thiserror.workspace = true
+
+[dev-dependencies]
+prism-core = { path = "../core" }
+
+[lints]
+workspace = true

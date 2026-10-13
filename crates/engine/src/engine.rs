@@ -16,8 +16,17 @@ use crate::random::Random;
 use crate::status::{EngineStatus, LayerStatus};
 use crate::stream::ClipStream;
 
+/// A destination of the program image: a window, later a network stream.
+///
+/// The render thread calls [`Output::present`] after every frame, so it must
+/// not wait long: skip the frame rather than block when the destination is
+/// not ready.
+pub trait Output: Send {
+    /// Shows `program`.
+    fn present(&mut self, gpu: &Gpu, program: &ProgramOutput);
+}
+
 /// Instruction sent to the render thread.
-#[derive(Debug)]
 pub enum Command {
     /// Plays this composition from now on. Clips keep playing when they are
     /// still triggered; [`prism_core::Layer::trigger_count`] tells the engine
@@ -45,6 +54,35 @@ pub enum Command {
         /// Cue point index.
         index: usize,
     },
+    /// Presents the program to `output` after every frame, from now on.
+    AddOutput {
+        /// Identifier chosen by the caller, to remove the output later.
+        id: u64,
+        /// The destination.
+        output: Box<dyn Output>,
+    },
+    /// Stops presenting to an output and drops it.
+    RemoveOutput {
+        /// Identifier given to [`Command::AddOutput`].
+        id: u64,
+    },
+}
+
+impl std::fmt::Debug for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::SetComposition(_) => f.write_str("SetComposition"),
+            Self::Seek {
+                layer,
+                position,
+                hold,
+            } => write!(f, "Seek({layer}, {position}, hold: {hold})"),
+            Self::Release { layer } => write!(f, "Release({layer})"),
+            Self::JumpToCue { layer, index } => write!(f, "JumpToCue({layer}, {index})"),
+            Self::AddOutput { id, .. } => write!(f, "AddOutput({id})"),
+            Self::RemoveOutput { id } => write!(f, "RemoveOutput({id})"),
+        }
+    }
 }
 
 /// The mixed image of the composition, refreshed after every frame.
@@ -209,6 +247,7 @@ pub struct EngineState {
     uploader: FrameUploader,
     transparent: wgpu::TextureView,
     program: Arc<ProgramOutput>,
+    outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
     last_tick: Option<Instant>,
     stats: Stats,
@@ -234,6 +273,7 @@ impl EngineState {
             uploader,
             transparent,
             program,
+            outputs: Vec::new(),
             random: Random::new(seed),
             last_tick: None,
             stats: Stats {
@@ -297,7 +337,17 @@ impl EngineState {
                     stream.seek(position, false);
                 }
             }
+            Command::AddOutput { id, output } => {
+                self.outputs.retain(|(existing, _)| *existing != id);
+                self.outputs.push((id, output));
+            }
+            Command::RemoveOutput { id } => self.outputs.retain(|(existing, _)| *existing != id),
         }
+    }
+
+    /// Number of outputs presented after every frame.
+    pub fn output_count(&self) -> usize {
+        self.outputs.len()
     }
 
     fn current_stream(&mut self, layer: LayerId) -> Option<&mut ClipStream> {
@@ -444,8 +494,12 @@ impl EngineState {
             },
         );
         gpu.queue.submit([encoder.finish()]);
+        let work = started.elapsed();
 
-        self.update_stats(now, started.elapsed());
+        for (_, output) in &mut self.outputs {
+            output.present(&gpu, &self.program);
+        }
+        self.update_stats(now, work);
     }
 
     fn update_stats(&mut self, now: Instant, work: Duration) {
