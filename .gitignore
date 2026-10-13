@@ -1,0 +1,15 @@
+# Rust
+/target/
+
+# Third-party reference documents: never in the repository (docs/CLEAN_ROOM.md)
+/private/
+/*.pdf
+
+# Local media used for manual tests
+/media/
+
+# macOS
+.DS_Store
+
+# Local Claude Code settings
+.claude/settings.local.json
