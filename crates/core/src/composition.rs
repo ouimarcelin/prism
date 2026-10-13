@@ -230,10 +230,10 @@ impl Composition {
     /// Adds `layer_count` layers and `column_count` columns with default names.
     pub fn with_grid(mut self, layer_count: usize, column_count: usize) -> Self {
         for i in 0..column_count {
-            self.add_column(format!("Column {}", i + 1));
+            self.add_column(format!("Colonne {}", i + 1));
         }
         for i in 0..layer_count {
-            self.add_layer(format!("Layer {}", i + 1));
+            self.add_layer(format!("Couche {}", i + 1));
         }
         self
     }
@@ -497,6 +497,22 @@ impl Composition {
         })
     }
 
+    /// Whether both compositions hold the same saved content, ignoring what
+    /// is playing: triggering clips does not modify a project.
+    pub fn same_content(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.resolution == other.resolution
+            && self.frame_rate == other.frame_rate
+            && self.columns == other.columns
+            && self.crossfader == other.crossfader
+            && self.layers.len() == other.layers.len()
+            && self
+                .layers
+                .iter()
+                .zip(&other.layers)
+                .all(|(a, b)| a.same_content(b))
+    }
+
     /// Every clip of the grid, mutable.
     pub fn clips_mut(&mut self) -> impl Iterator<Item = &mut Clip> {
         self.layers
@@ -702,6 +718,19 @@ mod tests {
         // An empty slot starts nothing either.
         comp.trigger_clip(slot(&comp, 0, 1)).unwrap();
         assert_eq!(comp.layers()[0].trigger_count(), 3);
+    }
+
+    #[test]
+    fn triggering_does_not_change_the_content() {
+        let mut comp = grid(1, 1);
+        let s = slot(&comp, 0, 0);
+        comp.set_clip(s, Some(Clip::from_file("/a.mov"))).unwrap();
+        let saved = comp.clone();
+        comp.trigger_clip(s).unwrap();
+        assert_ne!(comp, saved);
+        assert!(comp.same_content(&saved));
+        comp.layer_mut(s.layer).unwrap().opacity = Unit::new(0.5);
+        assert!(!comp.same_content(&saved));
     }
 
     #[test]

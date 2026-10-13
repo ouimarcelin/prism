@@ -95,4 +95,18 @@ impl Layer {
     pub fn trigger_count(&self) -> u64 {
         self.trigger_count
     }
+
+    /// Whether both layers hold the same saved content, ignoring what is
+    /// playing.
+    pub fn same_content(&self, other: &Self) -> bool {
+        self.id == other.id
+            && self.name == other.name
+            && self.opacity == other.opacity
+            && self.blend_mode == other.blend_mode
+            && self.bypass == other.bypass
+            && self.solo == other.solo
+            && self.crossfader_side == other.crossfader_side
+            && self.transition_ms == other.transition_ms
+            && self.clips == other.clips
+    }
 }
