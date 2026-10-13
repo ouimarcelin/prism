@@ -5,6 +5,11 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ## [Non publié]
 
+### Modifié
+
+- wgpu 30 au lieu de 26, Rust 1.95 minimum, en vue de l'interface egui 0.36 (ADR 0005).
+- CI : seules les exécutions de pull request remplacées sont annulées ; chaque push sur `main` garde sa propre exécution complète.
+
 ### Ajouté
 
 - Lecture des fichiers HAP, HAP Alpha, HAP Q et HAP Q Alpha (crate `prism-media`) : lecteur QuickTime/MP4 avec accès direct à toute image, décodeur de trames selon la spécification publique HAP.

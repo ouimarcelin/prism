@@ -266,8 +266,10 @@ fn snappy_into(compressed: &[u8], out: &mut Vec<u8>, replace: bool) -> Result<()
 
 fn le_u32_table(table: &[u8]) -> impl Iterator<Item = usize> + '_ {
     table
-        .chunks_exact(4)
-        .map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]) as usize)
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|bytes| u32::from_le_bytes(*bytes) as usize)
 }
 
 /// Decodes frame data split into independently compressed chunks.
