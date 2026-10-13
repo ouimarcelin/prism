@@ -1,0 +1,29 @@
+[package]
+name = "prism-media"
+description = "Media decoding for Prism: QuickTime container reading and HAP frame decoding."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Writers for HAP frames and QuickTime files, used by tests of this and other crates.
+test-support = []
+
+[dependencies]
+snap = "1.1.2"
+thiserror.workspace = true
+
+[dev-dependencies]
+# Integration tests and examples use the test writers.
+prism-media = { path = ".", features = ["test-support"] }
+tempfile.workspace = true
+
+[[example]]
+name = "make-test-clip"
+required-features = ["test-support"]
+
+[lints]
+workspace = true

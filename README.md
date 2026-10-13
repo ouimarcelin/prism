@@ -38,6 +38,20 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/check-clean-room.sh
 ```
 
+## Tester la lecture HAP
+
+Générer une mire HAP 1080p de 4 secondes (variantes : `hap`, `hap-alpha`, `hap-q`, `hap-q-alpha`) :
+
+```bash
+cargo run --release -p prism-media --features test-support --example make-test-clip -- media/mire.mov hap-q
+```
+
+Vérifier un fichier HAP (le vôtre ou la mire) : propriétés, vitesse de décodage et d'envoi au GPU, capture PNG d'une image :
+
+```bash
+cargo run --release -p prism-render --example hap-check -- media/mire.mov 30 media/mire.png
+```
+
 ## Développement clean room
 
 Prism est écrit uniquement à partir de sources publiques et de descriptions de comportement rédigées par l'équipe. Aucun code, binaire, fichier, visuel ou média de Resolume n'est utilisé. Détails et preuves : [`docs/CLEAN_ROOM.md`](docs/CLEAN_ROOM.md).

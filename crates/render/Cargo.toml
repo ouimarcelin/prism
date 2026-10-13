@@ -13,8 +13,13 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 half = "2.7.1"
 pollster = "1.0.1"
 prism-core = { path = "../core" }
+prism-media = { path = "../media" }
 thiserror.workspace = true
 wgpu = "26.0.1"
+
+[dev-dependencies]
+png = "0.18.1"
+prism-media = { path = "../media", features = ["test-support"] }
 
 [lints]
 workspace = true
