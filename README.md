@@ -7,7 +7,7 @@ Logiciel open source de VJing et de projection mapping, écrit en Rust, avec ren
 
 ## État
 
-Phase 0 : mise en place du dépôt. Aucune fonction utilisable pour l'instant.
+Phase 1 en cours : modèle de données et sauvegarde des projets. Aucune application utilisable pour l'instant.
 Feuille de route : [`docs/SPEC.md`](docs/SPEC.md), section « Plan de développement ».
 
 | Phase | Contenu | Version |
@@ -23,8 +23,20 @@ Plateforme cible : macOS 13+ (Apple Silicon et Intel) d'abord, Windows ensuite.
 
 ## Compiler
 
-Prérequis : [Rust stable](https://rustup.rs), Xcode Command Line Tools, FFmpeg (`brew install ffmpeg pkg-config`).
-Les commandes de compilation seront ajoutées avec le premier code (phase 1).
+Prérequis : [Rust stable](https://rustup.rs) et les Xcode Command Line Tools.
+
+```bash
+cargo build --workspace --release
+cargo test --workspace
+```
+
+Avant chaque pull request :
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+scripts/check-clean-room.sh
+```
 
 ## Développement clean room
 
