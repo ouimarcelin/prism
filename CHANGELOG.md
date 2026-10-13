@@ -7,6 +7,9 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Lecture des fichiers HAP, HAP Alpha, HAP Q et HAP Q Alpha (crate `prism-media`) : lecteur QuickTime/MP4 avec accès direct à toute image, décodeur de trames selon la spécification publique HAP.
+- Envoi des trames HAP au GPU sans décompression sur le processeur (textures BC), conversion en texture de couche ; lecture d'un fichier HAP jusqu'au compositeur.
+- Outils de test manuel : `make-test-clip` (génère des mires HAP) et `hap-check` (propriétés, vitesse, capture PNG).
 - Crate `prism-render` : mixage des couches sur le GPU (wgpu, Metal), opacité, modes normal, add, multiply et screen, crossfader appliqué via la composition ; images intermédiaires en 16 bits flottants ; tests GPU comparés à une référence CPU (ADR 0004).
 - Workspace Cargo et crate `prism-core` : composition (résolution, fréquence), grille couches × colonnes, crossfader A/B à trois courbes, réglages de couche (opacité, mode de fusion, solo, bypass, transition), réglages de lecture des clips, déclenchement d'un clip ou d'une colonne.
 - Fichier projet `.prism` en JSON versionné : chemins relatifs au dossier du projet, écriture atomique, détection des médias manquants (ADR 0002).
