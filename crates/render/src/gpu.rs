@@ -38,12 +38,15 @@ pub enum ReadbackError {
     MapRange(#[from] wgpu::MapRangeError),
 }
 
-/// Adapter, device and queue shared by the render engine and the outputs.
+/// Instance, adapter, device and queue shared by the render engine, the
+/// outputs and the interface.
 ///
 /// `wgpu` objects are thread-safe: the render thread and the interface can
 /// both hold references to the same device.
 #[derive(Debug)]
 pub struct Gpu {
+    /// Entry point, needed to create window surfaces.
+    pub instance: wgpu::Instance,
     /// Physical GPU.
     pub adapter: wgpu::Adapter,
     /// Logical device.
@@ -89,6 +92,7 @@ impl Gpu {
             })
             .await?;
         Ok(Self {
+            instance: instance.clone(),
             adapter,
             device,
             queue,

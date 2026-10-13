@@ -17,5 +17,5 @@ mod status;
 mod stream;
 mod worker;
 
-pub use engine::{Command, Engine, EngineState, ProgramOutput};
+pub use engine::{Command, Engine, EngineState, Output, ProgramOutput};
 pub use status::{ClipState, EngineStatus, LayerStatus};

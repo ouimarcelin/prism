@@ -7,11 +7,13 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- `cargo-deny` ne vérifie que les plateformes livrées (macOS, Windows).
 - wgpu 30 au lieu de 26, Rust 1.95 minimum, en vue de l'interface egui 0.36 (ADR 0005).
 - CI : seules les exécutions de pull request remplacées sont annulées ; chaque push sur `main` garde sa propre exécution complète.
 
 ### Ajouté
 
+- Application `prism` : fenêtre de contrôle avec aperçu, sortie plein écran sur un second écran, vidéos ou projet passés en ligne de commande, raccourcis clavier (colonnes 1 à 9, Espace, F, Échap) ; sorties présentées par le thread de rendu avec synchronisation verticale (crate `prism-output`, ADR 0007).
 - Moteur de lecture (crate `prism-engine`) : thread de rendu à la fréquence de la composition, lecture avant, arrière, aléatoire, pause, vitesse, boucle, aller-retour, une fois, points d'entrée et de sortie, scratch, points de repère ; un thread de décodage par clip ; fondu entre clips ; état publié pour l'interface (ADR 0006).
 - Outil `engine-run` : lecture de 1 à 4 fichiers HAP en 1080p60 sans fenêtre, avec verdict de fluidité.
 - Lecture des fichiers HAP, HAP Alpha, HAP Q et HAP Q Alpha (crate `prism-media`) : lecteur QuickTime/MP4 avec accès direct à toute image, décodeur de trames selon la spécification publique HAP.

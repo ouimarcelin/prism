@@ -38,3 +38,4 @@ Ce que cela implique pour la suite.
 | [0004](0004-espace-de-mixage.md) | Espace de mixage et pipeline de composition | Acceptée |
 | [0005](0005-wgpu-30-et-egui.md) | wgpu 30, egui 0.36 et Rust 1.95 | Acceptée |
 | [0006](0006-moteur-de-lecture.md) | Moteur de lecture et thread de rendu | Acceptée |
+| [0007](0007-sorties-et-application.md) | Sorties présentées par le thread de rendu | Acceptée |

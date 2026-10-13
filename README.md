@@ -38,6 +38,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/check-clean-room.sh
 ```
 
+## Lancer Prism
+
+```bash
+cargo run --release -p prism-app -- media/a.mov media/b.mov media/c.mov media/d.mov
+```
+
+Les vidéos HAP vont dans la première colonne, une par couche, et la première colonne démarre. La fenêtre de contrôle montre l'aperçu ; `F` ouvre la sortie plein écran sur le second écran (ou `--sortie N` au lancement), `Échap` la ferme, `1` à `9` déclenchent les colonnes, `Espace` arrête tout. `prism --help` liste les options.
+
 ## Tester la lecture HAP
 
 Générer une mire HAP 1080p de 4 secondes (variantes : `hap`, `hap-alpha`, `hap-q`, `hap-q-alpha`) :

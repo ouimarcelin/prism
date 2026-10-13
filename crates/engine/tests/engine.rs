@@ -8,11 +8,12 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use prism_core::{Clip, Composition, Direction, FrameRate, LoopMode, Resolution, Slot};
-use prism_engine::{ClipState, Command, Engine, EngineState, LayerStatus};
+use prism_engine::{ClipState, Command, Engine, EngineState, LayerStatus, Output, ProgramOutput};
 use prism_media::BlockFormat;
 use prism_media::test_support::{
     Compression, Image, MovOptions, encode_image, solid_plane, write_mov,
@@ -364,4 +365,41 @@ fn render_thread_runs_at_the_composition_rate() {
     assert_eq!(status.layers[0].state, ClipState::Playing);
     assert_eq!(engine.program().resolution().width, 32);
     drop(engine);
+}
+
+/// Counts the frames presented to it.
+struct CountingOutput(Arc<AtomicUsize>);
+
+impl Output for CountingOutput {
+    fn present(&mut self, _gpu: &Gpu, program: &ProgramOutput) {
+        assert_eq!(program.resolution().width, 32);
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn outputs_receive_every_frame_until_removed() {
+    let Some(gpu) = gpu() else { return };
+    let (comp, _) = composition_with(Clip::from_file("/unused.mov"));
+    let mut driver = Driver::new(gpu, comp);
+    let first = Arc::new(AtomicUsize::new(0));
+    let second = Arc::new(AtomicUsize::new(0));
+    driver.state.apply(Command::AddOutput {
+        id: 1,
+        output: Box::new(CountingOutput(Arc::clone(&first))),
+    });
+    driver.state.apply(Command::AddOutput {
+        id: 2,
+        output: Box::new(CountingOutput(Arc::clone(&second))),
+    });
+    for _ in 0..3 {
+        driver.tick();
+    }
+    driver.state.apply(Command::RemoveOutput { id: 1 });
+    for _ in 0..2 {
+        driver.tick();
+    }
+    assert_eq!(first.load(Ordering::SeqCst), 3);
+    assert_eq!(second.load(Ordering::SeqCst), 5);
+    assert_eq!(driver.state.output_count(), 1);
 }
