@@ -15,7 +15,7 @@ pollster = "1.0.1"
 prism-core = { path = "../core" }
 prism-media = { path = "../media" }
 thiserror.workspace = true
-wgpu = "26.0.1"
+wgpu = "30"
 
 [dev-dependencies]
 png = "0.18.1"

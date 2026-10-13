@@ -91,7 +91,8 @@ fn run(
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)?;
         gpu.queue.submit([encoder.finish()]);
-        gpu.device.poll(prism_render::wgpu::PollType::Wait)?;
+        gpu.device
+            .poll(prism_render::wgpu::PollType::wait_indefinitely())?;
         upload_time += start.elapsed();
     }
     println!(

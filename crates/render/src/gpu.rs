@@ -33,6 +33,9 @@ pub enum ReadbackError {
     /// Mapping the staging buffer failed.
     #[error("cannot map the readback buffer")]
     Map(#[from] wgpu::BufferAsyncError),
+    /// The mapped range could not be accessed.
+    #[error("cannot access the mapped readback buffer")]
+    MapRange(#[from] wgpu::MapRangeError),
 }
 
 /// Adapter, device and queue shared by the render engine and the outputs.
@@ -53,9 +56,9 @@ impl Gpu {
     /// Opens the high-performance GPU without any window surface. Used by
     /// tests, benchmarks and offline rendering.
     pub fn headless() -> Result<Self, GpuError> {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
         pollster::block_on(Self::from_instance(&instance, None))
     }
@@ -70,6 +73,7 @@ impl Gpu {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 force_fallback_adapter: false,
                 compatible_surface,
+                ..Default::default()
             })
             .await
             .map_err(GpuError::NoAdapter)?;
@@ -183,18 +187,20 @@ pub fn read_texture(
     slice.map_async(wgpu::MapMode::Read, move |result| {
         let _ = sender.send(result);
     });
-    device.poll(wgpu::PollType::Wait)?;
+    device.poll(wgpu::PollType::wait_indefinitely())?;
     receiver
         .recv()
         .map_err(|_| ReadbackError::Map(wgpu::BufferAsyncError))??;
 
-    let data = slice.get_mapped_range();
+    let data = slice.get_mapped_range()?;
     let mut pixels = Vec::with_capacity((size.width * size.height) as usize);
     for row in data.chunks_exact(padded_row_bytes as usize) {
-        for texel in row[..row_bytes as usize].chunks_exact(WORKING_FORMAT_BYTES as usize) {
+        // Four little-endian half floats per texel.
+        let (texels, _) = row[..row_bytes as usize].as_chunks::<8>();
+        for texel in texels {
             let mut pixel = [0.0; 4];
-            for (channel, bytes) in pixel.iter_mut().zip(texel.chunks_exact(2)) {
-                *channel = half::f16::from_le_bytes([bytes[0], bytes[1]]).to_f32();
+            for (channel, bytes) in pixel.iter_mut().zip(texel.as_chunks::<2>().0) {
+                *channel = half::f16::from_le_bytes(*bytes).to_f32();
             }
             pixels.push(pixel);
         }

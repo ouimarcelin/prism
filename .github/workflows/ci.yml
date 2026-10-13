@@ -8,9 +8,11 @@ on:
 permissions:
   contents: read
 
+# Only superseded pull request runs are cancelled: every push to main keeps
+# its own complete run.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   clean-room:

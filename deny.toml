@@ -6,11 +6,6 @@ all-features = true
 
 [advisories]
 yanked = "deny"
-ignore = [
-    # Unmaintained, no known vulnerability. Pulled by wgpu 26 through the
-    # metal crate; remove once wgpu is upgraded (see ADR 0004).
-    { id = "RUSTSEC-2024-0436", reason = "transitive via wgpu-hal/metal, unmaintained only" },
-]
 
 [licenses]
 allow = [
