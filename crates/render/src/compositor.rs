@@ -16,6 +16,30 @@ pub struct LayerInput<'a> {
     pub opacity: f32,
     /// Blend mode against the layers below.
     pub blend_mode: BlendMode,
+    /// Clip being replaced, while the layer fades from one clip to the next.
+    pub transition: Option<Transition<'a>>,
+}
+
+impl<'a> LayerInput<'a> {
+    /// A layer showing one frame, without transition.
+    pub fn new(texture: &'a wgpu::TextureView, opacity: f32, blend_mode: BlendMode) -> Self {
+        Self {
+            texture,
+            opacity,
+            blend_mode,
+            transition: None,
+        }
+    }
+}
+
+/// Fade between the previous clip of a layer and its new clip. The layer
+/// shows `previous` mixed with the new frame by `progress`, before blending.
+#[derive(Clone, Copy, Debug)]
+pub struct Transition<'a> {
+    /// Current frame of the clip being replaced.
+    pub previous: &'a wgpu::TextureView,
+    /// `0.0` shows only `previous`, `1.0` only the new clip.
+    pub progress: f32,
 }
 
 #[repr(C)]
@@ -23,7 +47,16 @@ pub struct LayerInput<'a> {
 struct LayerParams {
     opacity: f32,
     blend_mode: u32,
-    _pad: [u32; 2],
+    progress: f32,
+    _pad: u32,
+}
+
+fn unit(value: f32) -> f32 {
+    if value.is_nan() {
+        0.0
+    } else {
+        value.clamp(0.0, 1.0)
+    }
 }
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<LayerParams>() as u64;
@@ -117,6 +150,7 @@ impl Compositor {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                texture_entry(4),
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -212,21 +246,35 @@ impl Compositor {
         queue: &wgpu::Queue,
         layers: &[LayerInput<'_>],
     ) -> &wgpu::Texture {
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("composite"),
+        });
+        self.encode(device, queue, &mut encoder, layers);
+        queue.submit([encoder.finish()]);
+        self.output()
+    }
+
+    /// Records the compositing of `layers` into `encoder`. The result is in
+    /// [`Compositor::output`] once the encoder is submitted. Call it at most
+    /// once per submission: layer parameters are written when it is submitted.
+    pub fn encode(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        layers: &[LayerInput<'_>],
+    ) {
         if layers.len() > self.params_capacity {
             self.params_capacity = layers.len().next_power_of_two();
             self.params =
                 Self::create_params_buffer(device, self.params_capacity, self.params_stride);
         }
         for (index, layer) in layers.iter().enumerate() {
-            let opacity = if layer.opacity.is_nan() {
-                0.0
-            } else {
-                layer.opacity.clamp(0.0, 1.0)
-            };
             let params = LayerParams {
-                opacity,
+                opacity: unit(layer.opacity),
                 blend_mode: blend_code(layer.blend_mode),
-                _pad: [0; 2],
+                progress: layer.transition.map_or(1.0, |t| unit(t.progress)),
+                _pad: 0,
             };
             queue.write_buffer(
                 &self.params,
@@ -235,9 +283,6 @@ impl Compositor {
             );
         }
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("composite"),
-        });
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("background"),
             color_attachments: &[Some(color_attachment(
@@ -277,6 +322,12 @@ impl Compositor {
                         binding: 3,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: wgpu::BindingResource::TextureView(
+                            layer.transition.map_or(layer.texture, |t| t.previous),
+                        ),
+                    },
                 ],
             });
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -298,18 +349,15 @@ impl Compositor {
             drop(pass);
             current = next;
         }
-
-        queue.submit([encoder.finish()]);
         self.output = current;
-        &self.targets[current].texture
     }
 
-    /// Result of the last [`Compositor::render`] call.
+    /// Result of the last [`Compositor::render`] or [`Compositor::encode`].
     pub fn output(&self) -> &wgpu::Texture {
         &self.targets[self.output].texture
     }
 
-    /// View of the result of the last [`Compositor::render`] call.
+    /// View of the result of the last [`Compositor::render`] or [`Compositor::encode`].
     pub fn output_view(&self) -> &wgpu::TextureView {
         &self.targets[self.output].view
     }

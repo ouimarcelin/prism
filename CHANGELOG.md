@@ -12,6 +12,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Moteur de lecture (crate `prism-engine`) : thread de rendu à la fréquence de la composition, lecture avant, arrière, aléatoire, pause, vitesse, boucle, aller-retour, une fois, points d'entrée et de sortie, scratch, points de repère ; un thread de décodage par clip ; fondu entre clips ; état publié pour l'interface (ADR 0006).
+- Outil `engine-run` : lecture de 1 à 4 fichiers HAP en 1080p60 sans fenêtre, avec verdict de fluidité.
 - Lecture des fichiers HAP, HAP Alpha, HAP Q et HAP Q Alpha (crate `prism-media`) : lecteur QuickTime/MP4 avec accès direct à toute image, décodeur de trames selon la spécification publique HAP.
 - Envoi des trames HAP au GPU sans décompression sur le processeur (textures BC), conversion en texture de couche ; lecture d'un fichier HAP jusqu'au compositeur.
 - Outils de test manuel : `make-test-clip` (génère des mires HAP) et `hap-check` (propriétés, vitesse, capture PNG).

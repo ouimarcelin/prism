@@ -53,6 +53,9 @@ pub struct Layer {
     /// Column of the clip currently playing. Runtime state, not saved.
     #[serde(skip)]
     pub(crate) active: Option<ColumnId>,
+    /// Number of clip starts on this layer. Runtime state, not saved.
+    #[serde(skip)]
+    pub(crate) trigger_count: u64,
 }
 
 impl Layer {
@@ -68,6 +71,7 @@ impl Layer {
             transition_ms: 0,
             clips: vec![None; column_count],
             active: None,
+            trigger_count: 0,
         }
     }
 
@@ -84,5 +88,11 @@ impl Layer {
     /// Column of the clip currently playing on this layer.
     pub fn active_column(&self) -> Option<ColumnId> {
         self.active
+    }
+
+    /// Increases every time a clip starts on this layer, including when the
+    /// playing clip is triggered again: the engine then restarts it.
+    pub fn trigger_count(&self) -> u64 {
+        self.trigger_count
     }
 }

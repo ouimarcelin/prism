@@ -718,6 +718,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-engine"
+version = "0.0.0"
+dependencies = [
+ "prism-core",
+ "prism-media",
+ "prism-render",
+ "tempfile",
+]
+
+[[package]]
 name = "prism-media"
 version = "0.0.0"
 dependencies = [

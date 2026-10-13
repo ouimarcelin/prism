@@ -1,0 +1,21 @@
+[package]
+name = "prism-engine"
+description = "Prism playback engine: render thread, clip playback, decoding threads."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+prism-core = { path = "../core" }
+prism-media = { path = "../media" }
+prism-render = { path = "../render" }
+
+[dev-dependencies]
+prism-media = { path = "../media", features = ["test-support"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

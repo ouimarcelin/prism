@@ -294,11 +294,7 @@ fn hap_file_plays_through_the_compositor() {
             .unwrap();
         gpu.queue.submit([encoder.finish()]);
 
-        let layers = [LayerInput {
-            texture: video.view(),
-            opacity: 0.5,
-            blend_mode: BlendMode::Normal,
-        }];
+        let layers = [LayerInput::new(video.view(), 0.5, BlendMode::Normal)];
         let output = compositor.render(&gpu.device, &gpu.queue, &layers);
         let pixels = read_texture(&gpu.device, &gpu.queue, output).unwrap();
 

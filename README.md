@@ -52,6 +52,12 @@ Vérifier un fichier HAP (le vôtre ou la mire) : propriétés, vitesse de déco
 cargo run --release -p prism-render --example hap-check -- media/mire.mov 30 media/mire.png
 ```
 
+Faire tourner le moteur sans fenêtre sur 1 à 4 fichiers HAP (une couche par fichier, 1080p60) et vérifier qu'il tient 60 images/s :
+
+```bash
+cargo run --release -p prism-engine --example engine-run -- --seconds 30 media/a.mov media/b.mov media/c.mov media/d.mov
+```
+
 ## Développement clean room
 
 Prism est écrit uniquement à partir de sources publiques et de descriptions de comportement rédigées par l'équipe. Aucun code, binaire, fichier, visuel ou média de Resolume n'est utilisé. Détails et preuves : [`docs/CLEAN_ROOM.md`](docs/CLEAN_ROOM.md).
