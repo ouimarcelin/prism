@@ -19,6 +19,11 @@ pub struct Preferences {
     pub output_screen: Option<String>,
     /// Duration of the automatic crossfade, in seconds.
     pub crossfade_seconds: f32,
+    /// Duration of the automatic crossfade, in beats.
+    pub crossfade_beats: f32,
+    /// Whether the automatic crossfade lasts [`Preferences::crossfade_beats`]
+    /// beats at the tempo of the composition rather than a time in seconds.
+    pub crossfade_on_beats: bool,
 }
 
 impl Default for Preferences {
@@ -27,6 +32,8 @@ impl Default for Preferences {
             recent_projects: Vec::new(),
             output_screen: None,
             crossfade_seconds: 2.0,
+            crossfade_beats: 4.0,
+            crossfade_on_beats: false,
         }
     }
 }
@@ -65,6 +72,16 @@ impl Preferences {
         }
         let json = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
         std::fs::write(path, json)
+    }
+
+    /// Duration of the automatic crossfade at `bpm` beats per minute, in
+    /// seconds.
+    pub fn crossfade_duration(&self, bpm: f64) -> f32 {
+        if self.crossfade_on_beats {
+            (f64::from(self.crossfade_beats) * 60.0 / bpm) as f32
+        } else {
+            self.crossfade_seconds
+        }
     }
 
     /// Puts `path` first in the recent projects.
@@ -120,6 +137,16 @@ mod tests {
         let loaded = Preferences::load(&path);
         assert_eq!(loaded.crossfade_seconds, 1.0);
         assert!(loaded.recent_projects.is_empty());
+    }
+
+    #[test]
+    fn crossfades_last_seconds_or_beats() {
+        let mut preferences = Preferences::default();
+        assert_eq!(preferences.crossfade_duration(120.0), 2.0);
+        preferences.crossfade_on_beats = true;
+        preferences.crossfade_beats = 8.0;
+        assert_eq!(preferences.crossfade_duration(120.0), 4.0);
+        assert_eq!(preferences.crossfade_duration(60.0), 8.0);
     }
 
     #[test]

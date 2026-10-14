@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use egui::{Event, Key, Modifiers, RawInput, Rect, pos2, vec2};
 use prism_core::{Clip, Composition, Slot};
-use prism_engine::{ClipState, EngineStatus, LayerStatus};
+use prism_engine::{ClipState, Command, EngineStatus, LayerStatus};
 use prism_ui::{Action, ControlPanel, Document, FrameInfo, Screen, Shortcut};
 
 fn input(events: Vec<Event>) -> RawInput {
@@ -55,7 +55,7 @@ fn frame(
         output_screen: Some(1),
     };
     let mut actions = Vec::new();
-    let mut output = ctx.run_ui(input(events), |ui| actions = panel.ui(ui, &info));
+    let mut output = ctx.run_ui(input(events), |ui| actions.extend(panel.ui(ui, &info)));
     // No renderer here: textures are not uploaded.
     output.textures_delta.clear();
     actions
@@ -204,6 +204,16 @@ fn missing_media_dialog_is_drawn() {
     }
 }
 
+fn released(key: Key) -> Event {
+    Event::Key {
+        key,
+        physical_key: None,
+        pressed: false,
+        repeat: false,
+        modifiers: Modifiers::NONE,
+    }
+}
+
 fn key_with(key: Key, modifiers: Modifiers) -> Event {
     Event::Key {
         key,
@@ -313,4 +323,42 @@ fn click_button(
     frame(ctx, panel, status, vec![press(true)]);
     frame(ctx, panel, status, vec![press(false)]);
     true
+}
+
+#[test]
+fn tap_tempo_and_resync_reach_the_engine() {
+    let (document, _) = sample_document();
+    let mut panel = ControlPanel::new(document, Vec::new());
+    let ctx = egui::Context::default();
+    let status = EngineStatus::default();
+    frame(&ctx, &mut panel, &status, Vec::new());
+
+    // Each tap presses and releases T: a key pressed again without being
+    // released counts as an automatic repeat.
+    let tap = || vec![key(Key::T), released(Key::T)];
+
+    // A first tap puts a beat on itself at the current tempo.
+    let actions = frame(&ctx, &mut panel, &status, tap());
+    assert!(
+        matches!(actions.as_slice(), [Action::Engine(Command::Tap { bpm, .. })] if *bpm == 120.0),
+        "{actions:?}"
+    );
+    // A second tap, a few milliseconds later: far too fast, the tempo stops
+    // at the maximum, in the document and in the command.
+    let actions = frame(&ctx, &mut panel, &status, tap());
+    assert!(
+        matches!(actions.as_slice(), [Action::Engine(Command::Tap { bpm, .. })] if *bpm == prism_core::MAX_BPM),
+        "{actions:?}"
+    );
+    assert_eq!(
+        panel.document().composition().tempo.get(),
+        prism_core::MAX_BPM
+    );
+    assert!(panel.document().is_dirty());
+
+    let actions = frame(&ctx, &mut panel, &status, vec![key(Key::R)]);
+    assert!(
+        matches!(actions.as_slice(), [Action::Engine(Command::Resync { .. })]),
+        "{actions:?}"
+    );
 }
