@@ -46,3 +46,4 @@ Ce que cela implique pour la suite.
 | [0012](0012-cadence-du-thread-de-rendu.md) | Cadence du thread de rendu : temps réel et tampons d'envoi réutilisés | Acceptée |
 | [0013](0013-quatre-couches-par-passe.md) | Quatre couches par passe de mixage | Acceptée |
 | [0014](0014-tempo-et-horloge.md) | Tempo et horloge musicale | Acceptée |
+| [0015](0015-moteur-d-effets.md) | Moteur d'effets | Acceptée |
