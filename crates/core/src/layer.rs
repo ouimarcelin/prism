@@ -17,11 +17,35 @@ pub enum BlendMode {
     Multiply,
     /// Inverted colors multiplied, then inverted: the result is lighter.
     Screen,
+    /// The lighter of the two colors, channel by channel.
+    Lighten,
+    /// The darker of the two colors, channel by channel.
+    Darken,
+    /// Absolute difference: identical colors give black.
+    Difference,
+    /// Layer subtracted from the layers below, floored at black.
+    Subtract,
+    /// Multiply in the darks of the layers below, screen in their lights:
+    /// raises contrast.
+    Overlay,
+    /// Like difference, with lower contrast.
+    Exclusion,
 }
 
 impl BlendMode {
     /// Every blend mode, in display order.
-    pub const ALL: [Self; 4] = [Self::Normal, Self::Add, Self::Multiply, Self::Screen];
+    pub const ALL: [Self; 10] = [
+        Self::Normal,
+        Self::Add,
+        Self::Multiply,
+        Self::Screen,
+        Self::Lighten,
+        Self::Darken,
+        Self::Difference,
+        Self::Subtract,
+        Self::Overlay,
+        Self::Exclusion,
+    ];
 }
 
 /// One row of the grid: a stack position, mixing settings and one optional

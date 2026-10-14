@@ -27,6 +27,18 @@ fn blend(cb: f32, cs: f32, mode: BlendMode) -> f32 {
         BlendMode::Add => cb + cs,
         BlendMode::Multiply => cb * cs,
         BlendMode::Screen => cb + cs - cb * cs,
+        BlendMode::Lighten => cb.max(cs),
+        BlendMode::Darken => cb.min(cs),
+        BlendMode::Difference => (cb - cs).abs(),
+        BlendMode::Subtract => (cb - cs).max(0.0),
+        BlendMode::Overlay => {
+            if cb <= 0.5 {
+                2.0 * cb * cs
+            } else {
+                1.0 - 2.0 * (1.0 - cb) * (1.0 - cs)
+            }
+        }
+        BlendMode::Exclusion => cb + cs - 2.0 * cb * cs,
     }
 }
 
@@ -85,6 +97,36 @@ mod tests {
         assert_close(
             composite(BASE, GRAY, 1.0, BlendMode::Screen),
             [0.75, 0.625, 0.875, 1.0],
+        );
+    }
+
+    #[test]
+    fn comparison_and_contrast_modes() {
+        let top = [0.75, 0.25, 0.5, 1.0];
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Lighten),
+            [0.75, 0.25, 0.75, 1.0],
+        );
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Darken),
+            [0.5, 0.25, 0.5, 1.0],
+        );
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Difference),
+            [0.25, 0.0, 0.25, 1.0],
+        );
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Subtract),
+            [0.0, 0.0, 0.25, 1.0],
+        );
+        // Overlay: multiply where below <= 0.5, screen above.
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Overlay),
+            [0.75, 0.125, 0.75, 1.0],
+        );
+        assert_close(
+            composite(BASE, top, 1.0, BlendMode::Exclusion),
+            [0.5, 0.375, 0.5, 1.0],
         );
     }
 

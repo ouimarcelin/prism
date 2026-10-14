@@ -37,6 +37,12 @@ const BLEND_NORMAL: u32 = 0u;
 const BLEND_ADD: u32 = 1u;
 const BLEND_MULTIPLY: u32 = 2u;
 const BLEND_SCREEN: u32 = 3u;
+const BLEND_LIGHTEN: u32 = 4u;
+const BLEND_DARKEN: u32 = 5u;
+const BLEND_DIFFERENCE: u32 = 6u;
+const BLEND_SUBTRACT: u32 = 7u;
+const BLEND_OVERLAY: u32 = 8u;
+const BLEND_EXCLUSION: u32 = 9u;
 
 fn unpremultiply(color: vec4<f32>) -> vec3<f32> {
     if color.a <= 0.0 {
@@ -56,6 +62,27 @@ fn blend(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
         }
         case BLEND_SCREEN: {
             return cb + cs - cb * cs;
+        }
+        case BLEND_LIGHTEN: {
+            return max(cb, cs);
+        }
+        case BLEND_DARKEN: {
+            return min(cb, cs);
+        }
+        case BLEND_DIFFERENCE: {
+            return abs(cb - cs);
+        }
+        case BLEND_SUBTRACT: {
+            return max(cb - cs, vec3<f32>(0.0));
+        }
+        case BLEND_OVERLAY: {
+            // Hard light with the roles swapped: driven by the layers below.
+            let dark = 2.0 * cb * cs;
+            let light = 1.0 - 2.0 * (1.0 - cb) * (1.0 - cs);
+            return select(light, dark, cb <= vec3<f32>(0.5));
+        }
+        case BLEND_EXCLUSION: {
+            return cb + cs - 2.0 * cb * cs;
         }
         default: {
             return cs;

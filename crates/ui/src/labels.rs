@@ -8,6 +8,12 @@ pub(crate) fn blend(mode: BlendMode) -> &'static str {
         BlendMode::Add => "Addition",
         BlendMode::Multiply => "Produit",
         BlendMode::Screen => "Écran",
+        BlendMode::Lighten => "Éclaircir",
+        BlendMode::Darken => "Assombrir",
+        BlendMode::Difference => "Différence",
+        BlendMode::Subtract => "Soustraction",
+        BlendMode::Overlay => "Incrustation",
+        BlendMode::Exclusion => "Exclusion",
     }
 }
 
