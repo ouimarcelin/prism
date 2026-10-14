@@ -15,7 +15,7 @@ mod labels;
 mod panel;
 mod shortcuts;
 
-pub use document::{Document, VIDEO_EXTENSIONS, is_video};
+pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
 pub use panel::{Action, ControlPanel, FrameInfo, Screen};
 pub use shortcuts::{SHORTCUT_HELP, Shortcut};
 

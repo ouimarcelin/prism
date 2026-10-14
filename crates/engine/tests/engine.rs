@@ -420,3 +420,63 @@ fn outputs_receive_every_frame_until_removed() {
     assert_eq!(second.load(Ordering::SeqCst), 5);
     assert_eq!(driver.state.output_count(), 1);
 }
+
+/// Writes a `SIZE` PNG of one opaque color.
+fn solid_png(path: &Path, rgb: [u8; 3]) {
+    let (width, height) = (u32::from(SIZE.0), u32::from(SIZE.1));
+    let data: Vec<u8> = (0..width * height).flat_map(|_| rgb).collect();
+    let mut encoder = png::Encoder::new(
+        std::io::BufWriter::new(File::create(path).unwrap()),
+        width,
+        height,
+    );
+    encoder.set_color(png::ColorType::Rgb);
+    encoder.set_depth(png::BitDepth::Eight);
+    encoder
+        .write_header()
+        .unwrap()
+        .write_image_data(&data)
+        .unwrap();
+}
+
+#[test]
+fn image_sequences_and_stills_play_like_movies() {
+    let Some(gpu) = gpu() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let frames = dir.path().join("frames");
+    std::fs::create_dir(&frames).unwrap();
+    // Three frames at 10 per second, green level naming the frame.
+    for index in 0..3u8 {
+        solid_png(
+            &frames.join(format!("f{}.png", index + 1)),
+            [0, index * 4, 0],
+        );
+    }
+    let (mut comp, slot) = composition_with(Clip::from_image_sequence(&frames, 10.0));
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    let status =
+        driver.settle(|status| status.state == ClipState::Playing && status.frame.is_some());
+    assert_eq!(status.frame_count, 3);
+    assert!((status.duration - 0.3).abs() < 1e-9);
+    // 0.15 s later: second frame.
+    for _ in 0..9 {
+        driver.tick();
+    }
+    let status = driver.settle(|status| status.frame == Some(1));
+    assert_eq!(driver.program_frame(), 1);
+    assert!(status.position >= 0.1);
+
+    // A still image: one frame, shown as long as the clip plays.
+    let still = dir.path().join("still.png");
+    solid_png(&still, [0, 8, 0]);
+    comp.set_clip(slot, Some(Clip::from_file(&still))).unwrap();
+    comp.trigger_clip(slot).unwrap();
+    driver.state.set_composition(comp);
+    driver.settle(|status| status.frame_count == 1 && status.frame == Some(0));
+    for _ in 0..30 {
+        driver.tick();
+    }
+    assert_eq!(driver.program_frame(), 2);
+    assert_eq!(driver.layer().state, ClipState::Playing);
+}

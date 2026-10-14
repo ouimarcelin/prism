@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::hap::{self, HapError, HapFrame};
 use crate::mov::{ContainerError, FourCc, VideoTrack};
+use crate::source::MediaInfo;
 
 /// Error raised while opening a file or decoding one of its frames.
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +23,9 @@ pub enum DecodeError {
     /// The video track does not use a HAP codec.
     #[error("codec {0} is not HAP")]
     NotHap(String),
+    /// An image file is invalid or does not match the sequence.
+    #[error("image illisible : {0}")]
+    Image(String),
     /// The frame index is past the end of the track.
     #[error("frame {index} is past the last frame ({count} frames)")]
     FrameOutOfRange {
@@ -47,6 +51,7 @@ pub fn is_hap(codec: FourCc) -> bool {
 pub struct HapDecoder<R = File> {
     reader: R,
     track: VideoTrack,
+    info: MediaInfo,
     packet: Vec<u8>,
 }
 
@@ -66,6 +71,7 @@ impl<R: Read + Seek> HapDecoder<R> {
             return Err(DecodeError::NotHap(track.codec_name()));
         }
         Ok(Self {
+            info: MediaInfo::from_track(&track),
             reader,
             track,
             packet: Vec::new(),
@@ -75,6 +81,11 @@ impl<R: Read + Seek> HapDecoder<R> {
     /// Video track: size, timing, frame count.
     pub fn track(&self) -> &VideoTrack {
         &self.track
+    }
+
+    /// Size and timing, as for every media.
+    pub fn media_info(&self) -> &MediaInfo {
+        &self.info
     }
 
     /// Decodes frame `index` into `frame`, reusing its buffers.

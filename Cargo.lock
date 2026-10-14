@@ -1907,6 +1907,7 @@ dependencies = [
 name = "prism-engine"
 version = "0.0.0"
 dependencies = [
+ "png",
  "prism-core",
  "prism-media",
  "prism-render",
@@ -1917,10 +1918,13 @@ dependencies = [
 name = "prism-media"
 version = "0.0.0"
 dependencies = [
+ "png",
  "prism-media",
  "snap",
  "tempfile",
  "thiserror 2.0.21",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]

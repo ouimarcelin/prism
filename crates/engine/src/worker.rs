@@ -8,28 +8,28 @@
 
 use std::collections::VecDeque;
 use std::error::Error;
-use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
 
-use prism_media::{HapDecoder, HapFrame, VideoTrack};
+use prism_core::MediaSource;
+use prism_media::{Frame, FrameSource, MediaInfo};
 
 /// Message from the render thread to a worker.
 pub(crate) enum Request {
     /// Frames to decode, most urgent first. Replaces the previous list.
     Want(Vec<usize>),
     /// A frame buffer the render thread no longer needs.
-    Recycle(HapFrame),
+    Recycle(Frame),
 }
 
 /// Message from a worker to the render thread.
 pub(crate) enum Event {
-    /// The file is open.
-    Opened(VideoTrack),
+    /// The media is open.
+    Opened(MediaInfo),
     /// The file could not be opened; the worker stops.
     OpenFailed(String),
     /// A decoded frame.
-    Frame(usize, HapFrame),
+    Frame(usize, Frame),
     /// A frame could not be decoded.
     FrameFailed(usize, String),
 }
@@ -41,14 +41,14 @@ pub(crate) struct Worker {
 }
 
 impl Worker {
-    /// Starts a worker decoding `path`. The thread ends when the returned
+    /// Starts a worker decoding `source`. The thread ends when the returned
     /// value is dropped.
-    pub(crate) fn spawn(path: PathBuf) -> std::io::Result<Self> {
+    pub(crate) fn spawn(source: MediaSource) -> std::io::Result<Self> {
         let (requests, request_receiver) = mpsc::channel();
         let (event_sender, events) = mpsc::channel();
         thread::Builder::new()
             .name("prism-decode".into())
-            .spawn(move || run(path, request_receiver, event_sender))?;
+            .spawn(move || run(&source, request_receiver, event_sender))?;
         Ok(Self { requests, events })
     }
 
@@ -59,7 +59,7 @@ impl Worker {
     }
 
     /// Gives a frame buffer back for reuse.
-    pub(crate) fn recycle(&self, frame: HapFrame) {
+    pub(crate) fn recycle(&self, frame: Frame) {
         let _ = self.requests.send(Request::Recycle(frame));
     }
 
@@ -81,20 +81,30 @@ pub(crate) fn error_chain(error: &dyn Error) -> String {
     message
 }
 
-fn run(path: PathBuf, requests: Receiver<Request>, events: Sender<Event>) {
-    let mut decoder = match HapDecoder::open(&path) {
+/// Opens the media of a clip.
+fn open(source: &MediaSource) -> Result<Box<dyn FrameSource>, prism_media::DecodeError> {
+    match source {
+        MediaSource::File { path } => prism_media::open_file(path),
+        MediaSource::ImageSequence { path, frame_rate } => {
+            prism_media::open_sequence(path, *frame_rate)
+        }
+    }
+}
+
+fn run(source: &MediaSource, requests: Receiver<Request>, events: Sender<Event>) {
+    let mut decoder = match open(source) {
         Ok(decoder) => decoder,
         Err(error) => {
             let _ = events.send(Event::OpenFailed(error_chain(&error)));
             return;
         }
     };
-    if events.send(Event::Opened(decoder.track().clone())).is_err() {
+    if events.send(Event::Opened(decoder.info().clone())).is_err() {
         return;
     }
 
     let mut queue: VecDeque<usize> = VecDeque::new();
-    let mut spare: Vec<HapFrame> = Vec::new();
+    let mut spare: Vec<Frame> = Vec::new();
     loop {
         // Wait when idle; otherwise take pending messages without waiting.
         let message = if queue.is_empty() {
@@ -121,7 +131,7 @@ fn run(path: PathBuf, requests: Receiver<Request>, events: Sender<Event>) {
             continue;
         };
         let mut frame = spare.pop().unwrap_or_default();
-        let event = match decoder.decode_frame(index, &mut frame) {
+        let event = match decoder.decode(index, &mut frame) {
             Ok(()) => Event::Frame(index, frame),
             Err(error) => {
                 spare.push(frame);

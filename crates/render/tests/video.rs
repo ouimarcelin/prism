@@ -12,7 +12,7 @@ use prism_media::test_support::{
     Compression, Image, MovOptions, encode_image, encode_multiple, plane_from_fn, solid_plane,
     write_mov, ycocg_color,
 };
-use prism_media::{BlockFormat, HapDecoder, HapFrame};
+use prism_media::{BlockFormat, Frame, HapDecoder, HapFrame, RgbaImage};
 use prism_render::{Compositor, FrameUploader, Gpu, LayerInput, VideoTexture, read_texture};
 
 /// BC endpoints are 5 or 6 bits per channel; GPUs expand them slightly
@@ -50,7 +50,7 @@ fn quantized_rgb(rgb: [u8; 3]) -> [f32; 3] {
 }
 
 /// Converts `frame` and returns its pixels, row by row.
-fn convert(gpu: &Gpu, frame: &HapFrame, width: u32, height: u32) -> Vec<[f32; 4]> {
+fn convert(gpu: &Gpu, frame: &Frame, width: u32, height: u32) -> Vec<[f32; 4]> {
     let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, width, height);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
@@ -61,10 +61,10 @@ fn convert(gpu: &Gpu, frame: &HapFrame, width: u32, height: u32) -> Vec<[f32; 4]
     read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap()
 }
 
-fn decode(data: &[u8], width: u32, height: u32) -> HapFrame {
+fn decode(data: &[u8], width: u32, height: u32) -> Frame {
     let mut frame = HapFrame::default();
     prism_media::hap::decode_frame(data, width, height, &mut frame).unwrap();
-    frame
+    Frame::Hap(frame)
 }
 
 fn assert_pixel(pixels: &[[f32; 4]], width: u32, x: u32, y: u32, expected: [f32; 4]) {
@@ -284,10 +284,11 @@ fn hap_file_plays_through_the_compositor() {
         height: 16,
     };
     let mut compositor = Compositor::new(&gpu.device, resolution);
-    let mut frame = HapFrame::default();
+    let mut hap = HapFrame::default();
 
     for index in [2usize, 0, 3] {
-        decoder.decode_frame(index, &mut frame).unwrap();
+        decoder.decode_frame(index, &mut hap).unwrap();
+        let frame = Frame::Hap(hap.clone());
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         uploader
             .upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)
@@ -318,7 +319,9 @@ fn wrong_plane_size_is_reported() {
         16,
         8,
     );
-    frame.color.data.truncate(8);
+    if let Frame::Hap(hap) = &mut frame {
+        hap.color.data.truncate(8);
+    }
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     let error = uploader
         .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, &frame)
@@ -329,5 +332,67 @@ fn wrong_plane_size_is_reported() {
             expected: 64,
             actual: 8
         }
+    ));
+}
+
+#[test]
+fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
+    let Some(gpu) = gpu() else { return };
+    let (width, height) = (4, 2);
+    // Straight alpha: red at 40 %, then opaque blue.
+    let mut pixels = Vec::new();
+    for x in 0..8 {
+        pixels.extend_from_slice(if x % 4 < 2 {
+            &[255, 0, 0, 102]
+        } else {
+            &[0, 0, 255, 255]
+        });
+    }
+    let image = Frame::Rgba(RgbaImage {
+        width,
+        height,
+        pixels,
+    });
+    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut target = VideoTexture::new(&gpu.device, width, height);
+    let hap = decode(
+        &encode_image(
+            Image::Rgb,
+            &solid_plane(BlockFormat::Bc1, width, height, [0, 255, 0, 255]),
+            Compression::None,
+        ),
+        width,
+        height,
+    );
+    // The same texture shows a HAP frame, then pixels, then HAP again.
+    for (frame, expected) in [
+        (&hap, [0.0, 1.0, 0.0, 1.0]),
+        (&image, [0.4, 0.0, 0.0, 0.4]),
+        (&hap, [0.0, 1.0, 0.0, 1.0]),
+    ] {
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        uploader
+            .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, frame)
+            .unwrap();
+        gpu.queue.submit([encoder.finish()]);
+        let pixels = read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap();
+        assert_pixel(&pixels, width, 0, 1, expected);
+    }
+    let pixels = read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap();
+    assert_pixel(&pixels, width, 3, 0, [0.0, 1.0, 0.0, 1.0]);
+
+    // Pixels of the wrong size are refused.
+    let small = Frame::Rgba(RgbaImage {
+        width: 1,
+        height: 1,
+        pixels: vec![0; 4],
+    });
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    assert!(matches!(
+        uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, &small),
+        Err(prism_render::UploadError::WrongSize {
+            expected: 32,
+            actual: 4
+        })
     ));
 }

@@ -10,6 +10,9 @@ pub const CUE_POINT_COUNT: usize = 8;
 /// Highest playback speed multiplier.
 pub const MAX_SPEED: f32 = 10.0;
 
+/// Frame rate given to a new image sequence.
+pub const DEFAULT_SEQUENCE_RATE: f64 = 30.0;
+
 /// Where the frames of a clip come from.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -20,13 +23,27 @@ pub enum MediaSource {
         /// Location of the file.
         path: PathBuf,
     },
+    /// A folder of PNG images, played in name order.
+    ImageSequence {
+        /// Location of the folder.
+        path: PathBuf,
+        /// Images shown per second.
+        frame_rate: f64,
+    },
 }
 
 impl MediaSource {
-    /// Path of the file behind this source, if any.
+    /// Path of the file or folder behind this source.
     pub fn path(&self) -> Option<&Path> {
         match self {
-            Self::File { path } => Some(path),
+            Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
+        }
+    }
+
+    /// Mutable path of the file or folder behind this source.
+    pub fn path_mut(&mut self) -> Option<&mut PathBuf> {
+        match self {
+            Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
         }
     }
 }
@@ -127,6 +144,20 @@ impl Clip {
             playback: Playback::default(),
         }
     }
+
+    /// Creates a clip for a folder of PNG images, named after the folder.
+    pub fn from_image_sequence(folder: impl Into<PathBuf>, frame_rate: f64) -> Self {
+        let path = folder.into();
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Self {
+            name,
+            source: MediaSource::ImageSequence { path, frame_rate },
+            playback: Playback::default(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -141,6 +172,18 @@ mod tests {
             clip.source.path(),
             Some(Path::new("/media/loops/tunnel_blue.mov"))
         );
+    }
+
+    #[test]
+    fn image_sequences_are_saved_with_their_rate() {
+        let clip = Clip::from_image_sequence("/media/smoke", 24.0);
+        assert_eq!(clip.name, "smoke");
+        let json = serde_json::to_value(&clip.source).unwrap();
+        assert_eq!(json["kind"], "image_sequence");
+        assert_eq!(json["frame_rate"], 24.0);
+        let back: MediaSource = serde_json::from_value(json).unwrap();
+        assert_eq!(back, clip.source);
+        assert_eq!(back.path(), Some(Path::new("/media/smoke")));
     }
 
     #[test]

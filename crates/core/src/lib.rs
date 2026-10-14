@@ -19,7 +19,10 @@ mod layer;
 mod project;
 mod value;
 
-pub use clip::{CUE_POINT_COUNT, Clip, Direction, LoopMode, MAX_SPEED, MediaSource, Playback};
+pub use clip::{
+    CUE_POINT_COUNT, Clip, DEFAULT_SEQUENCE_RATE, Direction, LoopMode, MAX_SPEED, MediaSource,
+    Playback,
+};
 pub use composition::{
     Column, Composition, DEFAULT_COLUMN_COUNT, DEFAULT_LAYER_COUNT, FrameRate, MAX_DIMENSION,
     ModelError, Resolution,
