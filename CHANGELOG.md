@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Le crossfader occupe toute sa longueur dans la barre du bas.
 - L'application garde les actions de toutes les passes d'egui dans une image : un raccourci ou un clic ne se perd plus quand egui refait la mise en page.
 - La ligne d'état (cadence, saccades, images sautées, images en retard) a sa propre ligne sous le crossfader.
 - Thread de rendu en ordonnancement temps réel sur macOS : réveillé à l'heure même quand d'autres processus occupent les cœurs ; threads de décodage en classe « initiée par l'utilisateur » (ADR 0012).
@@ -24,6 +25,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Réglage des effets dans l'inspecteur : sections repliables pour la composition, la couche et le clip ; activer, monter, descendre, retirer, ajouter un effet du catalogue ; curseurs et listes de réglages, clic droit pour la valeur par défaut.
+- Outil `ui-snapshot` : la fenêtre de contrôle dessinée dans une image PNG, pour vérifier la mise en page.
 - Moteur d'effets (crate `prism-fx`) : chaînes d'effets GPU sur le clip, la couche et la composition, enregistrées dans le projet ; six premiers effets : couleur, inversion, transformation, miroir, kaléidoscope, flou (ADR 0015). Réglage dans l'interface au ticket suivant.
 - Tempo de la composition (20 à 999 BPM, enregistré dans le projet), tap tempo (bouton et touche T), resync (bouton et touche R), voyants des temps de la mesure ; horloge de tempo sans dérive dans le moteur (crate `prism-clock`) ; fondu automatique du crossfader en temps, au tempo (ADR 0014).
 - Outil `gpu-bench` : temps GPU d'une image du moteur, sans fenêtre.
