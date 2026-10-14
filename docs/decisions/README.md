@@ -47,3 +47,4 @@ Ce que cela implique pour la suite.
 | [0013](0013-quatre-couches-par-passe.md) | Quatre couches par passe de mixage | Acceptée |
 | [0014](0014-tempo-et-horloge.md) | Tempo et horloge musicale | Acceptée |
 | [0015](0015-moteur-d-effets.md) | Moteur d'effets | Acceptée |
+| [0016](0016-animation-des-parametres.md) | Animation des paramètres | Acceptée |

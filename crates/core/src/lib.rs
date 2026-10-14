@@ -29,7 +29,7 @@ pub use composition::{
     ModelError, Resolution,
 };
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
-pub use effect::Effect;
+pub use effect::{Animation, Effect, MIN_PERIOD, Period, Shape};
 pub use ids::{ColumnId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};

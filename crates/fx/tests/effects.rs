@@ -343,7 +343,7 @@ fn strobe_follows_the_beat() {
     let Some(gpu) = gpu() else { return };
     let color = [0.3, 0.6, 0.9, 1.0];
     let strobe = [effect("strobe", &[("rate", 1.0), ("duty", 0.5)])];
-    let at = |beat: f32| {
+    let at = |beat: f64| {
         let time = FrameTime { seconds: 0.0, beat };
         run_at(&gpu, &strobe, 1, 1, &[color], time).unwrap()[0]
     };
@@ -377,4 +377,45 @@ fn colorize_and_vignette_change_colors() {
     .unwrap();
     assert!(shaded[0][0] < 0.5, "corner {:?}", shaded[0]);
     assert_close(shaded[40], [1.0; 4], TOLERANCE, "center");
+}
+
+#[test]
+fn a_beat_animation_is_still_on_the_beat_after_ten_minutes() {
+    use prism_clock::BeatClock;
+    use prism_core::{Animation, Period, Shape};
+    use std::time::{Duration, Instant};
+
+    // The criterion of phase 2: an effect on the beat stays in time after
+    // 10 minutes. Here every frame of the tenth minute at 60 per second,
+    // 128 BPM: the effect is on for the first half of each beat.
+    let invert = find("invert").unwrap();
+    let mut effect = invert.create();
+    effect.animations.insert(
+        "amount".into(),
+        Animation {
+            shape: Shape::Square,
+            period: Period::Beats(1.0),
+            ..Animation::new(0.0, 1.0)
+        },
+    );
+    let start = Instant::now();
+    let clock = BeatClock::new(128.0, start);
+    for frame in 9 * 3600..10 * 3600 {
+        let seconds = f64::from(frame) / 60.0;
+        let time = FrameTime {
+            seconds,
+            beat: clock.beat_at(start + Duration::from_secs_f64(seconds)),
+        };
+        let beats = seconds * 128.0 / 60.0;
+        let within = beats - beats.floor();
+        if (within - 0.5).abs() < 1e-6 || within < 1e-6 {
+            continue;
+        }
+        let expected = if within < 0.5 { 1.0 } else { 0.0 };
+        assert_eq!(
+            invert.values_at(&effect, time)[0],
+            expected,
+            "frame {frame}"
+        );
+    }
 }

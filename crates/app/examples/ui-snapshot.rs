@@ -6,11 +6,12 @@
 //! ```
 //!
 //! The window shows a sample project: clips in the grid, the first one
-//! playing, effects on the clip, its layer and the composition.
+//! playing, effects on the clip, its layer and the composition, one
+//! setting animated.
 
 use std::process::ExitCode;
 
-use prism_core::{Clip, Composition, Effect, Slot};
+use prism_core::{Animation, Clip, Composition, Effect, Slot};
 use prism_engine::{ClipState, EngineStatus, LayerStatus};
 use prism_render::{Gpu, wgpu};
 use prism_ui::{ControlPanel, Document, FrameInfo, Screen};
@@ -44,6 +45,8 @@ fn sample() -> (Document, Slot, EngineStatus) {
     if let Some(clip) = composition.clip_mut(slot) {
         let mut blur = Effect::new("blur");
         blur.set_param("radius", 12.0);
+        blur.animations
+            .insert("radius".into(), Animation::new(0.0, 24.0));
         clip.effects = vec![blur, Effect::new("kaleidoscope")];
     }
     if let Some(layer) = composition.layer_mut(slot.layer) {

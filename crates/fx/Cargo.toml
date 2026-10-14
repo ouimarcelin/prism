@@ -18,3 +18,4 @@ workspace = true
 
 [dev-dependencies]
 png = "0.18.1"
+prism-clock = { path = "../clock" }

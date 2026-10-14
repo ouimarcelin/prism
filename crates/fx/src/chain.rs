@@ -21,13 +21,13 @@ struct PassParams {
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<PassParams>() as u64;
 
-/// Time of the frame, for effects that move on their own.
+/// Time of the frame, for effects and settings that move on their own.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FrameTime {
     /// Seconds since the engine started.
-    pub seconds: f32,
+    pub seconds: f64,
     /// Beat position of the tempo clock.
-    pub beat: f32,
+    pub beat: f64,
 }
 
 /// Pipelines of every effect of the catalog, shared by all chains.
@@ -276,7 +276,7 @@ impl EffectChain {
             .filter(|effect| !effect.bypass)
             .filter_map(|effect| {
                 let info = find(&effect.kind)?;
-                Some((info, info.values(effect)))
+                Some((info, info.values_at(effect, time)))
             })
             .flat_map(|(info, values)| {
                 (0..info.passes.len()).map(move |index| Pass {
@@ -396,8 +396,8 @@ impl EffectChain {
             let params = PassParams {
                 values: pass.values,
                 size: [size.0 as f32, size.1 as f32],
-                time: time.seconds,
-                beat: time.beat,
+                time: time.seconds as f32,
+                beat: time.beat as f32,
             };
             if self.written.get(index) == Some(&params) {
                 continue;
