@@ -43,6 +43,7 @@ fn decode_png(bytes: &[u8], image: &mut RgbaImage) -> Result<(), String> {
     };
     image.width = info.width;
     image.height = info.height;
+    image.order = crate::ChannelOrder::Rgba;
     image.pixels.clear();
     image.pixels.reserve(pixels * 4);
     for row in buffer
@@ -71,6 +72,7 @@ fn decode_jpeg(bytes: Vec<u8>, image: &mut RgbaImage) -> Result<(), String> {
     let info = decoder.info().ok_or("en-tête JPEG illisible")?;
     image.width = u32::from(info.width);
     image.height = u32::from(info.height);
+    image.order = crate::ChannelOrder::Rgba;
     if pixels.len() != image.width as usize * image.height as usize * 4 {
         return Err("taille de pixels inattendue".into());
     }
@@ -108,10 +110,7 @@ impl FrameSource for StillImage {
         if index != 0 {
             return Err(DecodeError::FrameOutOfRange { index, count: 1 });
         }
-        let target = frame.rgba_mut();
-        target.width = self.image.width;
-        target.height = self.image.height;
-        target.pixels.clone_from(&self.image.pixels);
+        frame.rgba_mut().clone_from(&self.image);
         Ok(())
     }
 }

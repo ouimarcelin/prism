@@ -3,20 +3,102 @@
 
 use std::path::Path;
 
-use crate::decoder::{DecodeError, HapDecoder};
+use std::fs::File;
+
+use crate::decoder::{DecodeError, HapDecoder, is_hap};
 use crate::hap::HapFrame;
 use crate::image::{IMAGE_EXTENSIONS, ImageSequence, StillImage};
 use crate::mov::VideoTrack;
 
-/// 8-bit RGBA pixels, straight (non-premultiplied) alpha, rows from the top.
+/// Order of the four bytes of a pixel.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum ChannelOrder {
+    /// Red, green, blue, alpha.
+    #[default]
+    Rgba,
+    /// Blue, green, red, alpha, as video decoders often deliver.
+    Bgra,
+}
+
+/// 8-bit pixels with alpha, straight (non-premultiplied), rows from the top.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RgbaImage {
     /// Width in pixels.
     pub width: u32,
     /// Height in pixels.
     pub height: u32,
+    /// Order of the bytes of each pixel.
+    pub order: ChannelOrder,
     /// `width × height × 4` bytes.
     pub pixels: Vec<u8>,
+}
+
+/// Matrix turning luma and chroma into red, green and blue.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum YuvMatrix {
+    /// ITU-R BT.601, standard definition.
+    Bt601,
+    /// ITU-R BT.709, high definition.
+    #[default]
+    Bt709,
+}
+
+/// Video pixels as decoders deliver them, 4:2:0: one luma byte per pixel,
+/// then one interleaved pair of chroma bytes (Cb, Cr) per 2 × 2 pixels.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct YuvImage {
+    /// Width in pixels.
+    pub width: u32,
+    /// Height in pixels.
+    pub height: u32,
+    /// `width × height` luma bytes.
+    pub luma: Vec<u8>,
+    /// `⌈width / 2⌉ × ⌈height / 2⌉` pairs of chroma bytes.
+    pub chroma: Vec<u8>,
+    /// Color matrix.
+    pub matrix: YuvMatrix,
+    /// Whether values use the full 0–255 range rather than the video range
+    /// (16–235 for luma).
+    pub full_range: bool,
+}
+
+impl YuvImage {
+    /// Size of the chroma plane, in chroma samples.
+    pub fn chroma_size(&self) -> (u32, u32) {
+        (self.width.div_ceil(2), self.height.div_ceil(2))
+    }
+
+    /// Color of a pixel, computed on the CPU as the GPU does. For tests and
+    /// thumbnails.
+    pub fn rgb_at(&self, x: u32, y: u32) -> [u8; 3] {
+        let luma = f32::from(self.luma[(y * self.width + x) as usize]) / 255.0;
+        let (chroma_width, _) = self.chroma_size();
+        let at = ((y / 2 * chroma_width + x / 2) * 2) as usize;
+        let cb = f32::from(self.chroma[at]) / 255.0 - 128.0 / 255.0;
+        let cr = f32::from(self.chroma[at + 1]) / 255.0 - 128.0 / 255.0;
+        let (luma, cb, cr) = if self.full_range {
+            (luma, cb, cr)
+        } else {
+            (
+                (luma - 16.0 / 255.0) * (255.0 / 219.0),
+                cb * (255.0 / 224.0),
+                cr * (255.0 / 224.0),
+            )
+        };
+        let [r, g, b] = match self.matrix {
+            YuvMatrix::Bt601 => [
+                luma + 1.402 * cr,
+                luma - 0.344_136 * cb - 0.714_136 * cr,
+                luma + 1.772 * cb,
+            ],
+            YuvMatrix::Bt709 => [
+                luma + 1.5748 * cr,
+                luma - 0.187_324 * cb - 0.468_124 * cr,
+                luma + 1.8556 * cb,
+            ],
+        };
+        [r, g, b].map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u8)
+    }
 }
 
 /// A decoded frame, ready to be uploaded to the GPU.
@@ -26,6 +108,8 @@ pub enum Frame {
     Hap(HapFrame),
     /// Uncompressed pixels.
     Rgba(RgbaImage),
+    /// Luma and chroma planes, as video decoders deliver them.
+    Yuv(YuvImage),
 }
 
 impl Default for Frame {
@@ -43,7 +127,7 @@ impl Frame {
         }
         match self {
             Self::Hap(frame) => frame,
-            Self::Rgba(_) => unreachable!("replaced just above"),
+            _ => unreachable!("replaced just above"),
         }
     }
 
@@ -54,7 +138,19 @@ impl Frame {
         }
         match self {
             Self::Rgba(image) => image,
-            Self::Hap(_) => unreachable!("replaced just above"),
+            _ => unreachable!("replaced just above"),
+        }
+    }
+
+    /// The luma and chroma planes, turning the frame into a YUV frame if
+    /// needed.
+    pub fn yuv_mut(&mut self) -> &mut YuvImage {
+        if !matches!(self, Self::Yuv(_)) {
+            *self = Self::Yuv(YuvImage::default());
+        }
+        match self {
+            Self::Yuv(image) => image,
+            _ => unreachable!("replaced just above"),
         }
     }
 }
@@ -146,7 +242,10 @@ impl MediaInfo {
 }
 
 /// A media that decodes frames by index, in any order.
-pub trait FrameSource: Send {
+///
+/// A source stays on the thread that opened it: platform decoders are not
+/// required to move between threads.
+pub trait FrameSource {
     /// Size and timing.
     fn info(&self) -> &MediaInfo;
 
@@ -164,7 +263,8 @@ impl FrameSource for HapDecoder {
     }
 }
 
-/// Opens a media file: a HAP movie, or a still image (PNG, JPEG).
+/// Opens a media file: a still image (PNG, JPEG), a HAP movie, or on macOS
+/// a movie in any codec AVFoundation decodes (H.264, ProRes…).
 pub fn open_file(path: &Path) -> Result<Box<dyn FrameSource>, DecodeError> {
     let extension = path
         .extension()
@@ -174,7 +274,27 @@ pub fn open_file(path: &Path) -> Result<Box<dyn FrameSource>, DecodeError> {
     if IMAGE_EXTENSIONS.contains(&extension.as_str()) {
         return Ok(Box::new(StillImage::open(path)?));
     }
-    Ok(Box::new(HapDecoder::open(path)?))
+    let mut file = File::open(path).map_err(DecodeError::Open)?;
+    let track = VideoTrack::read(&mut file)?;
+    if is_hap(track.codec) {
+        return Ok(Box::new(HapDecoder::new(file)?));
+    }
+    open_platform(path, &track)
+}
+
+#[cfg(target_os = "macos")]
+fn open_platform(path: &Path, track: &VideoTrack) -> Result<Box<dyn FrameSource>, DecodeError> {
+    Ok(Box::new(crate::avf::AvfSource::open(
+        path,
+        track.codec_name(),
+        track.frame_count(),
+        track.duration_seconds(),
+    )?))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_platform(_path: &Path, track: &VideoTrack) -> Result<Box<dyn FrameSource>, DecodeError> {
+    Err(DecodeError::UnsupportedCodec(track.codec_name()))
 }
 
 /// Opens a folder of PNG images, played in name order at `rate` frames per
@@ -197,6 +317,37 @@ mod tests {
         assert_eq!(info.frame_at(0.04), 1);
         assert_eq!(info.frame_at(100.0), 9);
         assert_eq!(MediaInfo::uniform("PNG", 1, 1, 1, 0.0).frame_rate(), 1.0);
+    }
+
+    #[test]
+    fn yuv_reference_colors() {
+        let gray = YuvImage {
+            width: 2,
+            height: 2,
+            luma: vec![126; 4],
+            chroma: vec![128, 128],
+            ..YuvImage::default()
+        };
+        assert_eq!(gray.rgb_at(1, 1), [128, 128, 128]);
+        // Video-range red in BT.709.
+        let red = YuvImage {
+            width: 1,
+            height: 1,
+            luma: vec![63],
+            chroma: vec![102, 240],
+            ..YuvImage::default()
+        };
+        let [r, g, b] = red.rgb_at(0, 0);
+        assert!(r > 240 && g < 20 && b < 20, "{:?}", [r, g, b]);
+        let full = YuvImage {
+            full_range: true,
+            matrix: YuvMatrix::Bt601,
+            luma: vec![255],
+            chroma: vec![128, 128],
+            width: 1,
+            height: 1,
+        };
+        assert_eq!(full.rgb_at(0, 0), [255, 255, 255]);
     }
 
     #[test]

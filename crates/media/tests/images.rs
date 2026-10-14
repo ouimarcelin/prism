@@ -46,7 +46,7 @@ fn rgba_png(path: &Path, extra: u8) {
 fn pixels(frame: &Frame) -> &[u8] {
     match frame {
         Frame::Rgba(image) => &image.pixels,
-        Frame::Hap(_) => panic!("expected an RGBA frame"),
+        _ => panic!("expected an RGBA frame"),
     }
 }
 
