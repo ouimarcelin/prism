@@ -40,3 +40,4 @@ Ce que cela implique pour la suite.
 | [0006](0006-moteur-de-lecture.md) | Moteur de lecture et thread de rendu | Acceptée |
 | [0007](0007-sorties-et-application.md) | Sorties présentées par le thread de rendu | Acceptée |
 | [0008](0008-interface-egui.md) | Interface egui et document édité | Acceptée |
+| [0009](0009-sources-d-images.md) | Sources d'images communes à tous les formats | Acceptée |

@@ -14,6 +14,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Images fixes (PNG, JPEG) et séquences PNG (dossier joué dans l'ordre des numéros, fréquence réglable) : import par dialogue, glisser-déposer ou ligne de commande ; tous les formats passent par une même interface de source d'images (ADR 0009).
 - Six modes de fusion : éclaircir, assombrir, différence, soustraction, incrustation, exclusion.
 - Interface de contrôle egui (crate `prism-ui`) : grille de clips, déclenchement à la souris et au clavier, réglages des couches, crossfader, propriétés du clip (sens, vitesse, fin, entrée et sortie, scratch, points de repère), aperçu du programme, réglages de la composition, choix de l'écran de sortie, fichiers de projet, import par dialogue ou glisser-déposer, médias manquants (ADR 0008).
 - Application `prism` : fenêtre de contrôle avec aperçu, sortie plein écran sur un second écran, vidéos ou projet passés en ligne de commande, raccourcis clavier (colonnes 1 à 9, Espace, F, Échap) ; sorties présentées par le thread de rendu avec synchronisation verticale (crate `prism-output`, ADR 0007).
