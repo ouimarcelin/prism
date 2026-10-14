@@ -7,6 +7,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- L'application garde les actions de toutes les passes d'egui dans une image : un raccourci ou un clic ne se perd plus quand egui refait la mise en page.
+- La ligne d'état (cadence, saccades, images sautées, images en retard) a sa propre ligne sous le crossfader.
 - Thread de rendu en ordonnancement temps réel sur macOS : réveillé à l'heure même quand d'autres processus occupent les cœurs ; threads de décodage en classe « initiée par l'utilisateur » (ADR 0012).
 - Trames envoyées au GPU par des tampons réutilisés d'une image à l'autre : plus d'allocation de mémoire GPU pendant la lecture ; travail moyen par image de 3,5 à 2,3 ms avec 4 couches HAP 1080p (ADR 0012).
 - Au plus 3 images en attente sur le GPU : au-delà, le moteur saute un tour au lieu d'empiler des images et leurs tampons ; images sautées et latence du GPU dans l'état du moteur (ADR 0012).
@@ -22,6 +24,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Tempo de la composition (20 à 999 BPM, enregistré dans le projet), tap tempo (bouton et touche T), resync (bouton et touche R), voyants des temps de la mesure ; horloge de tempo sans dérive dans le moteur (crate `prism-clock`) ; fondu automatique du crossfader en temps, au tempo (ADR 0014).
 - Outil `gpu-bench` : temps GPU d'une image du moteur, sans fenêtre.
 - Benchmark et test d'endurance de la phase 1 (`docs/benchmarks/`) : `engine-run` tient la durée voulue, note chaque incident (saccade, images en retard) avec la pagination de la machine, relève l'empreinte mémoire et le nombre de tampons GPU, et écrit un rapport Markdown ; état du moteur enrichi (pire écart entre deux images, saccades, durée de chaque étape d'une image) ; clips de bruit HAP et HAP Q, le contenu le plus lourd, dans `make-test-clip`.
 - Cmd+Q avec confirmation des modifications, écrans maintenus allumés pendant la sortie, préférences (projets récents, écran de sortie, durée du fondu), crossfader automatique vers A ou B (ADR 0011).

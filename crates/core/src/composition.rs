@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Clip, ColumnId, Crossfader, Layer, LayerId, Slot};
+use crate::{Bpm, Clip, ColumnId, Crossfader, Layer, LayerId, Slot};
 
 /// Largest width or height accepted for a composition, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -122,6 +122,8 @@ pub struct Composition {
     layers: Vec<Layer>,
     /// A/B crossfader.
     pub crossfader: Crossfader,
+    /// Tempo, for everything that follows the beat.
+    pub tempo: Bpm,
     next_id: u32,
 }
 
@@ -135,6 +137,8 @@ struct CompositionRepr {
     layers: Vec<Layer>,
     #[serde(default)]
     crossfader: Crossfader,
+    #[serde(default)]
+    tempo: Bpm,
     #[serde(default)]
     next_id: u32,
 }
@@ -189,6 +193,7 @@ impl TryFrom<CompositionRepr> for Composition {
             columns: repr.columns,
             layers: repr.layers,
             crossfader: repr.crossfader,
+            tempo: repr.tempo,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -223,6 +228,7 @@ impl Composition {
             columns: Vec::new(),
             layers: Vec::new(),
             crossfader: Crossfader::default(),
+            tempo: Bpm::DEFAULT,
             next_id: 0,
         }
     }
@@ -505,6 +511,7 @@ impl Composition {
             && self.frame_rate == other.frame_rate
             && self.columns == other.columns
             && self.crossfader == other.crossfader
+            && self.tempo == other.tempo
             && self.layers.len() == other.layers.len()
             && self
                 .layers
@@ -611,6 +618,25 @@ mod tests {
         assert_eq!(comp.layers().len(), 2);
         assert_eq!(comp.columns().len(), 3);
         assert_rectangular(&comp);
+    }
+
+    #[test]
+    fn tempo_is_saved_and_defaults_to_120() {
+        let mut comp = grid(1, 1);
+        assert_eq!(comp.tempo.get(), 120.0);
+        let saved = comp.clone();
+        comp.tempo = Bpm::new(128.0);
+        assert!(!comp.same_content(&saved));
+
+        let json = serde_json::to_string(&comp).unwrap();
+        let read: Composition = serde_json::from_str(&json).unwrap();
+        assert_eq!(read.tempo.get(), 128.0);
+
+        // Files written before the tempo existed.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("tempo");
+        let old: Composition = serde_json::from_value(value).unwrap();
+        assert_eq!(old.tempo, Bpm::DEFAULT);
     }
 
     #[test]

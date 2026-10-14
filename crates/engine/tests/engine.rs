@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use prism_core::{Clip, Composition, Direction, FrameRate, LoopMode, Resolution, Slot};
+use prism_core::{Bpm, Clip, Composition, Direction, FrameRate, LoopMode, Resolution, Slot};
 use prism_engine::{ClipState, Command, Engine, EngineState, LayerStatus, Output, ProgramOutput};
 use prism_media::BlockFormat;
 use prism_media::test_support::{
@@ -563,4 +563,49 @@ fn stutters_are_counted_after_the_start() {
     assert!((hitch.interval_ms - 50.0).abs() < 0.5, "{hitch:?}");
     // The delay came from the clock, not from the previous frame.
     assert!(hitch.previous.total_ms() < 25.0, "{hitch:?}");
+}
+
+#[test]
+fn beats_follow_the_tempo_taps_and_resync() {
+    let Some(gpu) = gpu() else { return };
+    let (mut comp, _) = composition_with(Clip::from_file("/unused.mov"));
+    comp.tempo = Bpm::new(120.0);
+    let mut driver = Driver::new(gpu, comp.clone());
+
+    // A bar starts now: one second later, two beats have passed.
+    driver.state.apply(Command::Resync { at: driver.now });
+    for _ in 0..=60 {
+        driver.tick();
+    }
+    let status = driver.state.status();
+    assert_eq!(status.bpm, 120.0);
+    assert!((status.beat - 2.0).abs() < 1e-6, "{}", status.beat);
+
+    // A tap at 90 BPM sets the tempo and puts a beat on the tap.
+    driver.state.apply(Command::Tap {
+        at: driver.now,
+        bpm: 90.0,
+    });
+    driver.tick();
+    let status = driver.state.status();
+    assert_eq!(status.bpm, 90.0);
+    assert!(
+        (status.beat - status.beat.round()).abs() < 1e-9,
+        "{}",
+        status.beat
+    );
+
+    // A tempo change in the composition starts from the last frame: one
+    // frame at 60 BPM later, the position moved by 1/60 of a beat.
+    let before = status.beat;
+    comp.tempo = Bpm::new(60.0);
+    driver.state.set_composition(comp);
+    driver.tick();
+    let status = driver.state.status();
+    assert_eq!(status.bpm, 60.0);
+    assert!(
+        (status.beat - before - 1.0 / 60.0).abs() < 1e-6,
+        "{}",
+        status.beat
+    );
 }

@@ -13,6 +13,10 @@ pub enum Shortcut {
     CloseOutput,
     /// Quits, after asking about unsaved changes.
     Quit,
+    /// One tap of the tap tempo.
+    TapTempo,
+    /// Starts a bar now.
+    Resync,
 }
 
 impl Shortcut {
@@ -20,6 +24,8 @@ impl Shortcut {
     pub fn from_text(text: &str) -> Option<Self> {
         match text {
             "f" | "F" => Some(Self::ToggleOutput),
+            "t" | "T" => Some(Self::TapTempo),
+            "r" | "R" => Some(Self::Resync),
             " " => Some(Self::StopAll),
             digit => digit
                 .parse::<usize>()
@@ -31,9 +37,11 @@ impl Shortcut {
 }
 
 /// Shortcuts listed in the help window: key, then action.
-pub const SHORTCUT_HELP: [(&str, &str); 9] = [
+pub const SHORTCUT_HELP: [(&str, &str); 11] = [
     ("1 à 9", "Déclencher la colonne"),
     ("Espace", "Arrêter toutes les couches"),
+    ("T", "Tap tempo : frapper en rythme"),
+    ("R", "Resync : la mesure commence maintenant"),
     ("F", "Ouvrir ou fermer la sortie plein écran"),
     ("Échap", "Fermer la sortie plein écran"),
     ("Cmd + N", "Nouveau projet"),
@@ -54,6 +62,8 @@ mod tests {
         assert_eq!(Shortcut::from_text("0"), None);
         assert_eq!(Shortcut::from_text("f"), Some(Shortcut::ToggleOutput));
         assert_eq!(Shortcut::from_text(" "), Some(Shortcut::StopAll));
+        assert_eq!(Shortcut::from_text("t"), Some(Shortcut::TapTempo));
+        assert_eq!(Shortcut::from_text("R"), Some(Shortcut::Resync));
         assert_eq!(Shortcut::from_text("x"), None);
     }
 }

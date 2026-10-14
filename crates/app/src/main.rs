@@ -388,7 +388,9 @@ impl App {
                 screens: &screens,
                 output_screen,
             };
-            actions = panel.ui(ui, &frame);
+            // egui may run the interface twice in one frame; only the first
+            // pass sees the input, so keep the actions of every pass.
+            actions.extend(panel.ui(ui, &frame));
         });
         self.handle(event_loop, actions);
         // Playheads and the preview move: keep drawing, at the screen rate

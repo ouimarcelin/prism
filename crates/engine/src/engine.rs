@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use prism_clock::BeatClock;
 use prism_core::{Composition, LayerId, Resolution, Slot};
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, Transition, WORKING_FORMAT, solid_color_texture,
@@ -67,6 +68,19 @@ pub enum Command {
         /// Identifier given to [`Command::AddOutput`].
         id: u64,
     },
+    /// A tap of the tap tempo: from `at` on, the tempo is `bpm` and a beat
+    /// falls at `at`. Set the same tempo in the composition.
+    Tap {
+        /// Instant of the tap.
+        at: Instant,
+        /// Tempo measured from the taps, in beats per minute.
+        bpm: f64,
+    },
+    /// Starts a bar at `at`.
+    Resync {
+        /// Instant of the first beat of the bar.
+        at: Instant,
+    },
 }
 
 impl std::fmt::Debug for Command {
@@ -82,6 +96,8 @@ impl std::fmt::Debug for Command {
             Self::JumpToCue { layer, index } => write!(f, "JumpToCue({layer}, {index})"),
             Self::AddOutput { id, .. } => write!(f, "AddOutput({id})"),
             Self::RemoveOutput { id } => write!(f, "RemoveOutput({id})"),
+            Self::Tap { bpm, .. } => write!(f, "Tap({bpm} BPM)"),
+            Self::Resync { .. } => f.write_str("Resync"),
         }
     }
 }
@@ -279,6 +295,8 @@ pub struct EngineState {
     program: Arc<ProgramOutput>,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
+    clock: BeatClock,
+    beat: f64,
     last_tick: Option<Instant>,
     submitted: u64,
     gpu_progress: Arc<GpuProgress>,
@@ -307,6 +325,8 @@ impl EngineState {
             program,
             outputs: Vec::new(),
             random: Random::new(seed),
+            clock: BeatClock::new(composition.tempo.get(), Instant::now()),
+            beat: 0.0,
             last_tick: None,
             submitted: 0,
             gpu_progress: Arc::default(),
@@ -349,6 +369,12 @@ impl EngineState {
             self.compositor.resize(resolution);
             self.program = Arc::new(ProgramOutput::new(&self.gpu.device, resolution));
         }
+        let bpm = composition.tempo.get();
+        if bpm != self.clock.bpm() {
+            // From the last frame on, so the beat position does not jump.
+            let time = self.last_tick.unwrap_or_else(Instant::now);
+            self.clock.set_bpm(bpm, time);
+        }
         self.composition = composition;
         self.sync_layers();
     }
@@ -385,6 +411,11 @@ impl EngineState {
                 self.outputs.push((id, output));
             }
             Command::RemoveOutput { id } => self.outputs.retain(|(existing, _)| *existing != id),
+            Command::Tap { at, bpm } => {
+                self.clock.set_bpm(bpm, at);
+                self.clock.align_beat(at);
+            }
+            Command::Resync { at } => self.clock.restart_bar(at),
         }
     }
 
@@ -464,6 +495,7 @@ impl EngineState {
             now.saturating_duration_since(last).as_secs_f64()
         });
         self.last_tick = Some(now);
+        self.beat = self.clock.beat_at(now);
         let tick = 1.0 / self.composition.frame_rate().as_f64();
 
         // Playback.
@@ -635,6 +667,8 @@ impl EngineState {
             last_hitch: self.stats.last_hitch,
             real_time: self.stats.real_time,
             gpu_skips: self.stats.gpu_skips,
+            bpm: self.clock.bpm(),
+            beat: self.beat,
             worst_gpu_latency_ms: self.gpu_progress.worst_latency_us.load(Ordering::Relaxed) as f64
                 / 1000.0,
             layers: self.layers.iter().map(LayerRuntime::status).collect(),

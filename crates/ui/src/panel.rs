@@ -2,9 +2,11 @@
 
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use egui::{Key, KeyboardShortcut, Modifiers};
-use prism_core::{ColumnId, MissingMedia, Resolution, Slot};
+use prism_clock::{BEATS_PER_BAR, TapTempo, beat_in_bar};
+use prism_core::{Bpm, ColumnId, MAX_BPM, MIN_BPM, MissingMedia, Resolution, Slot};
 use prism_engine::{Command, EngineStatus};
 
 use crate::crossfade::AutoFade;
@@ -81,6 +83,7 @@ pub struct ControlPanel {
     pub(crate) preferences: Preferences,
     preferences_path: Option<PathBuf>,
     pub(crate) auto_fade: Option<AutoFade>,
+    tap: TapTempo,
 }
 
 impl ControlPanel {
@@ -100,6 +103,7 @@ impl ControlPanel {
             preferences: Preferences::default(),
             preferences_path: None,
             auto_fade: None,
+            tap: TapTempo::default(),
         }
     }
 
@@ -199,8 +203,31 @@ impl ControlPanel {
                     self.actions.push(Action::Quit);
                 }
             }
+            Shortcut::TapTempo => self.tap_tempo(),
+            Shortcut::Resync => self.resync(),
         }
         self.document.commit(&before);
+    }
+
+    /// One tap of the tap tempo. From the second tap of a series on, the
+    /// tempo follows the taps; every tap puts a beat on itself.
+    pub(crate) fn tap_tempo(&mut self) {
+        let now = Instant::now();
+        let bpm = self
+            .tap
+            .tap(now)
+            .map_or(self.document.composition().tempo, Bpm::new);
+        self.document.composition_mut().tempo = bpm;
+        self.actions.push(Action::Engine(Command::Tap {
+            at: now,
+            bpm: bpm.get(),
+        }));
+    }
+
+    /// Starts a bar now.
+    pub(crate) fn resync(&mut self) {
+        self.actions
+            .push(Action::Engine(Command::Resync { at: Instant::now() }));
     }
 
     /// Asks to quit. Returns `true` when the application may quit now;
@@ -304,6 +331,8 @@ impl ControlPanel {
                         Key::Space => Some(Shortcut::StopAll),
                         Key::Escape => Some(Shortcut::CloseOutput),
                         Key::F => Some(Shortcut::ToggleOutput),
+                        Key::T => Some(Shortcut::TapTempo),
+                        Key::R => Some(Shortcut::Resync),
                         other => digit(*other).map(Shortcut::TriggerColumn),
                     },
                     _ => None,
@@ -446,16 +475,95 @@ impl ControlPanel {
         });
     }
 
+    /// Tempo, tap tempo, resync and the beat of the bar.
+    fn tempo(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
+        let mut bpm = self.document.composition().tempo.get();
+        let field = ui
+            .add(
+                egui::DragValue::new(&mut bpm)
+                    .range(MIN_BPM..=MAX_BPM)
+                    .speed(0.1)
+                    .fixed_decimals(1)
+                    .suffix(" BPM"),
+            )
+            .on_hover_text("Tempo de la composition");
+        if field.changed() {
+            self.document.composition_mut().tempo = Bpm::new(bpm);
+        }
+        // A tap counts when the button goes down, not when it comes up.
+        let tap = ui
+            .button("Tap")
+            .on_hover_text("Tap tempo : frapper en rythme (touche T)");
+        if tap.contains_pointer() && ui.input(|input| input.pointer.primary_pressed()) {
+            self.tap_tempo();
+        }
+        if ui
+            .button("Resync")
+            .on_hover_text("La mesure commence maintenant (touche R)")
+            .clicked()
+        {
+            self.resync();
+        }
+        beat_lights(ui, status.beat);
+    }
+
+    /// Duration of the automatic crossfade, as the interface says it.
+    fn crossfade_text(&self, seconds: f32) -> String {
+        if self.preferences.crossfade_on_beats {
+            format!(
+                "{} temps ({seconds:.1} s)",
+                self.preferences.crossfade_beats
+            )
+        } else {
+            format!("{seconds:.1} s")
+        }
+    }
+
+    /// Duration of the automatic crossfade, in seconds or in beats.
+    fn crossfade_duration(&mut self, ui: &mut egui::Ui) {
+        let preferences = &mut self.preferences;
+        let field = if preferences.crossfade_on_beats {
+            ui.add(
+                egui::DragValue::new(&mut preferences.crossfade_beats)
+                    .range(1.0..=64.0)
+                    .speed(0.1)
+                    .fixed_decimals(0)
+                    .suffix(" temps"),
+            )
+        } else {
+            ui.add(
+                egui::DragValue::new(&mut preferences.crossfade_seconds)
+                    .range(0.0..=60.0)
+                    .speed(0.05)
+                    .suffix(" s"),
+            )
+        }
+        .on_hover_text("Durée du fondu automatique");
+        let unit = ui
+            .selectable_label(preferences.crossfade_on_beats, "au tempo")
+            .on_hover_text("Compter le fondu automatique en temps, au tempo de la composition");
+        if unit.clicked() {
+            preferences.crossfade_on_beats = !preferences.crossfade_on_beats;
+        }
+        if field.drag_stopped() || field.lost_focus() || unit.clicked() {
+            self.save_preferences();
+        }
+    }
+
     fn transport(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
         let dt = ui.input(|input| input.stable_dt).min(0.1);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            let seconds = self.preferences.crossfade_seconds;
+            self.tempo(ui, status);
+            ui.separator();
+            let bpm = self.document.composition().tempo.get();
+            let seconds = self.preferences.crossfade_duration(bpm);
+            let duration = self.crossfade_text(seconds);
             let start = self.document.composition().crossfader.position.get();
             let mut fade_to = None;
             if ui
                 .button("◀ A")
-                .on_hover_text(format!("Crossfader vers A en {seconds:.1} s"))
+                .on_hover_text(format!("Crossfader vers A en {duration}"))
                 .clicked()
             {
                 fade_to = Some(0.0);
@@ -485,7 +593,7 @@ impl ControlPanel {
             ui.label(egui::RichText::new("B").strong());
             if ui
                 .button("B ▶")
-                .on_hover_text(format!("Crossfader vers B en {seconds:.1} s"))
+                .on_hover_text(format!("Crossfader vers B en {duration}"))
                 .clicked()
             {
                 fade_to = Some(1.0);
@@ -505,30 +613,21 @@ impl ControlPanel {
                         );
                     }
                 });
-            let mut seconds = self.preferences.crossfade_seconds;
-            let duration = ui
-                .add(
-                    egui::DragValue::new(&mut seconds)
-                        .range(0.0..=60.0)
-                        .speed(0.05)
-                        .suffix(" s"),
-                )
-                .on_hover_text("Durée du fondu automatique");
-            if duration.changed() {
-                self.preferences.crossfade_seconds = seconds;
-            }
-            if duration.drag_stopped() || duration.lost_focus() {
-                self.save_preferences();
-            }
+            self.crossfade_duration(ui);
             if let Some(target) = fade_to {
                 self.auto_fade = Some(AutoFade::new(start, target, seconds));
             }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(status_line(status)).on_hover_text(STATUS_HELP);
-            });
         });
-        ui.add_space(4.0);
+        // On its own line, so the controls above never push it out.
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(status_line(status))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .on_hover_text(STATUS_HELP);
+        });
+        ui.add_space(2.0);
     }
 
     pub(crate) fn trigger_column(&mut self, column: ColumnId) {
@@ -752,6 +851,29 @@ fn status_line(status: &EngineStatus) -> String {
         "{:.1} i/s · {:.1} ms par image · saccades : {} · sautées : {} · en retard : {late}",
         status.fps, status.frame_time_ms, status.hitches, status.gpu_skips
     )
+}
+
+/// One light per beat of the bar: the current beat is lit, the first beat
+/// of the bar in the warning color.
+fn beat_lights(ui: &mut egui::Ui, beat: f64) {
+    let spacing = 10.0;
+    let size = egui::vec2(spacing * BEATS_PER_BAR as f32, 12.0);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let current = beat_in_bar(beat);
+    let visuals = ui.visuals();
+    for index in 0..BEATS_PER_BAR {
+        let center = egui::pos2(
+            rect.left() + spacing * (index as f32 + 0.5),
+            rect.center().y,
+        );
+        let color = match (index == current, index) {
+            (true, 0) => visuals.warn_fg_color,
+            (true, _) => visuals.strong_text_color(),
+            (false, _) => visuals.widgets.inactive.bg_fill,
+        };
+        ui.painter().circle_filled(center, 3.5, color);
+    }
+    response.on_hover_text("Temps de la mesure");
 }
 
 #[cfg(test)]

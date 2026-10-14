@@ -117,6 +117,11 @@ pub struct EngineStatus {
     pub last_hitch: Option<Hitch>,
     /// Whether the render thread runs with real-time scheduling.
     pub real_time: bool,
+    /// Tempo, in beats per minute.
+    pub bpm: f64,
+    /// Beat position at the last frame: `0.0` at the start of a bar, four
+    /// beats per bar.
+    pub beat: f64,
     /// Ticks without a new image because the GPU was still busy with
     /// earlier frames: the previous image stayed on screen.
     pub gpu_skips: u64,

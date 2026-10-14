@@ -31,4 +31,4 @@ pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
 pub use ids::{ColumnId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
-pub use value::Unit;
+pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
