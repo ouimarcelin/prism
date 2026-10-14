@@ -65,7 +65,7 @@ fn program_texture(device: &wgpu::Device) -> wgpu::Texture {
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: WORKING_FORMAT,
-        usage: wgpu::TextureUsages::COPY_DST
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[],
@@ -101,7 +101,7 @@ fn main() -> ExitCode {
     };
     let mut uploader = FrameUploader::new(device, queue);
     let mut compositor = Compositor::new(device, resolution);
-    let program = program_texture(device);
+    let program = program_texture(device).create_view(&Default::default());
     let hap: Vec<Frame> = (0..layers).map(hap_frame).collect();
     let mut textures: Vec<VideoTexture> = (0..layers)
         .map(|_| VideoTexture::new(device, WIDTH, HEIGHT))
@@ -128,12 +128,7 @@ fn main() -> ExitCode {
             .iter()
             .map(|texture| LayerInput::new(texture.view(), 0.8, BlendMode::Screen))
             .collect();
-        compositor.encode(device, queue, &mut encoder, &inputs);
-        encoder.copy_texture_to_texture(
-            compositor.output().as_image_copy(),
-            program.as_image_copy(),
-            program.size(),
-        );
+        compositor.encode(device, queue, &mut encoder, &inputs, &program);
         let index = queue.submit([encoder.finish()]);
         cpu += encoding.elapsed();
         // Two frames in flight: wait for the one before.

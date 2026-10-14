@@ -88,7 +88,8 @@ impl std::fmt::Debug for Command {
 
 /// The mixed image of the composition, refreshed after every frame.
 ///
-/// Readers sample it at any time: it always holds a complete frame.
+/// Readers sample it at any time: the GPU runs work in submission order,
+/// so a reader sees a complete frame, never one being mixed.
 #[derive(Debug)]
 pub struct ProgramOutput {
     texture: wgpu::Texture,
@@ -109,7 +110,7 @@ impl ProgramOutput {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: WORKING_FORMAT,
-            usage: wgpu::TextureUsages::COPY_DST
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_SRC
                 | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
@@ -345,7 +346,7 @@ impl EngineState {
     pub fn set_composition(&mut self, composition: Composition) {
         let resolution = composition.resolution();
         if resolution != self.program.resolution() {
-            self.compositor.resize(&self.gpu.device, resolution);
+            self.compositor.resize(resolution);
             self.program = Arc::new(ProgramOutput::new(&self.gpu.device, resolution));
         }
         self.composition = composition;
@@ -478,7 +479,7 @@ impl EngineState {
         }
         let played = Instant::now();
 
-        // GPU: frame uploads, mixing and copy to the program image, in one
+        // GPU: frame uploads and mixing into the program image, in one
         // submission. Finished frames, and the upload buffers they held, are
         // collected first, without waiting.
         let gpu = Arc::clone(&self.gpu);
@@ -533,17 +534,12 @@ impl EngineState {
             };
             inputs.push(input);
         }
-        self.compositor
-            .encode(&gpu.device, &gpu.queue, &mut encoder, &inputs);
-        let resolution = self.program.resolution();
-        encoder.copy_texture_to_texture(
-            self.compositor.output().as_image_copy(),
-            self.program.texture.as_image_copy(),
-            wgpu::Extent3d {
-                width: resolution.width,
-                height: resolution.height,
-                depth_or_array_layers: 1,
-            },
+        self.compositor.encode(
+            &gpu.device,
+            &gpu.queue,
+            &mut encoder,
+            &inputs,
+            &self.program.view,
         );
         gpu.queue.submit([encoder.finish()]);
         self.watch_gpu(&gpu);

@@ -1,10 +1,11 @@
-// Composites one layer over the result of the layers below it.
+// Composites up to four layers over the result of the layers below them, in
+// one pass: the mix stays in 32-bit registers from one layer to the next.
 //
 // Colors are premultiplied by alpha and kept in display (gamma-encoded) space,
 // see docs/decisions/0004-espace-de-mixage.md. The blending formulas must stay
 // identical to `reference.rs`.
 
-struct LayerParams {
+struct Layer {
     opacity: f32,
     blend_mode: u32,
     // Transition from the previous clip: 1.0 when there is none.
@@ -12,11 +13,27 @@ struct LayerParams {
     _pad: u32,
 }
 
-@group(0) @binding(0) var<uniform> params: LayerParams;
+struct Batch {
+    layers: array<Layer, 4>,
+    // Layers of this pass, from the first.
+    count: u32,
+    // 1 when the pass starts from opaque black instead of `below_texture`.
+    over_black: u32,
+    _pad0: u32,
+    _pad1: u32,
+}
+
+@group(0) @binding(0) var<uniform> batch: Batch;
 @group(0) @binding(1) var below_texture: texture_2d<f32>;
-@group(0) @binding(2) var layer_texture: texture_2d<f32>;
-@group(0) @binding(3) var layer_sampler: sampler;
-@group(0) @binding(4) var previous_texture: texture_2d<f32>;
+@group(0) @binding(2) var layer_sampler: sampler;
+@group(0) @binding(3) var layer0: texture_2d<f32>;
+@group(0) @binding(4) var previous0: texture_2d<f32>;
+@group(0) @binding(5) var layer1: texture_2d<f32>;
+@group(0) @binding(6) var previous1: texture_2d<f32>;
+@group(0) @binding(7) var layer2: texture_2d<f32>;
+@group(0) @binding(8) var previous2: texture_2d<f32>;
+@group(0) @binding(9) var layer3: texture_2d<f32>;
+@group(0) @binding(10) var previous3: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -90,13 +107,8 @@ fn blend(cb: vec3<f32>, cs: vec3<f32>, mode: u32) -> vec3<f32> {
     }
 }
 
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let below = textureLoad(below_texture, vec2<i32>(in.position.xy), 0);
-    let current = textureSample(layer_texture, layer_sampler, in.uv);
-    let previous = textureSample(previous_texture, layer_sampler, in.uv);
-    let layer = mix(previous, current, params.progress);
-
+// Composites one layer, premultiplied, over the colors below it.
+fn composite(below: vec4<f32>, layer: vec4<f32>, params: Layer) -> vec4<f32> {
     let alpha_s = layer.a * params.opacity;
     let alpha_b = below.a;
     let cs = unpremultiply(layer);
@@ -107,4 +119,47 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         + (1.0 - alpha_s) * below.rgb;
     let alpha = alpha_s + alpha_b * (1.0 - alpha_s);
     return vec4<f32>(color, alpha);
+}
+
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    var result = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    if batch.over_black == 0u {
+        result = textureLoad(below_texture, vec2<i32>(in.position.xy), 0);
+    }
+    // The current frame of each layer is mixed with the clip it replaces,
+    // by the progress of the transition, before blending.
+    if batch.count > 0u {
+        let layer = mix(
+            textureSample(previous0, layer_sampler, in.uv),
+            textureSample(layer0, layer_sampler, in.uv),
+            batch.layers[0].progress,
+        );
+        result = composite(result, layer, batch.layers[0]);
+    }
+    if batch.count > 1u {
+        let layer = mix(
+            textureSample(previous1, layer_sampler, in.uv),
+            textureSample(layer1, layer_sampler, in.uv),
+            batch.layers[1].progress,
+        );
+        result = composite(result, layer, batch.layers[1]);
+    }
+    if batch.count > 2u {
+        let layer = mix(
+            textureSample(previous2, layer_sampler, in.uv),
+            textureSample(layer2, layer_sampler, in.uv),
+            batch.layers[2].progress,
+        );
+        result = composite(result, layer, batch.layers[2]);
+    }
+    if batch.count > 3u {
+        let layer = mix(
+            textureSample(previous3, layer_sampler, in.uv),
+            textureSample(layer3, layer_sampler, in.uv),
+            batch.layers[3].progress,
+        );
+        result = composite(result, layer, batch.layers[3]);
+    }
+    return result;
 }
