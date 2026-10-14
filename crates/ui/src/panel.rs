@@ -617,12 +617,17 @@ impl ControlPanel {
             if let Some(target) = fade_to {
                 self.auto_fade = Some(AutoFade::new(start, target, seconds));
             }
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(status_line(status)).on_hover_text(STATUS_HELP);
-            });
         });
-        ui.add_space(4.0);
+        // On its own line, so the controls above never push it out.
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(status_line(status))
+                    .small()
+                    .color(ui.visuals().weak_text_color()),
+            )
+            .on_hover_text(STATUS_HELP);
+        });
+        ui.add_space(2.0);
     }
 
     pub(crate) fn trigger_column(&mut self, column: ColumnId) {
