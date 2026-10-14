@@ -25,6 +25,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Douze effets de plus, 18 en tout : pixellisation, postérisation, seuil, contours, décalage RVB, glitch, vague, tourbillon, mosaïque, vignette, stroboscope, colorisation ; glitch, vague et stroboscope suivent le tempo. Exemple `gallery` : planche de tous les effets sur une mire.
 - Réglage des effets dans l'inspecteur : sections repliables pour la composition, la couche et le clip ; activer, monter, descendre, retirer, ajouter un effet du catalogue ; curseurs et listes de réglages, clic droit pour la valeur par défaut.
 - Outil `ui-snapshot` : la fenêtre de contrôle dessinée dans une image PNG, pour vérifier la mise en page.
 - Moteur d'effets (crate `prism-fx`) : chaînes d'effets GPU sur le clip, la couche et la composition, enregistrées dans le projet ; six premiers effets : couleur, inversion, transformation, miroir, kaléidoscope, flou (ADR 0015). Réglage dans l'interface au ticket suivant.
