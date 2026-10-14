@@ -20,6 +20,8 @@ libc = "0.2"
 png = "0.18.1"
 prism-media = { path = "../media", features = ["test-support"] }
 tempfile.workspace = true
+# Object counts for engine-run (GPU buffers alive).
+wgpu = { version = "30", features = ["counters"] }
 
 [lints]
 workspace = true

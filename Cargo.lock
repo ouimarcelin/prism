@@ -2036,6 +2036,7 @@ dependencies = [
  "prism-media",
  "prism-render",
  "tempfile",
+ "wgpu",
 ]
 
 [[package]]

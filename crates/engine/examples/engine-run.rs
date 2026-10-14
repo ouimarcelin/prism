@@ -38,14 +38,39 @@ fn command_output(program: &str, args: &[&str]) -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// Resident memory of this process, in megabytes, as `ps` reports it.
+/// Memory of this process, in megabytes: its footprint as the `footprint`
+/// tool of macOS reports it (memory of the GPU and compressed memory
+/// included, as the Activity Monitor shows), else its resident memory as
+/// `ps` reports it.
 fn memory_mb() -> Option<f64> {
-    let kilobytes: f64 =
-        command_output("ps", &["-o", "rss=", "-p", &std::process::id().to_string()])?
+    let pid = std::process::id().to_string();
+    footprint_mb(&pid).or_else(|| {
+        let kilobytes: f64 = command_output("ps", &["-o", "rss=", "-p", &pid])?
             .trim()
             .parse()
             .ok()?;
-    Some(kilobytes / 1024.0)
+        Some(kilobytes / 1024.0)
+    })
+}
+
+fn footprint_mb(pid: &str) -> Option<f64> {
+    // "engine-run [123]: 64-bit    Footprint: 259 MB (16384 bytes per page)"
+    let report = command_output("footprint", &["-p", pid])?;
+    let mut words = report.split("Footprint:").nth(1)?.split_whitespace();
+    let value: f64 = words.next()?.parse().ok()?;
+    let megabytes = match words.next()? {
+        "B" => value / 1024.0 / 1024.0,
+        "KB" => value / 1024.0,
+        "MB" => value,
+        "GB" => value * 1024.0,
+        _ => return None,
+    };
+    Some(megabytes)
+}
+
+/// GPU buffers alive, when wgpu counts its objects.
+fn gpu_buffers(gpu: &Gpu) -> isize {
+    gpu.device.get_internal_counters().hal.buffers.read()
 }
 
 /// Swap space in use on the machine, in megabytes (macOS).
@@ -241,7 +266,7 @@ fn main() -> ExitCode {
 
     let swap_at_start = swap_used_mb();
     let counters_at_start = PagingCounters::read();
-    let engine = match Engine::start(gpu, composition) {
+    let engine = match Engine::start(Arc::clone(&gpu), composition) {
         Ok(engine) => engine,
         Err(error) => {
             eprintln!("error: {error}");
@@ -251,7 +276,11 @@ fn main() -> ExitCode {
     let start = Instant::now();
     let duration = Duration::from_secs(options.seconds);
     let mut worst_fps = f64::INFINITY;
+    // Upload buffers and caches settle during the first seconds: memory is
+    // compared from this point on.
+    let memory_reference = (options.seconds / 2).clamp(1, 60);
     let mut memory_after_start = None;
+    let mut buffers_after_start = 0;
     let mut next_line = options.every;
     let mut next_second = 1;
     let mut counters = counters_at_start;
@@ -278,8 +307,9 @@ fn main() -> ExitCode {
                 last_second_paging = Some(now.since(before));
             }
             counters = now;
-            if memory_after_start.is_none() && seconds >= 5 {
+            if memory_after_start.is_none() && seconds >= memory_reference {
                 memory_after_start = memory_mb();
+                buffers_after_start = gpu_buffers(&gpu);
             }
         }
         let late: u64 = status.layers.iter().map(|layer| layer.late_frames).sum();
@@ -309,13 +339,15 @@ fn main() -> ExitCode {
         if seconds >= next_line || elapsed >= duration {
             next_line = seconds + options.every;
             println!(
-                "{:>5} s  {:5.1} i/s  {:5.2} ms/image (pire {:5.1})  pire écart {:5.1} ms  saccades {}  | {}",
+                "{:>5} s  {:5.1} i/s  {:5.2} ms/image (pire {:5.1})  pire écart {:5.1} ms  saccades {}  {:>4.0} Mo, {} tampons GPU  | {}",
                 seconds,
                 status.fps,
                 status.frame_time_ms,
                 status.worst_frame_time_ms,
                 status.worst_interval_ms,
                 status.hitches,
+                memory_mb().unwrap_or(f64::NAN),
+                gpu_buffers(&gpu),
                 layer_line(&status)
             );
         }
@@ -343,7 +375,10 @@ fn main() -> ExitCode {
     };
     let smooth = worst_fps >= 59.0 && status.hitches == 0 && late_frames == 0 && !errors;
     let memory = match (memory_after_start, memory_end) {
-        (Some(first), Some(last)) => format!("{first:.0} Mo après 5 s, {last:.0} Mo à la fin"),
+        (Some(first), Some(last)) => format!(
+            "{first:.0} Mo après {memory_reference} s, {last:.0} Mo à la fin ; tampons GPU : {buffers_after_start} après {memory_reference} s, {} à la fin",
+            gpu_buffers(&gpu)
+        ),
         _ => "inconnue".to_owned(),
     };
 
