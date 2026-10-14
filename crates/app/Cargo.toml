@@ -26,3 +26,6 @@ winit = "0.30.13"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+png = "0.18.1"
