@@ -1,0 +1,240 @@
+//! Effects on the GPU, checked pixel by pixel.
+//!
+//! These tests need a GPU. Without one they print a notice and pass.
+
+#![allow(clippy::unwrap_used)]
+
+use prism_core::Effect;
+use prism_fx::{EffectChain, EffectRenderer, FrameTime, find, is_active};
+use prism_render::{Gpu, WORKING_FORMAT, pixels_texture, read_texture, wgpu};
+
+/// Half-float precision on values up to 1.
+const TOLERANCE: f32 = 3e-3;
+
+fn gpu() -> Option<Gpu> {
+    match Gpu::headless() {
+        Ok(gpu) => Some(gpu),
+        Err(error) => {
+            eprintln!("skipping GPU test: {error}");
+            None
+        }
+    }
+}
+
+fn effect(kind: &str, params: &[(&str, f32)]) -> Effect {
+    let mut effect = find(kind).unwrap().create();
+    for (name, value) in params {
+        effect.set_param(*name, *value);
+    }
+    effect
+}
+
+/// Runs `effects` on an image of `width` × `height` pixels and returns the
+/// result, row by row; `None` when no effect applies.
+fn run(
+    gpu: &Gpu,
+    effects: &[Effect],
+    width: u32,
+    height: u32,
+    pixels: &[[f32; 4]],
+) -> Option<Vec<[f32; 4]>> {
+    let renderer = EffectRenderer::new(&gpu.device);
+    let input = pixels_texture(&gpu.device, &gpu.queue, width, height, pixels)
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let destination = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("result"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: WORKING_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let effects: Vec<&Effect> = effects.iter().collect();
+    let mut chain = EffectChain::default();
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    let written = chain.apply_into(
+        &renderer,
+        &gpu.device,
+        &gpu.queue,
+        &mut encoder,
+        &effects,
+        &input,
+        (width, height),
+        FrameTime::default(),
+        &destination.create_view(&wgpu::TextureViewDescriptor::default()),
+    );
+    gpu.queue.submit([encoder.finish()]);
+    written.then(|| read_texture(&gpu.device, &gpu.queue, &destination).unwrap())
+}
+
+fn assert_close(actual: [f32; 4], expected: [f32; 4], tolerance: f32, what: &str) {
+    for channel in 0..4 {
+        assert!(
+            (actual[channel] - expected[channel]).abs() < tolerance,
+            "{what}: expected {expected:?}, got {actual:?}"
+        );
+    }
+}
+
+/// An image with its left half `left` and its right half `right`.
+fn halves(width: u32, height: u32, left: [f32; 4], right: [f32; 4]) -> Vec<[f32; 4]> {
+    (0..width * height)
+        .map(|index| {
+            if index % width < width / 2 {
+                left
+            } else {
+                right
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn invert_works_on_straight_colors() {
+    let Some(gpu) = gpu() else { return };
+    let pixels = [[0.2, 0.4, 0.6, 1.0], [0.1, 0.2, 0.3, 0.5]];
+    let result = run(&gpu, &[effect("invert", &[])], 2, 1, &pixels).unwrap();
+    assert_close(result[0], [0.8, 0.6, 0.4, 1.0], TOLERANCE, "opaque");
+    assert_close(result[1], [0.4, 0.3, 0.2, 0.5], TOLERANCE, "translucent");
+}
+
+#[test]
+fn chains_skip_bypassed_and_unknown_effects() {
+    let Some(gpu) = gpu() else { return };
+    let pixel = [0.2, 0.4, 0.6, 1.0];
+    let mut bypassed = effect("invert", &[]);
+    bypassed.bypass = true;
+    let unknown = Effect::new("from a later version");
+    assert!(!is_active(&[&bypassed, &unknown]));
+    assert_eq!(
+        run(&gpu, &[bypassed.clone(), unknown.clone()], 1, 1, &[pixel]),
+        None
+    );
+
+    // Two inversions around the skipped ones: back to the start.
+    let chain = [
+        effect("invert", &[]),
+        bypassed,
+        unknown,
+        effect("invert", &[]),
+    ];
+    let result = run(&gpu, &chain, 1, 1, &[pixel]).unwrap();
+    assert_close(result[0], pixel, TOLERANCE, "twice inverted");
+}
+
+#[test]
+fn color_adjusts_brightness_saturation_and_hue() {
+    let Some(gpu) = gpu() else { return };
+    let gray = [0.5, 0.5, 0.5, 1.0];
+    let red = [1.0, 0.0, 0.0, 1.0];
+    let brighter = run(
+        &gpu,
+        &[effect("color", &[("brightness", 0.1)])],
+        1,
+        1,
+        &[gray],
+    );
+    assert_close(
+        brighter.unwrap()[0],
+        [0.6, 0.6, 0.6, 1.0],
+        TOLERANCE,
+        "brightness",
+    );
+    let flat = run(&gpu, &[effect("color", &[("contrast", 0.0)])], 1, 1, &[red]);
+    assert_close(flat.unwrap()[0], gray, TOLERANCE, "no contrast");
+    let gray_red = run(
+        &gpu,
+        &[effect("color", &[("saturation", 0.0)])],
+        1,
+        1,
+        &[red],
+    );
+    let luma = 0.2126;
+    assert_close(
+        gray_red.unwrap()[0],
+        [luma, luma, luma, 1.0],
+        TOLERANCE,
+        "no saturation",
+    );
+    let green = run(&gpu, &[effect("color", &[("hue", 120.0)])], 1, 1, &[red]);
+    assert_close(green.unwrap()[0], [0.0, 1.0, 0.0, 1.0], TOLERANCE, "hue");
+}
+
+#[test]
+fn transform_scales_and_moves_around_the_center() {
+    let Some(gpu) = gpu() else { return };
+    let color = [0.3, 0.6, 0.9, 1.0];
+    let pixels = vec![color; 64];
+    let at = |result: &[[f32; 4]], x: usize, y: usize| result[y * 8 + x];
+
+    let smaller = run(
+        &gpu,
+        &[effect("transform", &[("scale", 0.5)])],
+        8,
+        8,
+        &pixels,
+    )
+    .unwrap();
+    assert_close(at(&smaller, 0, 0), [0.0; 4], TOLERANCE, "corner");
+    assert_close(at(&smaller, 3, 4), color, TOLERANCE, "center");
+
+    // Half a width to the right: the left half is empty.
+    let moved = run(&gpu, &[effect("transform", &[("x", 0.5)])], 8, 8, &pixels).unwrap();
+    assert_close(at(&moved, 1, 4), [0.0; 4], TOLERANCE, "left");
+    assert_close(at(&moved, 6, 4), color, TOLERANCE, "right");
+}
+
+#[test]
+fn mirror_reflects_one_half() {
+    let Some(gpu) = gpu() else { return };
+    let red = [1.0, 0.0, 0.0, 1.0];
+    let blue = [0.0, 0.0, 1.0, 1.0];
+    let pixels = halves(8, 2, red, blue);
+    let left = run(&gpu, &[effect("mirror", &[])], 8, 2, &pixels).unwrap();
+    assert!(left.iter().all(|pixel| (pixel[0] - 1.0).abs() < TOLERANCE));
+    let right = run(&gpu, &[effect("mirror", &[("mode", 1.0)])], 8, 2, &pixels).unwrap();
+    assert!(right.iter().all(|pixel| (pixel[2] - 1.0).abs() < TOLERANCE));
+}
+
+#[test]
+fn kaleidoscope_and_blur_keep_a_plain_image() {
+    let Some(gpu) = gpu() else { return };
+    let color = [0.25, 0.5, 0.75, 1.0];
+    let pixels = vec![color; 16 * 8];
+    for chain in [
+        vec![effect(
+            "kaleidoscope",
+            &[("segments", 5.0), ("rotation", 30.0)],
+        )],
+        vec![effect("blur", &[("radius", 6.0)])],
+    ] {
+        let result = run(&gpu, &chain, 16, 8, &pixels).unwrap();
+        for pixel in result {
+            assert_close(pixel, color, TOLERANCE, &chain[0].kind);
+        }
+    }
+}
+
+#[test]
+fn blur_softens_an_edge() {
+    let Some(gpu) = gpu() else { return };
+    let black = [0.0, 0.0, 0.0, 1.0];
+    let white = [1.0, 1.0, 1.0, 1.0];
+    let pixels = halves(32, 4, black, white);
+    let result = run(&gpu, &[effect("blur", &[("radius", 4.0)])], 32, 4, &pixels).unwrap();
+    let row: Vec<f32> = result[..32].iter().map(|pixel| pixel[0]).collect();
+    // Far from the edge, unchanged; at the edge, in between; increasing.
+    assert!(row[0] < 0.01 && row[31] > 0.99, "{row:?}");
+    assert!(row[15] > 0.1 && row[15] < 0.5, "{row:?}");
+    assert!(row[16] > 0.5 && row[16] < 0.9, "{row:?}");
+    assert!(
+        row.windows(2).all(|pair| pair[0] <= pair[1] + 1e-3),
+        "{row:?}"
+    );
+}

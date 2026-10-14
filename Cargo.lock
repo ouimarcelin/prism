@@ -2045,6 +2045,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-fx"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "prism-core",
+ "prism-render",
+]
+
+[[package]]
 name = "prism-media"
 version = "0.0.0"
 dependencies = [
