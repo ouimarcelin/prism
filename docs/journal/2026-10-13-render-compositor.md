@@ -32,4 +32,4 @@ Crate `prism-render` : mixage GPU des couches avec opacité, 4 modes de fusion e
 
 ## Archive
 
-- Transcription : à archiver avec `scripts/archive-session.sh` en fin de session.
+- Transcription : `2026-10-14-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `955a36a2600b154657f197381787cd82ef89bef31efd45eb9d96556c2a8b97cd` (session Claude Code unique des tickets 1 à 11, archivée le 2026-10-14 à 12 h 11 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).

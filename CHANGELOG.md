@@ -7,6 +7,9 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Thread de rendu en ordonnancement temps réel sur macOS : réveillé à l'heure même quand d'autres processus occupent les cœurs ; threads de décodage en classe « initiée par l'utilisateur » (ADR 0012).
+- Trames envoyées au GPU par des tampons réutilisés d'une image à l'autre : plus d'allocation de mémoire GPU pendant la lecture ; travail moyen par image de 3,5 à 2,3 ms avec 4 couches HAP 1080p (ADR 0012).
+- Au plus 3 images en attente sur le GPU : au-delà, le moteur saute un tour au lieu d'empiler des images et leurs tampons ; images sautées et latence du GPU dans l'état du moteur (ADR 0012).
 - Interface allégée au repos (30 images/s) : de 67 % à 50 % d'un cœur avec 4 couches HAP 1080p.
 - Plus de menu macOS standard (Masquer, Cmd+H) : Cmd+Q passe par l'interface.
 - Le thread de décodage ne décode plus deux fois une image déjà livrée.
@@ -17,6 +20,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Benchmark et test d'endurance de la phase 1 (`docs/benchmarks/`) : `engine-run` tient la durée voulue, note chaque incident (saccade, images en retard) avec la pagination de la machine, relève l'empreinte mémoire et le nombre de tampons GPU, et écrit un rapport Markdown ; état du moteur enrichi (pire écart entre deux images, saccades, durée de chaque étape d'une image) ; clips de bruit HAP et HAP Q, le contenu le plus lourd, dans `make-test-clip`.
 - Cmd+Q avec confirmation des modifications, écrans maintenus allumés pendant la sortie, préférences (projets récents, écran de sortie, durée du fondu), crossfader automatique vers A ou B (ADR 0011).
 - Lecture H.264, ProRes et des autres codecs de macOS par AVFoundation, décodage matériel, conversion YUV sur le GPU ; 4 couches H.264 1080p60 tenues sur Apple M1 (ADR 0010). Outil `decode-speed`.
 - Images fixes (PNG, JPEG) et séquences PNG (dossier joué dans l'ordre des numéros, fréquence réglable) : import par dialogue, glisser-déposer ou ligne de commande ; tous les formats passent par une même interface de source d'images (ADR 0009).
