@@ -114,6 +114,12 @@ impl ControlPanel {
         self
     }
 
+    /// Selects a slot of the grid: its layer and clip show in the
+    /// inspector.
+    pub fn select(&mut self, slot: Option<Slot>) {
+        self.selected = slot;
+    }
+
     /// Preferences in use.
     pub fn preferences(&self) -> &Preferences {
         &self.preferences
@@ -571,9 +577,11 @@ impl ControlPanel {
             ui.label(egui::RichText::new("A").strong());
             let crossfader = &mut self.document.composition_mut().crossfader;
             let mut position = crossfader.position.get();
+            // A slider takes its length from the spacing, not from its size.
+            ui.spacing_mut().slider_width = 320.0;
             let slider = egui::Slider::new(&mut position, 0.0..=1.0).show_value(false);
             let response = ui
-                .add_sized([320.0, 20.0], slider)
+                .add(slider)
                 .on_hover_text("Crossfader : double-clic pour centrer");
             if response.double_clicked() {
                 position = 0.5;
