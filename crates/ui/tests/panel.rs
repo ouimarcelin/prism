@@ -77,6 +77,9 @@ fn playing_status(slot: Slot) -> EngineStatus {
         fps: 60.0,
         frame_time_ms: 3.5,
         late_ticks: 0,
+        worst_interval_ms: 17.0,
+        hitches: 0,
+        worst_frame_time_ms: 5.0,
         layers: vec![LayerStatus {
             layer: Some(slot.layer),
             slot: Some(slot),
@@ -87,6 +90,7 @@ fn playing_status(slot: Slot) -> EngineStatus {
             frame_count: 240,
             ..LayerStatus::default()
         }],
+        ..EngineStatus::default()
     }
 }
 

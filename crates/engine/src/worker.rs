@@ -99,6 +99,7 @@ fn open(source: &MediaSource) -> Result<Box<dyn FrameSource>, prism_media::Decod
 }
 
 fn run(source: &MediaSource, requests: Receiver<Request>, events: Sender<Event>) {
+    crate::priority::decode_thread();
     let mut decoder = match open(source) {
         Ok(decoder) => decoder,
         Err(error) => {

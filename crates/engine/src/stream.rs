@@ -232,7 +232,7 @@ impl ClipStream {
     pub(crate) fn upload(
         &mut self,
         gpu: &Gpu,
-        uploader: &FrameUploader,
+        uploader: &mut FrameUploader,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let (Some(wanted), Phase::Ready { track, .. }) = (self.wanted, &self.phase) else {

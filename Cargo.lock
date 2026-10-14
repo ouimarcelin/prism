@@ -2030,11 +2030,13 @@ dependencies = [
 name = "prism-engine"
 version = "0.0.0"
 dependencies = [
+ "libc",
  "png",
  "prism-core",
  "prism-media",
  "prism-render",
  "tempfile",
+ "wgpu",
 ]
 
 [[package]]

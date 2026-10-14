@@ -43,7 +43,7 @@ pub struct Transition<'a> {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
 struct LayerParams {
     opacity: f32,
     blend_mode: u32,
@@ -116,6 +116,8 @@ pub struct Compositor {
     params: wgpu::Buffer,
     params_capacity: usize,
     params_stride: u64,
+    /// Parameters in the buffer, by layer: only changes are written.
+    params_written: Vec<LayerParams>,
     targets: [Target; 2],
     output: usize,
     resolution: Resolution,
@@ -208,6 +210,7 @@ impl Compositor {
             params,
             params_capacity,
             params_stride,
+            params_written: Vec::new(),
             targets: Self::create_targets(device, resolution),
             output: 0,
             resolution,
@@ -274,6 +277,7 @@ impl Compositor {
             self.params_capacity = layers.len().next_power_of_two();
             self.params =
                 Self::create_params_buffer(device, self.params_capacity, self.params_stride);
+            self.params_written.clear();
         }
         for (index, layer) in layers.iter().enumerate() {
             let params = LayerParams {
@@ -282,11 +286,18 @@ impl Compositor {
                 progress: layer.transition.map_or(1.0, |t| unit(t.progress)),
                 _pad: 0,
             };
+            if self.params_written.get(index) == Some(&params) {
+                continue;
+            }
             queue.write_buffer(
                 &self.params,
                 index as u64 * self.params_stride,
                 bytemuck::bytes_of(&params),
             );
+            match self.params_written.get_mut(index) {
+                Some(written) => *written = params,
+                None => self.params_written.push(params),
+            }
         }
 
         encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

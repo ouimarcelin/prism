@@ -3,8 +3,11 @@
 //!
 //! ```text
 //! cargo run -p prism-media --features test-support --example make-test-clip -- \
-//!     media/bars.mov [hap|hap-alpha|hap-q|hap-q-alpha] [frames] [width] [height]
+//!     media/bars.mov [hap|hap-alpha|hap-q|hap-q-alpha|hap-noise|hap-q-noise] [frames] [width] [height]
 //! ```
+//!
+//! The `noise` variants hold random blocks that Snappy cannot compress: the
+//! heaviest HAP content to read, decompress and upload, for load tests.
 
 use std::fs::File;
 use std::io::BufWriter;
@@ -31,7 +34,7 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
         eprintln!(
-            "usage: make-test-clip OUTPUT.mov [hap|hap-alpha|hap-q|hap-q-alpha] [frames] [width] [height]"
+            "usage: make-test-clip OUTPUT.mov [hap|hap-alpha|hap-q|hap-q-alpha|hap-noise|hap-q-noise] [frames] [width] [height]"
         );
         return ExitCode::FAILURE;
     };
@@ -50,6 +53,8 @@ fn main() -> ExitCode {
         "hap-alpha" => *b"Hap5",
         "hap-q" => *b"HapY",
         "hap-q-alpha" => *b"HapM",
+        "hap-noise" => *b"Hap1",
+        "hap-q-noise" => *b"HapY",
         other => {
             eprintln!("unknown variant {other}");
             return ExitCode::FAILURE;
@@ -65,8 +70,23 @@ fn main() -> ExitCode {
     let alpha_of =
         move |by: u32| (by * 255 / height.div_ceil(4).max(2).saturating_sub(1)).min(255) as u8;
 
+    let mut seed = 0x2545_F491_4F6C_DD1D_u64;
+    let mut noise = move |format: BlockFormat| -> Vec<u8> {
+        (0..format.image_bytes(width, height))
+            .map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                (seed >> 24) as u8
+            })
+            .collect()
+    };
     let encoded: Vec<Vec<u8>> = (0..frames)
         .map(|frame| match variant {
+            "hap-noise" => encode_image(Image::Rgb, &noise(BlockFormat::Bc1), Compression::Snappy),
+            "hap-q-noise" => {
+                encode_image(Image::YCoCg, &noise(BlockFormat::Bc3), Compression::Snappy)
+            }
             "hap" => {
                 let texture = plane_from_fn(BlockFormat::Bc1, width, height, |bx, _| {
                     let [r, g, b] = bar_of(bx, frame);
