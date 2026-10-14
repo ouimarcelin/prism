@@ -57,6 +57,15 @@ pub struct EngineStatus {
     pub frame_time_ms: f64,
     /// Frames started more than one frame period late since the start.
     pub late_ticks: u64,
+    /// Longest time between two frames, in milliseconds, after the first
+    /// two seconds.
+    pub worst_interval_ms: f64,
+    /// Times between two frames longer than one and a half frame periods,
+    /// after the first two seconds: visible stutters.
+    pub hitches: u64,
+    /// Longest time spent preparing one frame, in milliseconds, after the
+    /// first two seconds.
+    pub worst_frame_time_ms: f64,
     /// Layers, bottom to top.
     pub layers: Vec<LayerStatus>,
 }

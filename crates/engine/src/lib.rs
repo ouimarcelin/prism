@@ -12,6 +12,7 @@
 
 mod engine;
 mod playhead;
+mod priority;
 mod random;
 mod status;
 mod stream;

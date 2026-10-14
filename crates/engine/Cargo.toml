@@ -13,6 +13,9 @@ prism-core = { path = "../core" }
 prism-media = { path = "../media" }
 prism-render = { path = "../render" }
 
+[target.'cfg(target_os = "macos")'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 png = "0.18.1"
 prism-media = { path = "../media", features = ["test-support"] }

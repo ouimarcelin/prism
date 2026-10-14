@@ -514,3 +514,34 @@ fn h264_movies_play_through_avfoundation() {
         status.frame
     );
 }
+
+#[test]
+fn stutters_are_counted_after_the_start() {
+    let Some(gpu) = gpu() else { return };
+    let (comp, _) = composition_with(Clip::from_file("/unused.mov"));
+    let mut driver = Driver::new(gpu, comp);
+    // A slow start is not a stutter.
+    driver.state.tick(driver.now);
+    driver.now += Duration::from_millis(200);
+    for _ in 0..130 {
+        driver.tick();
+    }
+    let status = driver.state.status();
+    assert_eq!(status.hitches, 0);
+    assert!(
+        (status.worst_interval_ms - 1000.0 / 60.0).abs() < 0.5,
+        "{}",
+        status.worst_interval_ms
+    );
+
+    // One frame shown 50 ms after the previous one.
+    driver.now += Duration::from_millis(33);
+    driver.tick();
+    let status = driver.state.status();
+    assert_eq!(status.hitches, 1);
+    assert!(
+        (status.worst_interval_ms - 50.0).abs() < 0.5,
+        "{}",
+        status.worst_interval_ms
+    );
+}

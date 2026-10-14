@@ -227,6 +227,9 @@ impl LayerRuntime {
     }
 }
 
+/// Frames rendered before intervals count, to leave out the start.
+const WARMUP_FRAMES: u64 = 120;
+
 /// Frame-rate statistics over a sliding second.
 struct Stats {
     frames: u64,
@@ -235,6 +238,10 @@ struct Stats {
     window_frames: u32,
     fps: f64,
     frame_time_ms: f64,
+    previous: Option<Instant>,
+    worst_interval_ms: f64,
+    hitches: u64,
+    worst_work_ms: f64,
 }
 
 /// Everything the render thread owns. Driven by [`EngineState::tick`], so
@@ -283,6 +290,10 @@ impl EngineState {
                 window_frames: 0,
                 fps: 0.0,
                 frame_time_ms: 0.0,
+                previous: None,
+                worst_interval_ms: 0.0,
+                hitches: 0,
+                worst_work_ms: 0.0,
             },
         };
         state.set_composition(composition);
@@ -501,9 +512,22 @@ impl EngineState {
     }
 
     fn update_stats(&mut self, now: Instant, work: Duration) {
+        let period_ms = 1000.0 / self.composition.frame_rate().as_f64();
         let stats = &mut self.stats;
         stats.frames += 1;
+        if let Some(previous) = stats.previous.replace(now)
+            && stats.frames > WARMUP_FRAMES
+        {
+            let interval_ms = now.saturating_duration_since(previous).as_secs_f64() * 1000.0;
+            stats.worst_interval_ms = stats.worst_interval_ms.max(interval_ms);
+            if interval_ms > period_ms * 1.5 {
+                stats.hitches += 1;
+            }
+        }
         let work_ms = work.as_secs_f64() * 1000.0;
+        if stats.frames > WARMUP_FRAMES {
+            stats.worst_work_ms = stats.worst_work_ms.max(work_ms);
+        }
         stats.frame_time_ms = if stats.frames == 1 {
             work_ms
         } else {
@@ -530,6 +554,9 @@ impl EngineState {
             fps: self.stats.fps,
             frame_time_ms: self.stats.frame_time_ms,
             late_ticks: self.stats.late_ticks,
+            worst_interval_ms: self.stats.worst_interval_ms,
+            hitches: self.stats.hitches,
+            worst_frame_time_ms: self.stats.worst_work_ms,
             layers: self.layers.iter().map(LayerRuntime::status).collect(),
         }
     }
@@ -622,6 +649,7 @@ impl Drop for Engine {
 /// Render loop: one frame per period of the composition frame rate.
 /// Commands are applied as soon as they arrive, between frames.
 fn run(mut state: EngineState, commands: Receiver<Command>, shared: Arc<Shared>) {
+    crate::priority::render_thread();
     let mut deadline = Instant::now();
     loop {
         // Wait for the next frame, applying commands meanwhile.
