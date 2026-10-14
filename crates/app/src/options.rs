@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use prism_core::{Clip, Composition, FILE_EXTENSION, MissingMedia, Slot};
+use prism_core::{Clip, Composition, DEFAULT_SEQUENCE_RATE, FILE_EXTENSION, MissingMedia, Slot};
 use prism_ui::Document;
 
 /// Usage text, shown by `--help`.
@@ -17,7 +17,8 @@ Options :
   --sortie N   ouvre tout de suite la sortie plein écran sur l'écran N
   --help       affiche cette aide
 
-Les vidéos sont placées dans la première colonne, une par couche, puis dans
+Les médias (vidéos HAP, images PNG ou JPEG, dossiers d'images PNG joués en
+séquence) sont placés dans la première colonne, une par couche, puis dans
 les colonnes suivantes, et la première colonne démarre.
 
 Raccourcis : voir le menu Aide de la fenêtre de contrôle.";
@@ -91,8 +92,14 @@ impl Options {
                 composition.layers()[index % layers].id(),
                 composition.columns()[index / layers].id(),
             );
+            let path = absolute(file);
+            let clip = if path.is_dir() {
+                Clip::from_image_sequence(path, DEFAULT_SEQUENCE_RATE)
+            } else {
+                Clip::from_file(path)
+            };
             composition
-                .set_clip(slot, Some(Clip::from_file(absolute(file))))
+                .set_clip(slot, Some(clip))
                 .map_err(|error| error.to_string())?;
         }
         if !self.files.is_empty() {

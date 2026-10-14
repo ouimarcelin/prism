@@ -13,8 +13,11 @@ publish.workspace = true
 test-support = []
 
 [dependencies]
+png = "0.18.1"
 snap = "1.1.2"
 thiserror.workspace = true
+zune-core = "0.5"
+zune-jpeg = "0.5.15"
 
 [dev-dependencies]
 # Integration tests and examples use the test writers.

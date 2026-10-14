@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use prism_media::{HapDecoder, HapFrame};
+use prism_media::{Frame, HapDecoder};
 use prism_render::{FrameUploader, Gpu, VideoTexture, read_texture};
 
 fn main() -> ExitCode {
@@ -57,17 +57,18 @@ fn run(
     );
 
     // CPU: read and decompress every frame.
-    let mut frame = HapFrame::default();
+    let mut frame = Frame::default();
     let start = Instant::now();
     for index in 0..frames {
-        decoder.decode_frame(index, &mut frame)?;
+        decoder.decode_frame(index, frame.hap_mut())?;
     }
     let decode_time = start.elapsed();
+    let hap = frame.hap_mut();
     println!(
         "layout    {:?}, {:?}{}",
-        frame.layout,
-        frame.color.format,
-        if frame.alpha.is_some() {
+        hap.layout,
+        hap.color.format,
+        if hap.alpha.is_some() {
             " + BC4 alpha"
         } else {
             ""
@@ -86,7 +87,7 @@ fn run(
     let mut video = VideoTexture::new(&gpu.device, track.width, track.height);
     let mut upload_time = Duration::ZERO;
     for index in 0..frames {
-        decoder.decode_frame(index, &mut frame)?;
+        decoder.decode_frame(index, frame.hap_mut())?;
         let start = Instant::now();
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)?;
@@ -122,7 +123,7 @@ fn run(
         },
         Clone::clone,
     );
-    decoder.decode_frame(index, &mut frame)?;
+    decoder.decode_frame(index, frame.hap_mut())?;
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)?;
     gpu.queue.submit([encoder.finish()]);

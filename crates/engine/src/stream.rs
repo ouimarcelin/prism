@@ -1,10 +1,8 @@
 //! A clip playing on a layer: its decoding worker, frame cache, playhead and
 //! layer texture.
 
-use std::path::PathBuf;
-
-use prism_core::{Playback, Slot};
-use prism_media::{HapFrame, VideoTrack};
+use prism_core::{MediaSource, Playback, Slot};
+use prism_media::{Frame, MediaInfo};
 use prism_render::{FrameUploader, Gpu, VideoTexture, wgpu};
 
 use crate::playhead::{MediaTiming, Playhead};
@@ -21,7 +19,7 @@ const CACHE_CAPACITY: usize = 8;
 enum Phase {
     Opening,
     Ready {
-        track: VideoTrack,
+        track: MediaInfo,
         timing: MediaTiming,
         playhead: Playhead,
     },
@@ -30,12 +28,12 @@ enum Phase {
 
 pub(crate) struct ClipStream {
     slot: Slot,
-    source: PathBuf,
+    source: MediaSource,
     playback: Playback,
     worker: Option<Worker>,
     phase: Phase,
     /// Decoded frames waiting for upload.
-    cache: Vec<(usize, HapFrame)>,
+    cache: Vec<(usize, Frame)>,
     /// Frames last asked of the worker.
     requested: Vec<usize>,
     /// Frame wanted on screen now.
@@ -50,7 +48,7 @@ pub(crate) struct ClipStream {
 
 impl ClipStream {
     /// Starts decoding `source` for the clip in `slot`.
-    pub(crate) fn open(slot: Slot, source: PathBuf, playback: Playback) -> Self {
+    pub(crate) fn open(slot: Slot, source: MediaSource, playback: Playback) -> Self {
         let (worker, phase) = match Worker::spawn(source.clone()) {
             Ok(worker) => (Some(worker), Phase::Opening),
             Err(error) => (None, Phase::Failed(error_chain(&error))),
@@ -76,8 +74,8 @@ impl ClipStream {
         self.slot
     }
 
-    pub(crate) fn plays(&self, slot: Slot, source: &std::path::Path) -> bool {
-        self.slot == slot && self.source == source
+    pub(crate) fn plays(&self, slot: Slot, source: &MediaSource) -> bool {
+        self.slot == slot && &self.source == source
     }
 
     /// Whether a frame is on screen.
@@ -148,7 +146,7 @@ impl ClipStream {
         while let Some(event) = worker.try_event() {
             match event {
                 Event::Opened(track) => {
-                    let timing = MediaTiming::from_track(&track);
+                    let timing = MediaTiming::from_info(&track);
                     let mut playhead = Playhead::new(&self.playback, timing);
                     if let Some((position, hold)) = self.pending_seek.take() {
                         playhead.seek(position, &self.playback, timing);

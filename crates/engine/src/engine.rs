@@ -377,21 +377,19 @@ impl EngineState {
             let retriggered = layer.trigger_count() != runtime.seen_triggers;
             runtime.seen_triggers = layer.trigger_count();
 
-            let wanted = composition.active_clip(id).and_then(|(column, clip)| {
-                clip.source
-                    .path()
-                    .map(|path| (Slot::new(id, column), path.to_path_buf(), &clip.playback))
-            });
+            let wanted = composition
+                .active_clip(id)
+                .map(|(column, clip)| (Slot::new(id, column), &clip.source, &clip.playback));
             match wanted {
-                Some((slot, path, playback)) => match runtime.current.as_mut() {
-                    Some(stream) if stream.plays(slot, &path) => {
+                Some((slot, source, playback)) => match runtime.current.as_mut() {
+                    Some(stream) if stream.plays(slot, source) => {
                         stream.set_playback(playback);
                         if retriggered {
                             stream.restart();
                         }
                     }
                     _ => {
-                        let stream = ClipStream::open(slot, path, playback.clone());
+                        let stream = ClipStream::open(slot, source.clone(), playback.clone());
                         runtime.switch(Some(stream), layer.transition_ms);
                     }
                 },

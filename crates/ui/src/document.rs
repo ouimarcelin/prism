@@ -4,11 +4,15 @@
 use std::path::{Path, PathBuf};
 
 use prism_core::{
-    Clip, Composition, FILE_EXTENSION, MediaSource, MissingMedia, Project, ProjectError, Slot,
+    Clip, Composition, DEFAULT_SEQUENCE_RATE, FILE_EXTENSION, MediaSource, MissingMedia, Project,
+    ProjectError, Slot,
 };
 
 /// File extensions accepted as video clips.
 pub const VIDEO_EXTENSIONS: [&str; 3] = ["mov", "mp4", "m4v"];
+
+/// File extensions accepted as still images.
+pub const IMAGE_EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
 
 /// How deep [`Document::relink_missing`] searches inside the chosen folder.
 const RELINK_DEPTH: usize = 8;
@@ -127,26 +131,31 @@ impl Document {
             )
     }
 
-    /// Places video `files` from `start`, one per slot to the right on the
-    /// same layer, replacing what is there and adding columns when needed.
-    /// Other files are ignored. Returns the number of clips placed.
+    /// Places media from `start`, one per slot to the right on the same
+    /// layer, replacing what is there and adding columns when needed:
+    /// videos and still images as clips, folders as image sequences. Other
+    /// files are ignored. Returns the number of clips placed.
     pub fn import(&mut self, files: &[PathBuf], start: Slot) -> usize {
-        let videos: Vec<&PathBuf> = files.iter().filter(|path| is_video(path)).collect();
+        let media: Vec<&PathBuf> = files
+            .iter()
+            .filter(|path| path.is_dir() || is_video(path) || is_image(path))
+            .collect();
         let Some(mut column) = self.composition.column_index(start.column) else {
             return 0;
         };
         let mut placed = 0;
-        for file in videos {
+        for file in media {
             while column >= self.composition.columns().len() {
                 let number = self.composition.columns().len() + 1;
                 self.composition.add_column(format!("Colonne {number}"));
             }
             let slot = Slot::new(start.layer, self.composition.columns()[column].id());
-            if self
-                .composition
-                .set_clip(slot, Some(Clip::from_file(file.clone())))
-                .is_ok()
-            {
+            let clip = if file.is_dir() {
+                Clip::from_image_sequence(file.clone(), DEFAULT_SEQUENCE_RATE)
+            } else {
+                Clip::from_file(file.clone())
+            };
+            if self.composition.set_clip(slot, Some(clip)).is_ok() {
                 placed += 1;
             }
             column += 1;
@@ -157,10 +166,13 @@ impl Document {
         placed
     }
 
-    /// Points the clip of `slot` to `path`.
+    /// Points the clip of `slot` to `path`, a file or a sequence folder.
     pub fn relink(&mut self, slot: Slot, path: PathBuf) {
         if let Some(clip) = self.composition.clip_mut(slot) {
-            clip.source = MediaSource::File { path };
+            match &mut clip.source {
+                MediaSource::ImageSequence { path: folder, .. } => *folder = path,
+                source => *source = MediaSource::File { path },
+            }
             self.revision += 1;
         }
     }
@@ -195,12 +207,22 @@ impl Document {
 
 /// Whether a path names a supported video file.
 pub fn is_video(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| VIDEO_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+    has_extension(path, &VIDEO_EXTENSIONS)
 }
 
-/// Files under `folder`, visible ones only, down to `depth` levels.
+/// Whether a path names a supported still image.
+pub fn is_image(path: &Path) -> bool {
+    has_extension(path, &IMAGE_EXTENSIONS)
+}
+
+fn has_extension(path: &Path, extensions: &[&str]) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| extensions.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
+/// Files and folders under `folder`, visible ones only, down to `depth`
+/// levels.
 fn collect_files(folder: &Path, depth: usize, found: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(folder) else {
         return;
@@ -214,7 +236,12 @@ fn collect_files(folder: &Path, depth: usize, found: &mut Vec<PathBuf>) {
             continue;
         }
         match entry.file_type() {
-            Ok(kind) if kind.is_dir() && depth > 0 => collect_files(&path, depth - 1, found),
+            Ok(kind) if kind.is_dir() => {
+                found.push(path.clone());
+                if depth > 0 {
+                    collect_files(&path, depth - 1, found);
+                }
+            }
             Ok(kind) if kind.is_file() => found.push(path),
             _ => {}
         }
@@ -310,6 +337,48 @@ mod tests {
         assert_eq!(remaining[0].path, PathBuf::from("/gone/b.mov"));
         let clip = document.composition().clip(slot).unwrap();
         assert_eq!(clip.source.path(), Some(nested.join("a.mov").as_path()));
+    }
+
+    #[test]
+    fn images_and_folders_are_imported() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("smoke");
+        std::fs::create_dir(&folder).unwrap();
+        let mut document = Document::default();
+        let slot = first_slot(&document);
+        let files = [dir.path().join("logo.PNG"), folder.clone()];
+        assert_eq!(document.import(&files, slot), 2);
+        let composition = document.composition();
+        assert_eq!(composition.clip(slot).unwrap().name, "logo");
+        let next = Slot::new(slot.layer, composition.columns()[1].id());
+        assert_eq!(
+            composition.clip(next).unwrap().source,
+            MediaSource::ImageSequence {
+                path: folder,
+                frame_rate: DEFAULT_SEQUENCE_RATE
+            }
+        );
+    }
+
+    #[test]
+    fn missing_sequence_folders_are_found_by_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let moved = dir.path().join("archive").join("smoke");
+        std::fs::create_dir_all(&moved).unwrap();
+        let mut document = Document::default();
+        let slot = first_slot(&document);
+        document
+            .composition_mut()
+            .set_clip(slot, Some(Clip::from_image_sequence("/gone/smoke", 12.0)))
+            .unwrap();
+        assert_eq!(document.relink_missing(dir.path()), 1);
+        assert_eq!(
+            document.composition().clip(slot).unwrap().source,
+            MediaSource::ImageSequence {
+                path: moved,
+                frame_rate: 12.0
+            }
+        );
     }
 
     #[test]

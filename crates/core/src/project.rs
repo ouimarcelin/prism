@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Clip, Composition, MediaSource, Slot};
+use crate::{Clip, Composition, Slot};
 
 /// Version of the project file format written by this build.
 ///
@@ -155,8 +155,8 @@ impl Project {
 }
 
 fn map_media_path(clip: &mut Clip, f: impl Fn(&Path) -> PathBuf) {
-    match &mut clip.source {
-        MediaSource::File { path } => *path = f(path),
+    if let Some(path) = clip.source.path_mut() {
+        *path = f(path);
     }
 }
 

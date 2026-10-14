@@ -254,12 +254,16 @@ impl ControlPanel {
                 response.on_hover_text(format!("{name} : fichier introuvable"))
             }
             Some(name) => response.on_hover_text(name.as_str()),
-            None => response.on_hover_text("Double-clic pour importer des vidéos"),
+            None => response.on_hover_text("Double-clic pour importer des médias"),
         };
         response.context_menu(|ui| {
-            if ui.button("Importer des vidéos ici…").clicked() {
+            if ui.button("Importer des médias ici…").clicked() {
                 ui.close();
                 self.import_dialog(Some(slot));
+            }
+            if ui.button("Importer une séquence d'images ici…").clicked() {
+                ui.close();
+                self.import_sequence_dialog(Some(slot));
             }
             if clip_name.is_some() {
                 if ui.button("Localiser le fichier…").clicked() {

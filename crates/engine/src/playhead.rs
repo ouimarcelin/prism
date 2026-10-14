@@ -4,7 +4,7 @@
 //! out points, seeking and holding for scratching.
 
 use prism_core::{Direction, LoopMode, Playback};
-use prism_media::VideoTrack;
+use prism_media::MediaInfo;
 
 use crate::random::Random;
 
@@ -18,10 +18,10 @@ pub struct MediaTiming {
 }
 
 impl MediaTiming {
-    /// Timing of a video track.
-    pub fn from_track(track: &VideoTrack) -> Self {
-        let duration = track.duration_seconds();
-        let frames = track.frame_count();
+    /// Timing of a media.
+    pub fn from_info(info: &MediaInfo) -> Self {
+        let duration = info.duration_seconds();
+        let frames = info.frame_count();
         Self {
             duration,
             frame_duration: if frames > 0 {

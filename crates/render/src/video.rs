@@ -7,7 +7,7 @@
 
 use std::num::NonZeroU64;
 
-use prism_media::{BlockFormat, ColorLayout, HapFrame, Plane};
+use prism_media::{BlockFormat, ColorLayout, Frame, HapFrame, Plane, RgbaImage};
 
 use crate::WORKING_FORMAT;
 
@@ -75,6 +75,7 @@ pub struct VideoTexture {
     height: u32,
     color: Option<BlockTexture>,
     alpha: Option<BlockTexture>,
+    rgba: Option<(wgpu::Texture, wgpu::TextureView)>,
     params: wgpu::Buffer,
     output: wgpu::Texture,
     output_view: wgpu::TextureView,
@@ -111,6 +112,7 @@ impl VideoTexture {
             height,
             color: None,
             alpha: None,
+            rgba: None,
             params,
             output,
             output_view,
@@ -238,12 +240,26 @@ impl FrameUploader {
         }
     }
 
-    /// Copies the planes of `frame` to the GPU and records, in `encoder`, the
-    /// pass that converts them into `target`.
+    /// Copies `frame` to the GPU and records, in `encoder`, the pass that
+    /// converts it into `target`.
     ///
-    /// The plane copies happen when the next command buffer is submitted, so
+    /// The copies happen when the next command buffer is submitted, so
     /// upload a given `target` at most once per submission.
     pub fn upload(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &mut VideoTexture,
+        frame: &Frame,
+    ) -> Result<(), UploadError> {
+        match frame {
+            Frame::Hap(hap) => self.upload_hap(device, queue, encoder, target, hap),
+            Frame::Rgba(image) => self.upload_rgba(device, queue, encoder, target, image),
+        }
+    }
+
+    fn upload_hap(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -270,21 +286,89 @@ impl FrameUploader {
             Some(plane) => write_plane(device, queue, &mut target.alpha, plane, width, height)?,
             None => target.alpha = None,
         }
-
         let params = ConvertParams {
             layout: layout_code(frame.layout),
             has_alpha_plane: u32::from(frame.alpha.is_some()),
             _pad: [0; 2],
         };
         queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
-
         let Some(color) = &target.color else {
             return Ok(());
         };
-        let alpha_view = target
+        let alpha = target
             .alpha
             .as_ref()
             .map_or(&self.no_alpha, |alpha| &alpha.view);
+        self.convert(device, encoder, target, &color.view, alpha);
+        Ok(())
+    }
+
+    fn upload_rgba(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &mut VideoTexture,
+        image: &RgbaImage,
+    ) -> Result<(), UploadError> {
+        let expected = target.width as usize * target.height as usize * 4;
+        if (image.width, image.height) != (target.width, target.height)
+            || image.pixels.len() != expected
+        {
+            return Err(UploadError::WrongSize {
+                expected,
+                actual: image.pixels.len(),
+            });
+        }
+        let size = wgpu::Extent3d {
+            width: target.width,
+            height: target.height,
+            depth_or_array_layers: 1,
+        };
+        let (texture, view) = target.rgba.get_or_insert_with(|| {
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("video pixels"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            (texture, view)
+        });
+        queue.write_texture(
+            texture.as_image_copy(),
+            &image.pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(target.width * 4),
+                rows_per_image: Some(target.height),
+            },
+            size,
+        );
+        let params = ConvertParams {
+            layout: layout_code(ColorLayout::Rgba),
+            has_alpha_plane: 0,
+            _pad: [0; 2],
+        };
+        queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
+        let view = view.clone();
+        self.convert(device, encoder, target, &view, &self.no_alpha);
+        Ok(())
+    }
+
+    /// Records the conversion pass from `color` (and `alpha`) into `target`.
+    fn convert(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &VideoTexture,
+        color: &wgpu::TextureView,
+        alpha: &wgpu::TextureView,
+    ) {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("video convert"),
             layout: &self.bind_group_layout,
@@ -295,11 +379,11 @@ impl FrameUploader {
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&color.view),
+                    resource: wgpu::BindingResource::TextureView(color),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(alpha_view),
+                    resource: wgpu::BindingResource::TextureView(alpha),
                 },
             ],
         });
@@ -322,7 +406,6 @@ impl FrameUploader {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
-        Ok(())
     }
 }
 

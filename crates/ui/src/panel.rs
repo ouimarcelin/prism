@@ -7,7 +7,7 @@ use egui::{Key, KeyboardShortcut, Modifiers};
 use prism_core::{ColumnId, MissingMedia, Resolution, Slot};
 use prism_engine::{Command, EngineStatus};
 
-use crate::document::{Document, VIDEO_EXTENSIONS};
+use crate::document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS};
 use crate::shortcuts::Shortcut;
 
 /// A screen that can show the full-screen output.
@@ -116,8 +116,9 @@ impl ControlPanel {
         };
         if self.document.import(files, start) == 0 {
             self.dialogs.message = Some(format!(
-                "Aucune vidéo reconnue. Formats acceptés : {}.",
-                VIDEO_EXTENSIONS.join(", ")
+                "Aucun média reconnu. Formats acceptés : {}, {}, ou un dossier d'images PNG.",
+                VIDEO_EXTENSIONS.join(", "),
+                IMAGE_EXTENSIONS.join(", ")
             ));
         }
     }
@@ -282,8 +283,13 @@ impl ControlPanel {
                     self.save_project_as();
                 }
                 ui.separator();
-                if ui.button("Importer des vidéos…").clicked() {
+                if ui.button("Importer des médias…").clicked() {
                     self.import_dialog(self.selected.or_else(|| first_slot(&self.document)));
+                }
+                if ui.button("Importer une séquence d'images…").clicked() {
+                    self.import_sequence_dialog(
+                        self.selected.or_else(|| first_slot(&self.document)),
+                    );
                 }
                 if ui.button("Médias manquants…").clicked() {
                     self.dialogs.missing = self.document.missing_media();
@@ -500,7 +506,7 @@ impl ControlPanel {
             return;
         };
         if let Some(files) = rfd::FileDialog::new()
-            .add_filter("Vidéos", &VIDEO_EXTENSIONS)
+            .add_filter("Vidéos et images", &media_extensions())
             .pick_files()
         {
             self.document.import(&files, start);
@@ -508,11 +514,37 @@ impl ControlPanel {
         }
     }
 
-    pub(crate) fn relocate_dialog(&mut self, slot: Slot) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Vidéos", &VIDEO_EXTENSIONS)
-            .pick_file()
+    pub(crate) fn import_sequence_dialog(&mut self, start: Option<Slot>) {
+        let Some(start) = start else {
+            return;
+        };
+        if let Some(folder) = rfd::FileDialog::new()
+            .set_title("Dossier d'images PNG")
+            .pick_folder()
         {
+            self.document.import(&[folder], start);
+            self.selected = Some(start);
+        }
+    }
+
+    pub(crate) fn relocate_dialog(&mut self, slot: Slot) {
+        let sequence = matches!(
+            self.document
+                .composition()
+                .clip(slot)
+                .map(|clip| &clip.source),
+            Some(prism_core::MediaSource::ImageSequence { .. })
+        );
+        let path = if sequence {
+            rfd::FileDialog::new()
+                .set_title("Dossier d'images PNG")
+                .pick_folder()
+        } else {
+            rfd::FileDialog::new()
+                .add_filter("Vidéos et images", &media_extensions())
+                .pick_file()
+        };
+        if let Some(path) = path {
             self.document.relink(slot, path);
         }
     }
@@ -525,6 +557,15 @@ impl ControlPanel {
             Pending::Quit => self.actions.push(Action::Quit),
         }
     }
+}
+
+/// Extensions offered by the file dialogs.
+fn media_extensions() -> Vec<&'static str> {
+    VIDEO_EXTENSIONS
+        .iter()
+        .chain(&IMAGE_EXTENSIONS)
+        .copied()
+        .collect()
 }
 
 /// First slot of the top layer.

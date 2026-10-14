@@ -91,7 +91,7 @@ impl ControlPanel {
         let missing = self.is_missing(slot);
         if self.document.composition().clip(slot).is_none() {
             ui.label(RichText::new("Case vide.").weak());
-            if ui.button("Importer des vidéos…").clicked() {
+            if ui.button("Importer des médias…").clicked() {
                 self.import_dialog(Some(slot));
             }
             return;
@@ -130,6 +130,18 @@ impl ControlPanel {
                     }
                 });
                 ui.end_row();
+
+                if let prism_core::MediaSource::ImageSequence { frame_rate, .. } = &mut clip.source
+                {
+                    ui.label("Images / s");
+                    ui.add(
+                        egui::DragValue::new(frame_rate)
+                            .range(1.0..=120.0)
+                            .speed(0.1),
+                    )
+                    .on_hover_text("Fréquence de la séquence d'images");
+                    ui.end_row();
+                }
 
                 let playback = &mut clip.playback;
                 ui.label("Sens");
