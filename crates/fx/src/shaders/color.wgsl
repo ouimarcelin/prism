@@ -1,7 +1,5 @@
 // Brightness, contrast, saturation and hue.
 
-const LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
-
 // Rotation of a color around the gray axis.
 fn rotate_hue(color: vec3<f32>, degrees: f32) -> vec3<f32> {
     let angle = radians(degrees);

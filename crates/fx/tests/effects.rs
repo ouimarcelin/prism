@@ -38,6 +38,18 @@ fn run(
     height: u32,
     pixels: &[[f32; 4]],
 ) -> Option<Vec<[f32; 4]>> {
+    run_at(gpu, effects, width, height, pixels, FrameTime::default())
+}
+
+/// Like `run`, at a given time of the engine.
+fn run_at(
+    gpu: &Gpu,
+    effects: &[Effect],
+    width: u32,
+    height: u32,
+    pixels: &[[f32; 4]],
+    time: FrameTime,
+) -> Option<Vec<[f32; 4]>> {
     let renderer = EffectRenderer::new(&gpu.device);
     let input = pixels_texture(&gpu.device, &gpu.queue, width, height, pixels)
         .create_view(&wgpu::TextureViewDescriptor::default());
@@ -66,7 +78,7 @@ fn run(
         &effects,
         &input,
         (width, height),
-        FrameTime::default(),
+        time,
         &destination.create_view(&wgpu::TextureViewDescriptor::default()),
     );
     gpu.queue.submit([encoder.finish()]);
@@ -237,4 +249,132 @@ fn blur_softens_an_edge() {
         row.windows(2).all(|pair| pair[0] <= pair[1] + 1e-3),
         "{row:?}"
     );
+}
+
+/// A varied opaque image: a gradient across, a different one down.
+fn gradient(width: u32, height: u32) -> Vec<[f32; 4]> {
+    (0..height)
+        .flat_map(|y| {
+            (0..width).map(move |x| {
+                let across = (x as f32 + 0.5) / width as f32;
+                let down = (y as f32 + 0.5) / height as f32;
+                [across, down, 1.0 - across, 1.0]
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn neutral_settings_leave_the_image_unchanged() {
+    let Some(gpu) = gpu() else { return };
+    let pixels = gradient(16, 8);
+    for neutral in [
+        effect("pixelate", &[("size", 1.0)]),
+        effect("rgb_split", &[("distance", 0.0)]),
+        effect("glitch", &[("amount", 0.0)]),
+        effect("wave", &[("amplitude", 0.0)]),
+        effect("swirl", &[("angle", 0.0)]),
+        effect("tile", &[("columns", 1.0), ("rows", 1.0)]),
+        effect("vignette", &[("amount", 0.0)]),
+        effect("strobe", &[("duty", 1.0)]),
+        effect("colorize", &[("amount", 0.0)]),
+        effect("edges", &[("mix", 0.0)]),
+    ] {
+        let result = run(&gpu, std::slice::from_ref(&neutral), 16, 8, &pixels).unwrap();
+        for (actual, expected) in result.iter().zip(&pixels) {
+            assert_close(*actual, *expected, TOLERANCE, &neutral.kind);
+        }
+    }
+}
+
+#[test]
+fn levels_posterize_and_threshold() {
+    let Some(gpu) = gpu() else { return };
+    let pixels = [[0.4, 0.4, 0.4, 1.0], [0.6, 0.6, 0.6, 1.0]];
+    let two = run(
+        &gpu,
+        &[effect("posterize", &[("levels", 2.0)])],
+        2,
+        1,
+        &pixels,
+    )
+    .unwrap();
+    assert_close(two[0], [0.0, 0.0, 0.0, 1.0], TOLERANCE, "posterize dark");
+    assert_close(two[1], [1.0, 1.0, 1.0, 1.0], TOLERANCE, "posterize light");
+    let cut = run(
+        &gpu,
+        &[effect("threshold", &[("softness", 0.0)])],
+        2,
+        1,
+        &pixels,
+    )
+    .unwrap();
+    assert_close(cut[0], [0.0, 0.0, 0.0, 1.0], TOLERANCE, "threshold dark");
+    assert_close(cut[1], [1.0, 1.0, 1.0, 1.0], TOLERANCE, "threshold light");
+}
+
+#[test]
+fn pixelate_tile_and_edges_follow_the_layout() {
+    let Some(gpu) = gpu() else { return };
+    let red = [1.0, 0.0, 0.0, 1.0];
+    let blue = [0.0, 0.0, 1.0, 1.0];
+    let pixels = halves(8, 2, red, blue);
+
+    // One cell as wide as the image: one color everywhere.
+    let big = run(&gpu, &[effect("pixelate", &[("size", 8.0)])], 8, 2, &pixels).unwrap();
+    assert!(
+        big.windows(2)
+            .all(|pair| (pair[0][0] - pair[1][0]).abs() < TOLERANCE)
+    );
+
+    // Two tiles across: red, blue, red, blue by quarters.
+    let tiles = run(&gpu, &[effect("tile", &[("rows", 1.0)])], 8, 2, &pixels).unwrap();
+    let reds: Vec<bool> = tiles[..8].iter().map(|pixel| pixel[0] > 0.5).collect();
+    assert_eq!(reds, [true, true, false, false, true, true, false, false]);
+
+    // Edges: dark on the plain halves, light at the border.
+    let outline = run(&gpu, &[effect("edges", &[])], 8, 2, &pixels).unwrap();
+    assert!(outline[0][1] < 0.01 && outline[7][1] < 0.01, "{outline:?}");
+    assert!(outline[3][1] > 0.2 && outline[4][1] > 0.2, "{outline:?}");
+}
+
+#[test]
+fn strobe_follows_the_beat() {
+    let Some(gpu) = gpu() else { return };
+    let color = [0.3, 0.6, 0.9, 1.0];
+    let strobe = [effect("strobe", &[("rate", 1.0), ("duty", 0.5)])];
+    let at = |beat: f32| {
+        let time = FrameTime { seconds: 0.0, beat };
+        run_at(&gpu, &strobe, 1, 1, &[color], time).unwrap()[0]
+    };
+    assert_close(at(10.25), color, TOLERANCE, "first half of the beat");
+    assert_close(at(10.75), [0.0, 0.0, 0.0, 1.0], TOLERANCE, "second half");
+}
+
+#[test]
+fn colorize_and_vignette_change_colors() {
+    let Some(gpu) = gpu() else { return };
+    let red = [1.0, 0.0, 0.0, 1.0];
+    let gray = run(
+        &gpu,
+        &[effect("colorize", &[("saturation", 0.0)])],
+        1,
+        1,
+        &[red],
+    )
+    .unwrap();
+    let luma = 0.2126;
+    assert_close(gray[0], [luma, luma, luma, 1.0], TOLERANCE, "colorize");
+
+    let white = vec![[1.0; 4]; 81];
+    let shaded = run(
+        &gpu,
+        &[effect("vignette", &[("amount", 1.0)])],
+        9,
+        9,
+        &white,
+    )
+    .unwrap();
+    assert!(shaded[0][0] < 0.5, "corner {:?}", shaded[0]);
+    assert_close(shaded[40], [1.0; 4], TOLERANCE, "center");
 }
