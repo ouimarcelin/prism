@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use egui::RichText;
-use prism_core::Effect;
+use prism_core::{Animation, Effect, MIN_PERIOD, Period, Shape};
 use prism_fx::{CATALOG, EffectInfo, ParamInfo, find};
 
 /// A change asked for in the chain editor.
@@ -132,11 +132,102 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect) {
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
             for param in info.params {
+                let animated = effect.animations.contains_key(param.id);
                 ui.label(param.label);
-                setting(ui, param, effect);
+                ui.horizontal(|ui| {
+                    // While animated, the set value waits for the animation
+                    // to stop.
+                    ui.add_enabled_ui(!animated, |ui| setting(ui, param, effect));
+                    animation_toggle(ui, param, effect);
+                });
                 ui.end_row();
+                if let Some(animation) = effect.animations.get_mut(param.id) {
+                    ui.label("");
+                    ui.push_id(param.id, |ui| animation_settings(ui, param, animation));
+                    ui.end_row();
+                }
             }
         });
+}
+
+/// Name of an animation shape in the interface.
+fn shape_label(shape: Shape) -> &'static str {
+    match shape {
+        Shape::Sine => "Sinus",
+        Shape::Triangle => "Triangle",
+        Shape::Ramp => "Rampe",
+        Shape::Square => "Carré",
+        Shape::Random => "Aléatoire",
+    }
+}
+
+/// Starts or stops the animation of a setting.
+fn animation_toggle(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
+    let animated = effect.animations.contains_key(param.id);
+    let hint = if animated {
+        "Arrêter l'animation de ce réglage"
+    } else {
+        "Animer ce réglage : une onde entre deux valeurs, au tempo ou en secondes"
+    };
+    if ui
+        .selectable_label(animated, "~")
+        .on_hover_text(hint)
+        .clicked()
+    {
+        if animated {
+            effect.animations.remove(param.id);
+        } else {
+            effect
+                .animations
+                .insert(param.id.to_owned(), Animation::new(param.min, param.max));
+        }
+    }
+}
+
+/// Shape, period and range of an animation.
+fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation: &mut Animation) {
+    ui.vertical(|ui| {
+        ui.horizontal(|ui| {
+            egui::ComboBox::from_id_salt("shape")
+                .selected_text(shape_label(animation.shape))
+                .show_ui(ui, |ui| {
+                    for shape in Shape::ALL {
+                        ui.selectable_value(&mut animation.shape, shape, shape_label(shape));
+                    }
+                });
+            let (mut length, on_beats) = match animation.period {
+                Period::Beats(length) => (length, true),
+                Period::Seconds(length) => (length, false),
+            };
+            ui.add(
+                egui::DragValue::new(&mut length)
+                    .range(MIN_PERIOD..=64.0)
+                    .speed(0.05)
+                    .suffix(if on_beats { " temps" } else { " s" }),
+            )
+            .on_hover_text("Durée d'un cycle");
+            let beats = ui
+                .selectable_label(on_beats, "au tempo")
+                .on_hover_text("Compter le cycle en temps, au tempo de la composition")
+                .clicked()
+                != on_beats;
+            animation.period = if beats {
+                Period::Beats(length)
+            } else {
+                Period::Seconds(length)
+            };
+        });
+        ui.horizontal(|ui| {
+            ui.spacing_mut().slider_width = 70.0;
+            ui.label("de");
+            ui.add(egui::Slider::new(
+                &mut animation.from,
+                param.min..=param.max,
+            ));
+            ui.label("à");
+            ui.add(egui::Slider::new(&mut animation.to, param.min..=param.max));
+        });
+    });
 }
 
 fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
