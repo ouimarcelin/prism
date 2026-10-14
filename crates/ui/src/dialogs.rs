@@ -208,7 +208,7 @@ impl ControlPanel {
     }
 
     fn unsaved_changes(&mut self, ctx: &egui::Context) {
-        let Some(pending) = self.dialogs.unsaved else {
+        let Some(pending) = self.dialogs.unsaved.clone() else {
             return;
         };
         let mut choice = None;

@@ -7,6 +7,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Interface allégée au repos (30 images/s) : de 67 % à 50 % d'un cœur avec 4 couches HAP 1080p.
+- Plus de menu macOS standard (Masquer, Cmd+H) : Cmd+Q passe par l'interface.
 - Le thread de décodage ne décode plus deux fois une image déjà livrée.
 - Noms par défaut des couches et des colonnes en français.
 - `cargo-deny` ne vérifie que les plateformes livrées (macOS, Windows).
@@ -15,6 +17,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Cmd+Q avec confirmation des modifications, écrans maintenus allumés pendant la sortie, préférences (projets récents, écran de sortie, durée du fondu), crossfader automatique vers A ou B (ADR 0011).
 - Lecture H.264, ProRes et des autres codecs de macOS par AVFoundation, décodage matériel, conversion YUV sur le GPU ; 4 couches H.264 1080p60 tenues sur Apple M1 (ADR 0010). Outil `decode-speed`.
 - Images fixes (PNG, JPEG) et séquences PNG (dossier joué dans l'ordre des numéros, fréquence réglable) : import par dialogue, glisser-déposer ou ligne de commande ; tous les formats passent par une même interface de source d'images (ADR 0009).
 - Six modes de fusion : éclaircir, assombrir, différence, soustraction, incrustation, exclusion.

@@ -7,16 +7,19 @@
 //! quitting. The application sends the composition to the engine whenever
 //! [`Document::revision`] changes.
 
+mod crossfade;
 mod dialogs;
 mod document;
 mod grid;
 mod inspector;
 mod labels;
 mod panel;
+mod preferences;
 mod shortcuts;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
 pub use panel::{Action, ControlPanel, FrameInfo, Screen};
+pub use preferences::{MAX_RECENT, Preferences};
 pub use shortcuts::{SHORTCUT_HELP, Shortcut};
 
 /// Message of an error and of all its causes.
