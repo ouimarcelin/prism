@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use prism_core::{Clip, Composition, FILE_EXTENSION, Project, Slot};
+use prism_core::{Clip, Composition, FILE_EXTENSION, MissingMedia, Slot};
+use prism_ui::Document;
 
 /// Usage text, shown by `--help`.
 pub const USAGE: &str = "\
@@ -19,11 +20,7 @@ Options :
 Les vidéos sont placées dans la première colonne, une par couche, puis dans
 les colonnes suivantes, et la première colonne démarre.
 
-Raccourcis :
-  1 à 9    déclenche la colonne correspondante
-  Espace   arrête toutes les couches
-  F        ouvre ou ferme la sortie plein écran
-  Échap    ferme la sortie plein écran";
+Raccourcis : voir le menu Aide de la fenêtre de contrôle.";
 
 /// What the command line asks for.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -76,17 +73,11 @@ impl Options {
         Ok(options)
     }
 
-    /// The composition to start with, and warnings to show.
-    pub fn composition(&self) -> Result<(Composition, Vec<String>), String> {
+    /// The project to start with, and the clips whose media is missing.
+    pub fn document(&self) -> Result<(Document, Vec<MissingMedia>), String> {
         if let Some(path) = &self.project {
-            let project = Project::load(path)
-                .map_err(|error| format!("impossible d'ouvrir {} : {error}", path.display()))?;
-            let warnings = project
-                .missing_media()
-                .into_iter()
-                .map(|missing| format!("média introuvable : {}", missing.path.display()))
-                .collect();
-            return Ok((project.composition, warnings));
+            return Document::open(path)
+                .map_err(|error| format!("impossible d'ouvrir {} : {error}", path.display()));
         }
 
         let mut composition = Composition::default();
@@ -110,7 +101,7 @@ impl Options {
                 .trigger_column(first)
                 .map_err(|error| error.to_string())?;
         }
-        Ok((composition, Vec::new()))
+        Ok((Document::new(composition), Vec::new()))
     }
 }
 
@@ -158,8 +149,9 @@ mod tests {
     fn files_fill_the_first_column_then_the_next() {
         let names: Vec<String> = (0..6).map(|i| format!("/media/{i}.mov")).collect();
         let options = Options::parse(names).unwrap();
-        let (composition, warnings) = options.composition().unwrap();
-        assert!(warnings.is_empty());
+        let (document, missing) = options.document().unwrap();
+        assert_eq!(missing.len(), 0);
+        let composition = document.composition();
         let clip_name = |layer: usize, column: usize| {
             let slot = Slot::new(
                 composition.layers()[layer].id(),
@@ -184,6 +176,6 @@ mod tests {
     #[test]
     fn too_many_files_are_refused() {
         let names: Vec<String> = (0..33).map(|i| format!("{i}.mov")).collect();
-        assert!(Options::parse(names).unwrap().composition().is_err());
+        assert!(Options::parse(names).unwrap().document().is_err());
     }
 }

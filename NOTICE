@@ -10,5 +10,16 @@ respective owners.
 
 Third-party components
 ----------------------
-None yet. Once dependencies are added, this section lists each bundled
-third-party component with its license and copyright notice.
+Prism is built from Rust crates published on crates.io under licenses
+compatible with MIT and Apache-2.0 (checked by cargo-deny, see deny.toml).
+Their notices will be listed here, generated with cargo-about, before the
+first public release.
+
+Fonts embedded in the interface (through the egui crate
+epaint_default_fonts):
+- Ubuntu Light: Ubuntu Font Licence 1.0
+- Noto Emoji: SIL Open Font License 1.1
+- Hack: MIT License, with the Bitstream Vera license for derived glyphs
+- emoji-icon-font: MIT License
+The license texts ship with the epaint_default_fonts crate and will be
+copied next to the application.
