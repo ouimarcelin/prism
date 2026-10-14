@@ -2088,6 +2088,8 @@ dependencies = [
  "prism-core",
  "prism-engine",
  "rfd",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

@@ -11,6 +11,8 @@ pub enum Shortcut {
     ToggleOutput,
     /// Closes the full-screen output.
     CloseOutput,
+    /// Quits, after asking about unsaved changes.
+    Quit,
 }
 
 impl Shortcut {
@@ -29,7 +31,7 @@ impl Shortcut {
 }
 
 /// Shortcuts listed in the help window: key, then action.
-pub const SHORTCUT_HELP: [(&str, &str); 8] = [
+pub const SHORTCUT_HELP: [(&str, &str); 9] = [
     ("1 à 9", "Déclencher la colonne"),
     ("Espace", "Arrêter toutes les couches"),
     ("F", "Ouvrir ou fermer la sortie plein écran"),
@@ -38,6 +40,7 @@ pub const SHORTCUT_HELP: [(&str, &str); 8] = [
     ("Cmd + O", "Ouvrir un projet"),
     ("Cmd + S", "Enregistrer"),
     ("Cmd + Maj + S", "Enregistrer sous"),
+    ("Cmd + Q", "Quitter"),
 ];
 
 #[cfg(test)]

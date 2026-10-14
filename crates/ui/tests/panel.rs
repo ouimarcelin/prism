@@ -199,3 +199,114 @@ fn missing_media_dialog_is_drawn() {
         frame(&ctx, &mut panel, &EngineStatus::default(), Vec::new());
     }
 }
+
+fn key_with(key: Key, modifiers: Modifiers) -> Event {
+    Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers,
+    }
+}
+
+#[test]
+fn command_q_quits_or_asks_first() {
+    let ctx = egui::Context::default();
+    let status = EngineStatus::default();
+    let mut panel = ControlPanel::new(Document::default(), Vec::new());
+    frame(&ctx, &mut panel, &status, Vec::new());
+    let actions = frame(
+        &ctx,
+        &mut panel,
+        &status,
+        vec![key_with(Key::Q, Modifiers::COMMAND)],
+    );
+    assert!(matches!(actions.as_slice(), [Action::Quit]));
+
+    // With unsaved changes, the confirmation comes first.
+    panel.drop_files(&[PathBuf::from("/media/a.mov")]);
+    let actions = frame(
+        &ctx,
+        &mut panel,
+        &status,
+        vec![key_with(Key::Q, Modifiers::COMMAND)],
+    );
+    assert!(actions.is_empty());
+    panel.shortcut(Shortcut::Quit);
+    assert!(panel.take_actions().is_empty());
+}
+
+#[test]
+fn crossfader_moves_on_its_own_when_asked() {
+    use prism_ui::Preferences;
+
+    let preferences = Preferences {
+        crossfade_seconds: 0.5,
+        ..Preferences::default()
+    };
+    let mut panel =
+        ControlPanel::new(Document::default(), Vec::new()).with_preferences(preferences, None);
+    let ctx = egui::Context::default();
+    let status = EngineStatus::default();
+    frame(&ctx, &mut panel, &status, Vec::new());
+    assert!(!panel.is_animating());
+
+    // Click "B ▶": find it by its label.
+    let clicked = click_button(&ctx, &mut panel, &status, "B ▶");
+    assert!(clicked);
+    assert!(panel.is_animating());
+    for _ in 0..120 {
+        frame(&ctx, &mut panel, &status, Vec::new());
+        if !panel.is_animating() {
+            break;
+        }
+    }
+    assert!(!panel.is_animating());
+    assert_eq!(
+        panel.document().composition().crossfader.position.get(),
+        1.0
+    );
+}
+
+/// Clicks the first widget labelled `text`. Returns whether one was found.
+fn click_button(
+    ctx: &egui::Context,
+    panel: &mut ControlPanel,
+    status: &EngineStatus,
+    text: &str,
+) -> bool {
+    // Draw a frame and find the text shape of the widget.
+    let mut target = None;
+    let screens: [Screen; 0] = [];
+    let info = FrameInfo {
+        status,
+        preview: None,
+        screens: &screens,
+        output_screen: None,
+    };
+    let mut output = ctx.run_ui(input(Vec::new()), |ui| {
+        panel.ui(ui, &info);
+    });
+    output.textures_delta.clear();
+    for shape in &output.shapes {
+        if let egui::epaint::Shape::Text(text_shape) = &shape.shape
+            && text_shape.galley.text() == text
+        {
+            target = Some(text_shape.visual_bounding_rect().center());
+        }
+    }
+    let Some(position) = target else {
+        return false;
+    };
+    let press = |pressed| Event::PointerButton {
+        pos: position,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: Modifiers::NONE,
+    };
+    frame(ctx, panel, status, vec![Event::PointerMoved(position)]);
+    frame(ctx, panel, status, vec![press(true)]);
+    frame(ctx, panel, status, vec![press(false)]);
+    true
+}

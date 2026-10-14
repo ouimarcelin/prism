@@ -17,12 +17,12 @@ use std::time::{Duration, Instant};
 use prism_engine::{Command, Engine};
 use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
-use prism_ui::{Action, ControlPanel, FrameInfo, Screen, Shortcut};
+use prism_ui::{Action, ControlPanel, FrameInfo, Preferences, Screen, Shortcut};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
-use winit::event::{ElementState, WindowEvent};
+use winit::event::{ElementState, StartCause, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::monitor::MonitorHandle;
 use winit::window::{Fullscreen, Window, WindowId};
 
@@ -31,6 +31,13 @@ use crate::options::{Options, USAGE};
 
 /// How often the list of screens is read again.
 const SCREEN_REFRESH: Duration = Duration::from_secs(2);
+
+/// After the last input, the interface redraws at the screen rate this
+/// long, then at [`IDLE_FRAME`] intervals.
+const ACTIVE_FOR: Duration = Duration::from_millis(1500);
+
+/// Interval between redraws of an idle interface (30 per second).
+const IDLE_FRAME: Duration = Duration::from_millis(33);
 
 fn main() -> ExitCode {
     let options = match Options::parse(std::env::args().skip(1)) {
@@ -52,7 +59,15 @@ fn main() -> ExitCode {
         }
     };
 
-    let event_loop = match EventLoop::new() {
+    let mut builder = EventLoop::builder();
+    // Without the default menu, Cmd+Q reaches the interface, which asks
+    // about unsaved changes instead of quitting at once.
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::EventLoopBuilderExtMacOS;
+        builder.with_default_menu(false);
+    }
+    let event_loop = match builder.build() {
         Ok(event_loop) => event_loop,
         Err(error) => {
             eprintln!("erreur : {error}");
@@ -60,11 +75,18 @@ fn main() -> ExitCode {
         }
     };
     event_loop.set_control_flow(ControlFlow::Wait);
+    let preferences_path = Preferences::default_path();
+    let preferences = preferences_path
+        .as_deref()
+        .map(Preferences::load)
+        .unwrap_or_default();
     let mut app = App {
         output_screen: options.output_screen,
-        panel: ControlPanel::new(document, missing),
+        panel: ControlPanel::new(document, missing).with_preferences(preferences, preferences_path),
         running: None,
         error: None,
+        output_modifiers: ModifiersState::empty(),
+        last_input: Instant::now(),
     };
     if let Err(error) = event_loop.run_app(&mut app) {
         eprintln!("erreur : {error}");
@@ -97,6 +119,10 @@ struct App {
     panel: ControlPanel,
     running: Option<Running>,
     error: Option<String>,
+    /// Modifier keys held over the output window.
+    output_modifiers: ModifiersState,
+    /// Last input on the control window.
+    last_input: Instant,
 }
 
 /// The full-screen output window, presented by the engine.
@@ -105,6 +131,31 @@ struct OutputWindow {
     screen: usize,
     window: Arc<Window>,
     shared: Arc<OutputShared>,
+    /// Keeps the screens awake while the output is open.
+    keep_awake: Option<std::process::Child>,
+}
+
+impl Drop for OutputWindow {
+    fn drop(&mut self) {
+        if let Some(child) = &mut self.keep_awake {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
+/// Keeps the displays awake until the child is stopped or Prism exits.
+#[cfg(target_os = "macos")]
+fn keep_displays_awake() -> Option<std::process::Child> {
+    std::process::Command::new("/usr/bin/caffeinate")
+        .args(["-d", "-i", "-w", &std::process::id().to_string()])
+        .spawn()
+        .ok()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn keep_displays_awake() -> Option<std::process::Child> {
+    None
 }
 
 /// Everything that exists once the control window is open.
@@ -186,9 +237,14 @@ impl Running {
         self.screens_read = Instant::now();
     }
 
-    /// Screen for the output when none is chosen: the first one that does
-    /// not show the control window.
-    fn default_screen(&self) -> Option<usize> {
+    /// Screen for the output when none is chosen: the one used last time,
+    /// otherwise the first one that does not show the control window.
+    fn default_screen(&self, preferred: Option<&str>) -> Option<usize> {
+        if let Some(index) =
+            preferred.and_then(|name| self.screens.iter().position(|screen| screen.name == name))
+        {
+            return Some(index);
+        }
         let current = self.control.window.current_monitor();
         self.monitors
             .iter()
@@ -237,6 +293,7 @@ impl Running {
             screen,
             window,
             shared,
+            keep_awake: keep_displays_awake(),
         });
         // Keep the keyboard on the control window.
         self.control.window.focus_window();
@@ -260,10 +317,11 @@ impl App {
             let result = match action {
                 Action::OpenOutput(screen) => running.open_output(event_loop, screen),
                 Action::ToggleOutput => {
+                    let preferred = self.panel.preferences().output_screen.as_deref();
                     if running.output.is_some() {
                         running.close_output();
                         Ok(())
-                    } else if let Some(screen) = running.default_screen() {
+                    } else if let Some(screen) = running.default_screen(preferred) {
                         running.open_output(event_loop, screen)
                     } else {
                         Ok(())
@@ -285,6 +343,15 @@ impl App {
             if let Err(error) = result {
                 eprintln!("erreur : sortie impossible : {}", describe(error.as_ref()));
             }
+        }
+        // Remember the screen of the output for next time.
+        if let Some(name) = running
+            .output
+            .as_ref()
+            .and_then(|output| running.screens.get(output.screen))
+            .map(|screen| screen.name.clone())
+        {
+            self.panel.remember_output_screen(&name);
         }
         // The engine plays the composition as edited.
         let document = self.panel.document();
@@ -324,17 +391,25 @@ impl App {
             actions = panel.ui(ui, &frame);
         });
         self.handle(event_loop, actions);
-        // Playheads and the preview move: draw continuously, paced by the
-        // screen refresh.
-        if let Some(running) = &self.running {
-            running.control.window.request_redraw();
+        // Playheads and the preview move: keep drawing, at the screen rate
+        // while the user acts or something animates, at 30 per second when
+        // idle.
+        if self.last_input.elapsed() < ACTIVE_FOR || self.panel.is_animating() {
+            event_loop.set_control_flow(ControlFlow::Wait);
+            if let Some(running) = &self.running {
+                running.control.window.request_redraw();
+            }
+        } else {
+            event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + IDLE_FRAME));
         }
     }
 
     fn output_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
+        let command = self.output_modifiers.super_key() || self.output_modifiers.control_key();
         let shortcut = match key {
+            Key::Character(text) if command => (text.as_str() == "q").then_some(Shortcut::Quit),
             Key::Character(text) => Shortcut::from_text(text),
-            Key::Named(NamedKey::Space) => Some(Shortcut::StopAll),
+            Key::Named(NamedKey::Space) if !command => Some(Shortcut::StopAll),
             Key::Named(NamedKey::Escape) => Some(Shortcut::CloseOutput),
             _ => None,
         };
@@ -347,6 +422,15 @@ impl App {
 }
 
 impl ApplicationHandler for App {
+    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+        // Time for the next frame of an idle interface.
+        if matches!(cause, StartCause::ResumeTimeReached { .. })
+            && let Some(running) = &self.running
+        {
+            running.control.window.request_redraw();
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.running.is_some() {
             return;
@@ -376,6 +460,9 @@ impl ApplicationHandler for App {
         };
         if running.control.window.id() == window_id {
             let repaint = running.control.on_event(&event);
+            if !matches!(event, WindowEvent::RedrawRequested) {
+                self.last_input = Instant::now();
+            }
             match event {
                 WindowEvent::CloseRequested => {
                     if self.panel.request_quit() {
@@ -408,6 +495,7 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(size) => output.shared.set_size(size.width, size.height),
             WindowEvent::Occluded(occluded) => output.shared.set_visible(!occluded),
             WindowEvent::CloseRequested => running.close_output(),
+            WindowEvent::ModifiersChanged(modifiers) => self.output_modifiers = modifiers.state(),
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed && !event.repeat =>
             {

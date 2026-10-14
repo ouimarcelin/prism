@@ -7,7 +7,9 @@ use egui::{Key, KeyboardShortcut, Modifiers};
 use prism_core::{ColumnId, MissingMedia, Resolution, Slot};
 use prism_engine::{Command, EngineStatus};
 
+use crate::crossfade::AutoFade;
 use crate::document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS};
+use crate::preferences::Preferences;
 use crate::shortcuts::Shortcut;
 
 /// A screen that can show the full-screen output.
@@ -51,10 +53,11 @@ pub struct FrameInfo<'a> {
 }
 
 /// What waits for an answer about unsaved changes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Pending {
     New,
     Open,
+    OpenPath(PathBuf),
     Quit,
 }
 
@@ -75,6 +78,9 @@ pub struct ControlPanel {
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
+    pub(crate) preferences: Preferences,
+    preferences_path: Option<PathBuf>,
+    pub(crate) auto_fade: Option<AutoFade>,
 }
 
 impl ControlPanel {
@@ -91,6 +97,52 @@ impl ControlPanel {
             },
             actions: Vec::new(),
             missing_cache: (u64::MAX, HashSet::new()),
+            preferences: Preferences::default(),
+            preferences_path: None,
+            auto_fade: None,
+        }
+    }
+
+    /// Uses `preferences`, saved to `path` whenever they change.
+    pub fn with_preferences(mut self, preferences: Preferences, path: Option<PathBuf>) -> Self {
+        self.preferences = preferences;
+        self.preferences_path = path;
+        self
+    }
+
+    /// Preferences in use.
+    pub fn preferences(&self) -> &Preferences {
+        &self.preferences
+    }
+
+    pub(crate) fn save_preferences(&mut self) {
+        if let Some(path) = &self.preferences_path
+            && let Err(error) = self.preferences.save(path)
+        {
+            self.dialogs.message = Some(format!(
+                "Préférences non enregistrées : {}",
+                crate::describe(&error)
+            ));
+        }
+    }
+
+    /// Remembers the screen showing the output, for next time.
+    pub fn remember_output_screen(&mut self, name: &str) {
+        if self.preferences.output_screen.as_deref() != Some(name) {
+            self.preferences.output_screen = Some(name.to_owned());
+            self.save_preferences();
+        }
+    }
+
+    /// Whether something moves on its own and needs frequent redraws.
+    pub fn is_animating(&self) -> bool {
+        self.auto_fade.is_some()
+    }
+
+    pub(crate) fn remember_project(&mut self) {
+        if let Some(path) = self.document.path().map(std::path::Path::to_path_buf) {
+            self.preferences.add_recent(&path);
+            self.save_preferences();
         }
     }
 
@@ -142,6 +194,11 @@ impl ControlPanel {
             Shortcut::StopAll => self.document.composition_mut().stop_all(),
             Shortcut::ToggleOutput => self.actions.push(Action::ToggleOutput),
             Shortcut::CloseOutput => self.actions.push(Action::CloseOutput),
+            Shortcut::Quit => {
+                if self.request_quit() {
+                    self.actions.push(Action::Quit);
+                }
+            }
         }
         self.document.commit(&before);
     }
@@ -205,14 +262,18 @@ impl ControlPanel {
     fn keyboard(&mut self, ctx: &egui::Context) {
         let command = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
         let command_shift = |key| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, key);
-        let (new, open, save_as, save) = ctx.input_mut(|input| {
+        let (new, open, save_as, save, quit) = ctx.input_mut(|input| {
             (
                 input.consume_shortcut(&command(Key::N)),
                 input.consume_shortcut(&command(Key::O)),
                 input.consume_shortcut(&command_shift(Key::S)),
                 input.consume_shortcut(&command(Key::S)),
+                input.consume_shortcut(&command(Key::Q)),
             )
         });
+        if quit {
+            self.shortcut(Shortcut::Quit);
+        }
         if new {
             self.new_project();
         }
@@ -269,6 +330,24 @@ impl ControlPanel {
                 {
                     self.open_project();
                 }
+                ui.menu_button("Projets récents", |ui| {
+                    if self.preferences.recent_projects.is_empty() {
+                        ui.label("Aucun");
+                    }
+                    for path in self.preferences.recent_projects.clone() {
+                        let name = path.file_name().map_or_else(
+                            || path.display().to_string(),
+                            |name| name.to_string_lossy().into_owned(),
+                        );
+                        if ui
+                            .button(name)
+                            .on_hover_text(path.display().to_string())
+                            .clicked()
+                        {
+                            self.open_recent(path);
+                        }
+                    }
+                });
                 ui.separator();
                 if ui
                     .add(egui::Button::new("Enregistrer").shortcut_text("Cmd+S"))
@@ -298,8 +377,11 @@ impl ControlPanel {
                     }
                 }
                 ui.separator();
-                if ui.button("Quitter").clicked() && self.request_quit() {
-                    self.actions.push(Action::Quit);
+                if ui
+                    .add(egui::Button::new("Quitter").shortcut_text("Cmd+Q"))
+                    .clicked()
+                {
+                    self.shortcut(Shortcut::Quit);
                 }
             });
             ui.menu_button("Composition", |ui| {
@@ -365,21 +447,49 @@ impl ControlPanel {
     }
 
     fn transport(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
+        let dt = ui.input(|input| input.stable_dt).min(0.1);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
+            let seconds = self.preferences.crossfade_seconds;
+            let start = self.document.composition().crossfader.position.get();
+            let mut fade_to = None;
+            if ui
+                .button("◀ A")
+                .on_hover_text(format!("Crossfader vers A en {seconds:.1} s"))
+                .clicked()
+            {
+                fade_to = Some(0.0);
+            }
             ui.label(egui::RichText::new("A").strong());
             let crossfader = &mut self.document.composition_mut().crossfader;
             let mut position = crossfader.position.get();
             let slider = egui::Slider::new(&mut position, 0.0..=1.0).show_value(false);
-            if ui
+            let response = ui
                 .add_sized([320.0, 20.0], slider)
-                .on_hover_text("Crossfader : double-clic pour centrer")
-                .double_clicked()
-            {
+                .on_hover_text("Crossfader : double-clic pour centrer");
+            if response.double_clicked() {
                 position = 0.5;
+            }
+            // Touching the crossfader stops an automatic move.
+            if response.dragged() || response.double_clicked() {
+                self.auto_fade = None;
+            }
+            if let Some(fade) = &mut self.auto_fade {
+                let (next, done) = fade.step(dt);
+                position = next;
+                if done {
+                    self.auto_fade = None;
+                }
             }
             crossfader.position = prism_core::Unit::new(position);
             ui.label(egui::RichText::new("B").strong());
+            if ui
+                .button("B ▶")
+                .on_hover_text(format!("Crossfader vers B en {seconds:.1} s"))
+                .clicked()
+            {
+                fade_to = Some(1.0);
+            }
             egui::ComboBox::from_id_salt("crossfader curve")
                 .selected_text(crate::labels::curve(crossfader.curve))
                 .show_ui(ui, |ui| {
@@ -395,6 +505,24 @@ impl ControlPanel {
                         );
                     }
                 });
+            let mut seconds = self.preferences.crossfade_seconds;
+            let duration = ui
+                .add(
+                    egui::DragValue::new(&mut seconds)
+                        .range(0.0..=60.0)
+                        .speed(0.05)
+                        .suffix(" s"),
+                )
+                .on_hover_text("Durée du fondu automatique");
+            if duration.changed() {
+                self.preferences.crossfade_seconds = seconds;
+            }
+            if duration.drag_stopped() || duration.lost_focus() {
+                self.save_preferences();
+            }
+            if let Some(target) = fade_to {
+                self.auto_fade = Some(AutoFade::new(start, target, seconds));
+            }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let late: u64 = status.layers.iter().map(|layer| layer.late_frames).sum();
@@ -437,8 +565,25 @@ impl ControlPanel {
         else {
             return;
         };
+        self.open_path(path);
+    }
+
+    /// Opens a project from the recent list, after asking about unsaved
+    /// changes.
+    fn open_recent(&mut self, path: PathBuf) {
+        if self.document.is_dirty() {
+            self.dialogs.unsaved = Some(Pending::OpenPath(path));
+            return;
+        }
+        self.open_path(path);
+    }
+
+    fn open_path(&mut self, path: PathBuf) {
         match Document::open(&path) {
-            Ok((document, missing)) => self.replace_document(document, missing),
+            Ok((document, missing)) => {
+                self.replace_document(document, missing);
+                self.remember_project();
+            }
             Err(error) => {
                 self.dialogs.message = Some(format!(
                     "Impossible d'ouvrir {} : {}",
@@ -461,7 +606,10 @@ impl ControlPanel {
     /// Saves; returns whether the document is saved afterwards.
     pub(crate) fn save_project(&mut self) -> bool {
         match self.document.save() {
-            Ok(true) => true,
+            Ok(true) => {
+                self.remember_project();
+                true
+            }
             Ok(false) => self.save_project_as(),
             Err(error) => {
                 self.dialogs.message = Some(format!(
@@ -490,7 +638,10 @@ impl ControlPanel {
             return false;
         };
         match self.document.save_as(&path) {
-            Ok(()) => true,
+            Ok(()) => {
+                self.remember_project();
+                true
+            }
             Err(error) => {
                 self.dialogs.message = Some(format!(
                     "Enregistrement impossible : {}",
@@ -554,6 +705,7 @@ impl ControlPanel {
         match pending {
             Pending::New => self.replace_document(Document::default(), Vec::new()),
             Pending::Open => self.pick_and_open(),
+            Pending::OpenPath(path) => self.open_path(path),
             Pending::Quit => self.actions.push(Action::Quit),
         }
     }

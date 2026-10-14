@@ -13,6 +13,8 @@ egui = "0.36.2"
 prism-core = { path = "../core" }
 prism-engine = { path = "../engine" }
 rfd = "0.17.2"
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [dev-dependencies]
 egui = "0.36.2"

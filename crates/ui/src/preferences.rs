@@ -1,0 +1,130 @@
+//! Preferences kept between sessions: recent projects, output screen,
+//! crossfade time.
+
+use std::io;
+use std::path::{Path, PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+/// Recent projects remembered.
+pub const MAX_RECENT: usize = 8;
+
+/// Preferences of the user.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Preferences {
+    /// Projects opened or saved, most recent first.
+    pub recent_projects: Vec<PathBuf>,
+    /// Name of the screen last used for the output.
+    pub output_screen: Option<String>,
+    /// Duration of the automatic crossfade, in seconds.
+    pub crossfade_seconds: f32,
+}
+
+impl Default for Preferences {
+    fn default() -> Self {
+        Self {
+            recent_projects: Vec::new(),
+            output_screen: None,
+            crossfade_seconds: 2.0,
+        }
+    }
+}
+
+impl Preferences {
+    /// Where preferences live on this system, if a home folder is known.
+    pub fn default_path() -> Option<PathBuf> {
+        let folder = if cfg!(target_os = "macos") {
+            std::env::var_os("HOME")
+                .map(|home| PathBuf::from(home).join("Library/Application Support/Prism"))
+        } else if cfg!(target_os = "windows") {
+            std::env::var_os("APPDATA").map(|appdata| PathBuf::from(appdata).join("Prism"))
+        } else {
+            std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .or_else(|| {
+                    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config"))
+                })
+                .map(|config| config.join("prism"))
+        };
+        folder.map(|folder| folder.join("preferences.json"))
+    }
+
+    /// Reads preferences; a missing or unreadable file gives the defaults.
+    pub fn load(path: &Path) -> Self {
+        std::fs::read_to_string(path)
+            .ok()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default()
+    }
+
+    /// Writes preferences, creating their folder if needed.
+    pub fn save(&self, path: &Path) -> io::Result<()> {
+        if let Some(folder) = path.parent() {
+            std::fs::create_dir_all(folder)?;
+        }
+        let json = serde_json::to_string_pretty(self).map_err(io::Error::other)?;
+        std::fs::write(path, json)
+    }
+
+    /// Puts `path` first in the recent projects.
+    pub fn add_recent(&mut self, path: &Path) {
+        self.recent_projects.retain(|recent| recent != path);
+        self.recent_projects.insert(0, path.to_path_buf());
+        self.recent_projects.truncate(MAX_RECENT);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recent_projects_are_unique_and_bounded() {
+        let mut preferences = Preferences::default();
+        for index in 0..10 {
+            preferences.add_recent(Path::new(&format!("/shows/{index}.prism")));
+        }
+        preferences.add_recent(Path::new("/shows/5.prism"));
+        assert_eq!(preferences.recent_projects.len(), MAX_RECENT);
+        assert_eq!(preferences.recent_projects[0], Path::new("/shows/5.prism"));
+        assert_eq!(
+            preferences
+                .recent_projects
+                .iter()
+                .filter(|path| path.ends_with("5.prism"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn saved_preferences_load_back_and_bad_files_give_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nested").join("preferences.json");
+        assert_eq!(Preferences::load(&path), Preferences::default());
+
+        let mut preferences = Preferences {
+            output_screen: Some("Projecteur".into()),
+            crossfade_seconds: 4.5,
+            ..Preferences::default()
+        };
+        preferences.add_recent(Path::new("/shows/a.prism"));
+        preferences.save(&path).unwrap();
+        assert_eq!(Preferences::load(&path), preferences);
+
+        std::fs::write(&path, b"{ not json").unwrap();
+        assert_eq!(Preferences::load(&path), Preferences::default());
+        // Unknown and missing fields are tolerated.
+        std::fs::write(&path, br#"{"crossfade_seconds": 1.0, "future": true}"#).unwrap();
+        let loaded = Preferences::load(&path);
+        assert_eq!(loaded.crossfade_seconds, 1.0);
+        assert!(loaded.recent_projects.is_empty());
+    }
+
+    #[test]
+    fn preferences_live_in_the_user_folder() {
+        let path = Preferences::default_path();
+        assert!(path.is_none_or(|path| path.ends_with("preferences.json")));
+    }
+}
