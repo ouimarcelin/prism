@@ -1,6 +1,7 @@
 //! The render thread: plays the clips of a composition, mixes them and keeps
 //! the program image up to date, at the composition frame rate.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
@@ -230,6 +231,22 @@ impl LayerRuntime {
 /// Frames rendered before intervals count, to leave out the start.
 const WARMUP_FRAMES: u64 = 120;
 
+/// Frames whose GPU work may be pending at once. When the GPU falls this
+/// far behind, the render thread leaves it alone for a tick instead of
+/// piling up frames, and the upload buffers they hold.
+const MAX_FRAMES_IN_FLIGHT: u64 = 3;
+
+/// Progress of the GPU, updated by completion callbacks on whichever thread
+/// polls the device.
+#[derive(Default)]
+struct GpuProgress {
+    /// Frames whose GPU work is finished.
+    completed: AtomicU64,
+    /// Longest time between the submission of a frame and the moment its
+    /// work was seen finished, in microseconds, after the start.
+    worst_latency_us: AtomicU64,
+}
+
 /// Frame-rate statistics over a sliding second.
 struct Stats {
     frames: u64,
@@ -246,6 +263,7 @@ struct Stats {
     worst_steps: FrameSteps,
     last_hitch: Option<Hitch>,
     real_time: bool,
+    gpu_skips: u64,
 }
 
 /// Everything the render thread owns. Driven by [`EngineState::tick`], so
@@ -261,6 +279,8 @@ pub struct EngineState {
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
     last_tick: Option<Instant>,
+    submitted: u64,
+    gpu_progress: Arc<GpuProgress>,
     stats: Stats,
 }
 
@@ -287,6 +307,8 @@ impl EngineState {
             outputs: Vec::new(),
             random: Random::new(seed),
             last_tick: None,
+            submitted: 0,
+            gpu_progress: Arc::default(),
             stats: Stats {
                 frames: 0,
                 late_ticks: 0,
@@ -302,6 +324,7 @@ impl EngineState {
                 worst_steps: FrameSteps::default(),
                 last_hitch: None,
                 real_time: false,
+                gpu_skips: 0,
             },
         };
         state.set_composition(composition);
@@ -456,10 +479,17 @@ impl EngineState {
         let played = Instant::now();
 
         // GPU: frame uploads, mixing and copy to the program image, in one
-        // submission. Upload buffers the GPU is done with come back first,
-        // without waiting.
+        // submission. Finished frames, and the upload buffers they held, are
+        // collected first, without waiting.
         let gpu = Arc::clone(&self.gpu);
         let _ = gpu.device.poll(wgpu::PollType::Poll);
+        let finished = self.gpu_progress.completed.load(Ordering::Acquire);
+        if self.submitted.saturating_sub(finished) >= MAX_FRAMES_IN_FLIGHT {
+            // No new image: the previous one stays on screen, and the next
+            // image counts as a stutter.
+            self.stats.gpu_skips += 1;
+            return;
+        }
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -516,6 +546,7 @@ impl EngineState {
             },
         );
         gpu.queue.submit([encoder.finish()]);
+        self.watch_gpu(&gpu);
         let submitted = Instant::now();
 
         for (_, output) in &mut self.outputs {
@@ -528,6 +559,23 @@ impl EngineState {
             present_ms: milliseconds(submitted.elapsed()),
         };
         self.update_stats(now, submitted - started, steps);
+    }
+
+    /// Counts the frame just submitted as finished once the GPU has run it.
+    fn watch_gpu(&mut self, gpu: &Gpu) {
+        self.submitted += 1;
+        let progress = Arc::clone(&self.gpu_progress);
+        let submitted_at = Instant::now();
+        let measured = self.stats.frames >= WARMUP_FRAMES;
+        gpu.queue.on_submitted_work_done(move || {
+            progress.completed.fetch_add(1, Ordering::Release);
+            if measured {
+                let latency = u64::try_from(submitted_at.elapsed().as_micros()).unwrap_or(u64::MAX);
+                progress
+                    .worst_latency_us
+                    .fetch_max(latency, Ordering::Relaxed);
+            }
+        });
     }
 
     fn update_stats(&mut self, now: Instant, work: Duration, steps: FrameSteps) {
@@ -590,6 +638,9 @@ impl EngineState {
             worst_steps: self.stats.worst_steps,
             last_hitch: self.stats.last_hitch,
             real_time: self.stats.real_time,
+            gpu_skips: self.stats.gpu_skips,
+            worst_gpu_latency_ms: self.gpu_progress.worst_latency_us.load(Ordering::Relaxed) as f64
+                / 1000.0,
             layers: self.layers.iter().map(LayerRuntime::status).collect(),
         }
     }

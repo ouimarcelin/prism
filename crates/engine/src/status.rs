@@ -85,7 +85,9 @@ pub struct Hitch {
     /// Time since the previous frame, in milliseconds.
     pub interval_ms: f64,
     /// Steps of the previous frame. A long step there delayed this frame;
-    /// short steps everywhere mean the thread woke up late.
+    /// short steps everywhere mean the thread woke up late, or that the GPU
+    /// was too far behind to take a new frame (see
+    /// [`EngineStatus::gpu_skips`]).
     pub previous: FrameSteps,
 }
 
@@ -115,6 +117,13 @@ pub struct EngineStatus {
     pub last_hitch: Option<Hitch>,
     /// Whether the render thread runs with real-time scheduling.
     pub real_time: bool,
+    /// Ticks without a new image because the GPU was still busy with
+    /// earlier frames: the previous image stayed on screen.
+    pub gpu_skips: u64,
+    /// Longest time between the submission of a frame and the moment its
+    /// GPU work was seen finished, in milliseconds, after the first two
+    /// seconds. About one frame period when the GPU keeps up.
+    pub worst_gpu_latency_ms: f64,
     /// Layers, bottom to top.
     pub layers: Vec<LayerStatus>,
 }

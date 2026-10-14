@@ -186,6 +186,9 @@ enum Trouble {
     Hitches { count: u64, last: Option<Hitch> },
     /// Frames shown late, on all layers together.
     LateFrames { count: u64 },
+    /// Ticks without a new image: the GPU was still busy with earlier
+    /// frames.
+    GpuSkips { count: u64 },
 }
 
 /// A problem seen during the run.
@@ -219,6 +222,9 @@ impl Incident {
             }
             Trouble::LateFrames { count } => {
                 let _ = write!(line, "{count} images en retard (décodage pas prêt)");
+            }
+            Trouble::GpuSkips { count } => {
+                let _ = write!(line, "{count} images sautées (GPU en retard)");
             }
         }
         if let Some(paging) = self.paging {
@@ -287,6 +293,7 @@ fn main() -> ExitCode {
     let mut last_second_paging = None;
     let mut seen_hitches = 0;
     let mut seen_late = 0;
+    let mut seen_skips = 0;
     let mut incidents = Vec::new();
     let mut polls = 1;
     loop {
@@ -326,6 +333,12 @@ fn main() -> ExitCode {
                 count: late - seen_late,
             });
             seen_late = late;
+        }
+        if status.gpu_skips > seen_skips {
+            troubles.push(Trouble::GpuSkips {
+                count: status.gpu_skips - seen_skips,
+            });
+            seen_skips = status.gpu_skips;
         }
         for trouble in troubles {
             let incident = Incident {
@@ -373,7 +386,11 @@ fn main() -> ExitCode {
     } else {
         status.fps
     };
-    let smooth = worst_fps >= 59.0 && status.hitches == 0 && late_frames == 0 && !errors;
+    let smooth = worst_fps >= 59.0
+        && status.hitches == 0
+        && late_frames == 0
+        && status.gpu_skips == 0
+        && !errors;
     let memory = match (memory_after_start, memory_end) {
         (Some(first), Some(last)) => format!(
             "{first:.0} Mo après {memory_reference} s, {last:.0} Mo à la fin ; tampons GPU : {buffers_after_start} après {memory_reference} s, {} à la fin",
@@ -423,6 +440,11 @@ fn main() -> ExitCode {
         summary,
         "- Images en retard (image précédente gardée) : {late_frames} ; départs en retard du thread : {}",
         status.late_ticks
+    );
+    let _ = writeln!(
+        summary,
+        "- GPU : {:.1} ms au pire entre l'envoi d'une image et sa fin ; images sautées (GPU en retard) : {}",
+        status.worst_gpu_latency_ms, status.gpu_skips
     );
     let _ = writeln!(summary, "- Mémoire : {memory}");
     if let (Some(begin), Some(end)) = (swap_at_start, swap_at_end) {

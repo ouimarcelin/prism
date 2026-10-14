@@ -117,8 +117,18 @@ impl Driver {
     }
 
     fn tick(&mut self) {
-        self.state.tick(self.now);
+        self.tick_and_wait();
         self.now += Duration::from_secs_f64(1.0 / FPS);
+    }
+
+    /// Renders a frame and waits for the GPU, as a real frame period would:
+    /// back-to-back ticks would otherwise outrun the GPU and skip frames.
+    fn tick_and_wait(&mut self) {
+        self.state.tick(self.now);
+        let _ = self
+            .gpu
+            .device
+            .poll(prism_render::wgpu::PollType::wait_indefinitely());
     }
 
     /// Ticks without advancing time until `done`, giving decoding threads
@@ -127,7 +137,7 @@ impl Driver {
     fn settle(&mut self, done: impl Fn(&LayerStatus) -> bool) -> LayerStatus {
         let limit = Instant::now() + Duration::from_secs(10);
         loop {
-            self.state.tick(self.now);
+            self.tick_and_wait();
             let status = self.layer();
             if done(&status) {
                 return status;
@@ -521,7 +531,7 @@ fn stutters_are_counted_after_the_start() {
     let (comp, _) = composition_with(Clip::from_file("/unused.mov"));
     let mut driver = Driver::new(gpu, comp);
     // A slow start is not a stutter.
-    driver.state.tick(driver.now);
+    driver.tick_and_wait();
     driver.now += Duration::from_millis(200);
     for _ in 0..130 {
         driver.tick();
@@ -529,6 +539,8 @@ fn stutters_are_counted_after_the_start() {
     let status = driver.state.status();
     assert_eq!(status.hitches, 0);
     assert_eq!(status.last_hitch, None);
+    assert_eq!(status.gpu_skips, 0);
+    assert!(status.worst_gpu_latency_ms > 0.0);
     assert!(
         (status.worst_interval_ms - 1000.0 / 60.0).abs() < 0.5,
         "{}",
