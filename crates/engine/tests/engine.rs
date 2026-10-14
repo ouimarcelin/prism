@@ -528,11 +528,13 @@ fn stutters_are_counted_after_the_start() {
     }
     let status = driver.state.status();
     assert_eq!(status.hitches, 0);
+    assert_eq!(status.last_hitch, None);
     assert!(
         (status.worst_interval_ms - 1000.0 / 60.0).abs() < 0.5,
         "{}",
         status.worst_interval_ms
     );
+    assert!(status.worst_steps.total_ms() > 0.0);
 
     // One frame shown 50 ms after the previous one.
     driver.now += Duration::from_millis(33);
@@ -544,4 +546,9 @@ fn stutters_are_counted_after_the_start() {
         "{}",
         status.worst_interval_ms
     );
+    let hitch = status.last_hitch.unwrap();
+    assert_eq!(hitch.frame, status.frames);
+    assert!((hitch.interval_ms - 50.0).abs() < 0.5, "{hitch:?}");
+    // The delay came from the clock, not from the previous frame.
+    assert!(hitch.previous.total_ms() < 25.0, "{hitch:?}");
 }

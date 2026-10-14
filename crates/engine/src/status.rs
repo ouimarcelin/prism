@@ -46,6 +46,49 @@ pub struct LayerStatus {
     pub frame_errors: u64,
 }
 
+/// Time the render thread spent on each step of one frame, in milliseconds.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct FrameSteps {
+    /// Collecting decoded frames and moving the playheads.
+    pub playback_ms: f64,
+    /// Copying decoded frames to the GPU and recording their conversion.
+    pub upload_ms: f64,
+    /// Recording the mix and submitting the frame to the GPU.
+    pub mix_ms: f64,
+    /// Presenting the program to the outputs.
+    pub present_ms: f64,
+}
+
+impl FrameSteps {
+    /// Total time of the frame.
+    pub fn total_ms(&self) -> f64 {
+        self.playback_ms + self.upload_ms + self.mix_ms + self.present_ms
+    }
+
+    /// Longest time of each step between `self` and `other`.
+    pub fn max(self, other: Self) -> Self {
+        Self {
+            playback_ms: self.playback_ms.max(other.playback_ms),
+            upload_ms: self.upload_ms.max(other.upload_ms),
+            mix_ms: self.mix_ms.max(other.mix_ms),
+            present_ms: self.present_ms.max(other.present_ms),
+        }
+    }
+}
+
+/// A stutter: a frame shown more than one and a half frame periods after
+/// the previous one.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Hitch {
+    /// Number of the late frame, counted from the start.
+    pub frame: u64,
+    /// Time since the previous frame, in milliseconds.
+    pub interval_ms: f64,
+    /// Steps of the previous frame. A long step there delayed this frame;
+    /// short steps everywhere mean the thread woke up late.
+    pub previous: FrameSteps,
+}
+
 /// State of the engine after its last frame.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct EngineStatus {
@@ -66,6 +109,12 @@ pub struct EngineStatus {
     /// Longest time spent preparing one frame, in milliseconds, after the
     /// first two seconds.
     pub worst_frame_time_ms: f64,
+    /// Longest time of each step of a frame, after the first two seconds.
+    pub worst_steps: FrameSteps,
+    /// Last stutter, if any.
+    pub last_hitch: Option<Hitch>,
+    /// Whether the render thread runs with real-time scheduling.
+    pub real_time: bool,
     /// Layers, bottom to top.
     pub layers: Vec<LayerStatus>,
 }

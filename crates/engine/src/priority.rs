@@ -1,21 +1,83 @@
 //! Scheduling priority of the engine threads.
 //!
-//! On macOS, a thread's quality-of-service class tells the system how soon
-//! to run it. The render thread asks for the class of user interfaces, so a
-//! busy machine wakes it on time; decoding threads ask for the class just
-//! below.
+//! On macOS, the render thread becomes a real-time thread, as audio and
+//! display threads are: it declares how much work it does in each frame
+//! period, and the scheduler wakes it on time even when other processes keep
+//! every core busy. Should the system refuse, it keeps the quality-of-service
+//! class of user interfaces. Decoding threads ask for the class just below.
 
-// One system call per thread. Each block states why it is sound.
+// A few system calls. Each block states why it is sound.
 #![allow(unsafe_code)]
 
-/// Called at the start of the render thread.
-pub(crate) fn render_thread() {
+use std::time::Duration;
+
+/// Called at the start of the render thread, and again when the frame
+/// period changes. Returns whether the thread runs in real time.
+pub(crate) fn render_thread(period: Duration) -> bool {
     #[cfg(target_os = "macos")]
-    // SAFETY: changes the class of the calling thread only; the arguments
-    // are a valid class and the relative priority 0.
-    unsafe {
-        libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+    {
+        // SAFETY: changes the class of the calling thread only; the arguments
+        // are a valid class and the relative priority 0.
+        unsafe {
+            libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+        }
+        real_time(period)
     }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = period;
+        false
+    }
+}
+
+/// `mach_timebase_info_data_t` of `<mach/mach_time.h>`: the system clock
+/// ticks `numer / denom` nanoseconds at a time. Declared here because the
+/// libc crate deprecates its own binding.
+#[cfg(target_os = "macos")]
+#[repr(C)]
+struct Timebase {
+    numer: u32,
+    denom: u32,
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn mach_timebase_info(info: *mut Timebase) -> libc::kern_return_t;
+}
+
+/// Real-time scheduling for the calling thread: up to a third of each
+/// `period` of computation, done within half of it.
+#[cfg(target_os = "macos")]
+fn real_time(period: Duration) -> bool {
+    let mut timebase = Timebase { numer: 0, denom: 0 };
+    // SAFETY: writes the two fields of `timebase`, laid out as the C
+    // structure.
+    let status = unsafe { mach_timebase_info(&raw mut timebase) };
+    if status != libc::KERN_SUCCESS || timebase.numer == 0 {
+        return false;
+    }
+    // Durations in ticks of the system clock.
+    let ticks = |duration: Duration| {
+        let ticks = duration.as_nanos() * u128::from(timebase.denom) / u128::from(timebase.numer);
+        u32::try_from(ticks).unwrap_or(u32::MAX)
+    };
+    let mut policy = libc::thread_time_constraint_policy {
+        period: ticks(period),
+        computation: ticks(period / 3),
+        constraint: ticks(period / 2),
+        preemptible: 1,
+    };
+    // SAFETY: `policy` is the structure the flavor expects, with its size in
+    // integers; the port names the calling thread and needs no release.
+    let status = unsafe {
+        libc::thread_policy_set(
+            libc::pthread_mach_thread_np(libc::pthread_self()),
+            libc::THREAD_TIME_CONSTRAINT_POLICY as libc::thread_policy_flavor_t,
+            (&raw mut policy).cast(),
+            libc::THREAD_TIME_CONSTRAINT_POLICY_COUNT,
+        )
+    };
+    status == libc::KERN_SUCCESS
 }
 
 /// Called at the start of each decoding thread.

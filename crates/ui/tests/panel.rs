@@ -90,6 +90,7 @@ fn playing_status(slot: Slot) -> EngineStatus {
             frame_count: 240,
             ..LayerStatus::default()
         }],
+        ..EngineStatus::default()
     }
 }
 

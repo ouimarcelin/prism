@@ -19,4 +19,4 @@ mod stream;
 mod worker;
 
 pub use engine::{Command, Engine, EngineState, Output, ProgramOutput};
-pub use status::{ClipState, EngineStatus, LayerStatus};
+pub use status::{ClipState, EngineStatus, FrameSteps, Hitch, LayerStatus};
