@@ -29,6 +29,11 @@ allow = [
     "Unicode-3.0",
 ]
 confidence-threshold = 0.9
+exceptions = [
+    # Fonts embedded in the egui interface (Ubuntu Light, Noto Emoji): free
+    # font licenses that allow bundling with software. See NOTICE, ADR 0008.
+    { crate = "epaint_default_fonts", allow = ["OFL-1.1", "Ubuntu-font-1.0"] },
+]
 
 [bans]
 multiple-versions = "warn"

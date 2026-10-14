@@ -1,0 +1,22 @@
+[package]
+name = "prism-ui"
+description = "Prism control interface: clip grid, layers, crossfader, clip properties, project files."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+egui = "0.36.2"
+prism-core = { path = "../core" }
+prism-engine = { path = "../engine" }
+rfd = "0.17.2"
+
+[dev-dependencies]
+egui = "0.36.2"
+tempfile.workspace = true
+
+[lints]
+workspace = true

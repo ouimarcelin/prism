@@ -1,20 +1,23 @@
-//! The Prism application: a control window with the program preview, and a
-//! full-screen output on a second screen.
+//! The Prism application: the control window, with the egui interface and
+//! the program preview, and a full-screen output on a second screen.
 //!
-//! The main thread only handles window events and keyboard shortcuts. The
+//! The main thread handles window events and draws the interface. The
 //! render thread of the engine plays the clips and presents the program to
-//! every window, so a busy main thread never makes the output stutter.
+//! the output window, so a busy interface never makes the output stutter.
 
+mod control;
 mod options;
 
 use std::error::Error;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use prism_core::Composition;
 use prism_engine::{Command, Engine};
 use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
+use prism_ui::{Action, ControlPanel, FrameInfo, Screen, Shortcut};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, WindowEvent};
@@ -23,10 +26,11 @@ use winit::keyboard::{Key, NamedKey};
 use winit::monitor::MonitorHandle;
 use winit::window::{Fullscreen, Window, WindowId};
 
+use crate::control::ControlWindow;
 use crate::options::{Options, USAGE};
 
-/// Identifier of the preview output in the engine.
-const PREVIEW_OUTPUT: u64 = 0;
+/// How often the list of screens is read again.
+const SCREEN_REFRESH: Duration = Duration::from_secs(2);
 
 fn main() -> ExitCode {
     let options = match Options::parse(std::env::args().skip(1)) {
@@ -40,16 +44,13 @@ fn main() -> ExitCode {
         println!("{USAGE}");
         return ExitCode::SUCCESS;
     }
-    let (composition, warnings) = match options.composition() {
+    let (document, missing) = match options.document() {
         Ok(result) => result,
         Err(message) => {
             eprintln!("erreur : {message}");
             return ExitCode::FAILURE;
         }
     };
-    for warning in warnings {
-        eprintln!("attention : {warning}");
-    }
 
     let event_loop = match EventLoop::new() {
         Ok(event_loop) => event_loop,
@@ -60,8 +61,8 @@ fn main() -> ExitCode {
     };
     event_loop.set_control_flow(ControlFlow::Wait);
     let mut app = App {
-        options,
-        document: composition,
+        output_screen: options.output_screen,
+        panel: ControlPanel::new(document, missing),
         running: None,
         error: None,
     };
@@ -91,42 +92,46 @@ fn describe(error: &dyn Error) -> String {
 }
 
 struct App {
-    options: Options,
-    /// The composition being played, edited here and sent to the engine.
-    document: Composition,
+    /// Screen, numbered from 1, for the output at start.
+    output_screen: Option<usize>,
+    panel: ControlPanel,
     running: Option<Running>,
     error: Option<String>,
 }
 
-/// A window shown by the engine.
+/// The full-screen output window, presented by the engine.
 struct OutputWindow {
     id: u64,
+    screen: usize,
     window: Arc<Window>,
     shared: Arc<OutputShared>,
 }
 
-/// Everything that exists once the first window is open.
+/// Everything that exists once the control window is open.
 ///
 /// Field order matters: the engine stops, and drops the window surfaces it
 /// presents to, before the windows themselves close.
 struct Running {
     engine: Engine,
     gpu: Arc<Gpu>,
-    control: OutputWindow,
+    control: ControlWindow,
     output: Option<OutputWindow>,
     next_output: u64,
+    monitors: Vec<MonitorHandle>,
+    screens: Vec<Screen>,
+    screens_read: Instant,
+    sent_revision: u64,
+    title: String,
 }
 
 impl Running {
-    fn start(
-        event_loop: &ActiveEventLoop,
-        composition: &Composition,
-    ) -> Result<Self, Box<dyn Error>> {
-        let control = Arc::new(
+    fn start(event_loop: &ActiveEventLoop, panel: &ControlPanel) -> Result<Self, Box<dyn Error>> {
+        let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
-                    .with_title("Prism")
-                    .with_inner_size(LogicalSize::new(1280.0, 720.0)),
+                    .with_title(panel.title())
+                    .with_inner_size(LogicalSize::new(1440.0, 900.0))
+                    .with_min_inner_size(LogicalSize::new(960.0, 600.0)),
             )?,
         );
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
@@ -135,90 +140,80 @@ impl Running {
                 event_loop.owned_display_handle(),
             ))
         });
-        let surface = instance.create_surface(Arc::clone(&control))?;
+        let surface = instance.create_surface(Arc::clone(&window))?;
         let gpu = Arc::new(pollster::block_on(Gpu::from_instance(
             &instance,
             Some(&surface),
         ))?);
-        let info = gpu.adapter.get_info();
-        println!("GPU : {} ({:?})", info.name, info.backend);
-
-        let size = control.inner_size();
-        let preview = OutputSurface::new(&gpu, surface, size.width, size.height, Fit::Contain)?;
-        let shared = preview.shared();
-        let engine = Engine::start(Arc::clone(&gpu), composition.clone())?;
-        engine.send(Command::AddOutput {
-            id: PREVIEW_OUTPUT,
-            output: Box::new(preview),
-        });
-
-        println!("Écrans :");
-        let primary = event_loop.primary_monitor();
-        for (index, monitor) in event_loop.available_monitors().enumerate() {
-            let size = monitor.size();
-            println!(
-                "  {}. {} ({} × {}){}",
-                index + 1,
-                monitor.name().unwrap_or_else(|| "écran".into()),
-                size.width,
-                size.height,
-                if Some(&monitor) == primary.as_ref() {
-                    ", principal"
-                } else {
-                    ""
-                }
-            );
-        }
-
-        Ok(Self {
+        let control = ControlWindow::new(&gpu, window, surface)?;
+        let document = panel.document();
+        let engine = Engine::start(Arc::clone(&gpu), document.composition().clone())?;
+        let mut running = Self {
             engine,
             gpu,
-            control: OutputWindow {
-                id: PREVIEW_OUTPUT,
-                window: control,
-                shared,
-            },
+            control,
             output: None,
-            next_output: PREVIEW_OUTPUT + 1,
-        })
+            next_output: 1,
+            monitors: Vec::new(),
+            screens: Vec::new(),
+            screens_read: Instant::now(),
+            sent_revision: document.revision(),
+            title: panel.title(),
+        };
+        running.read_screens(event_loop);
+        Ok(running)
     }
 
-    fn window(&self, id: WindowId) -> Option<&OutputWindow> {
-        std::iter::once(&self.control)
-            .chain(self.output.as_ref())
-            .find(|output| output.window.id() == id)
-    }
-
-    /// Screen for the output: the one asked for, otherwise the first screen
-    /// that does not show the control window.
-    fn output_monitor(
-        &self,
-        event_loop: &ActiveEventLoop,
-        requested: Option<usize>,
-    ) -> Option<MonitorHandle> {
-        let monitors: Vec<MonitorHandle> = event_loop.available_monitors().collect();
-        if let Some(screen) = requested {
-            return monitors.get(screen - 1).cloned();
-        }
-        let current = self.control.window.current_monitor();
-        monitors
+    fn read_screens(&mut self, event_loop: &ActiveEventLoop) {
+        let primary = event_loop.primary_monitor();
+        self.monitors = event_loop.available_monitors().collect();
+        self.screens = self
+            .monitors
             .iter()
-            .find(|monitor| Some(*monitor) != current.as_ref())
-            .cloned()
-            .or(current)
+            .enumerate()
+            .map(|(index, monitor)| {
+                let size = monitor.size();
+                Screen {
+                    name: monitor
+                        .name()
+                        .unwrap_or_else(|| format!("Écran {}", index + 1)),
+                    width: size.width,
+                    height: size.height,
+                    primary: Some(monitor) == primary.as_ref(),
+                }
+            })
+            .collect();
+        self.screens_read = Instant::now();
+    }
+
+    /// Screen for the output when none is chosen: the first one that does
+    /// not show the control window.
+    fn default_screen(&self) -> Option<usize> {
+        let current = self.control.window.current_monitor();
+        self.monitors
+            .iter()
+            .position(|monitor| Some(monitor) != current.as_ref())
+            .or_else(|| (!self.monitors.is_empty()).then_some(0))
     }
 
     fn open_output(
         &mut self,
         event_loop: &ActiveEventLoop,
-        requested: Option<usize>,
+        screen: usize,
     ) -> Result<(), Box<dyn Error>> {
-        if self.output.is_some() {
+        if self
+            .output
+            .as_ref()
+            .is_some_and(|output| output.screen == screen)
+        {
             return Ok(());
         }
-        let Some(monitor) = self.output_monitor(event_loop, requested) else {
-            return Err(format!("écran {} introuvable", requested.unwrap_or(0)).into());
-        };
+        self.close_output();
+        let monitor = self
+            .monitors
+            .get(screen)
+            .cloned()
+            .ok_or_else(|| format!("écran {} introuvable", screen + 1))?;
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
@@ -237,7 +232,14 @@ impl Running {
             id,
             output: Box::new(output),
         });
-        self.output = Some(OutputWindow { id, window, shared });
+        self.output = Some(OutputWindow {
+            id,
+            screen,
+            window,
+            shared,
+        });
+        // Keep the keyboard on the control window.
+        self.control.window.focus_window();
         Ok(())
     }
 
@@ -250,57 +252,96 @@ impl Running {
 }
 
 impl App {
-    fn fail(&mut self, event_loop: &ActiveEventLoop, error: &dyn Error) {
-        self.error = Some(describe(error));
-        event_loop.exit();
-    }
-
-    /// Sends the edited composition to the engine.
-    fn publish(&self) {
-        if let Some(running) = &self.running {
-            running.engine.set_composition(self.document.clone());
-        }
-    }
-
-    fn key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
-        match key {
-            Key::Character(text) => match text.as_str() {
-                "f" | "F" => self.toggle_output(event_loop),
-                digit => {
-                    let column = digit
-                        .parse::<usize>()
-                        .ok()
-                        .filter(|n| *n >= 1)
-                        .and_then(|n| self.document.columns().get(n - 1))
-                        .map(|column| column.id());
-                    if let Some(column) = column
-                        && self.document.trigger_column(column).is_ok()
-                    {
-                        self.publish();
-                    }
-                }
-            },
-            Key::Named(NamedKey::Space) => {
-                self.document.stop_all();
-                self.publish();
-            }
-            Key::Named(NamedKey::Escape) => {
-                if let Some(running) = &mut self.running {
-                    running.close_output();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn toggle_output(&mut self, event_loop: &ActiveEventLoop) {
+    fn handle(&mut self, event_loop: &ActiveEventLoop, actions: Vec<Action>) {
         let Some(running) = &mut self.running else {
             return;
         };
-        if running.output.is_some() {
-            running.close_output();
-        } else if let Err(error) = running.open_output(event_loop, None) {
-            eprintln!("erreur : sortie impossible : {}", describe(error.as_ref()));
+        for action in actions {
+            let result = match action {
+                Action::OpenOutput(screen) => running.open_output(event_loop, screen),
+                Action::ToggleOutput => {
+                    if running.output.is_some() {
+                        running.close_output();
+                        Ok(())
+                    } else if let Some(screen) = running.default_screen() {
+                        running.open_output(event_loop, screen)
+                    } else {
+                        Ok(())
+                    }
+                }
+                Action::CloseOutput => {
+                    running.close_output();
+                    Ok(())
+                }
+                Action::Engine(command) => {
+                    running.engine.send(command);
+                    Ok(())
+                }
+                Action::Quit => {
+                    event_loop.exit();
+                    Ok(())
+                }
+            };
+            if let Err(error) = result {
+                eprintln!("erreur : sortie impossible : {}", describe(error.as_ref()));
+            }
+        }
+        // The engine plays the composition as edited.
+        let document = self.panel.document();
+        if document.revision() != running.sent_revision {
+            running
+                .engine
+                .set_composition(document.composition().clone());
+            running.sent_revision = document.revision();
+        }
+        let title = self.panel.title();
+        if title != running.title {
+            running.control.window.set_title(&title);
+            running.title = title;
+        }
+    }
+
+    fn redraw(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        if running.screens_read.elapsed() > SCREEN_REFRESH {
+            running.read_screens(event_loop);
+        }
+        let status = running.engine.status();
+        let program = running.engine.program();
+        let output_screen = running.output.as_ref().map(|output| output.screen);
+        let screens = running.screens.clone();
+        let panel = &mut self.panel;
+        let mut actions = Vec::new();
+        running.control.draw(&running.gpu, program, |ui, preview| {
+            let frame = FrameInfo {
+                status: &status,
+                preview,
+                screens: &screens,
+                output_screen,
+            };
+            actions = panel.ui(ui, &frame);
+        });
+        self.handle(event_loop, actions);
+        // Playheads and the preview move: draw continuously, paced by the
+        // screen refresh.
+        if let Some(running) = &self.running {
+            running.control.window.request_redraw();
+        }
+    }
+
+    fn output_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
+        let shortcut = match key {
+            Key::Character(text) => Shortcut::from_text(text),
+            Key::Named(NamedKey::Space) => Some(Shortcut::StopAll),
+            Key::Named(NamedKey::Escape) => Some(Shortcut::CloseOutput),
+            _ => None,
+        };
+        if let Some(shortcut) = shortcut {
+            self.panel.shortcut(shortcut);
+            let actions = self.panel.take_actions();
+            self.handle(event_loop, actions);
         }
     }
 }
@@ -310,16 +351,17 @@ impl ApplicationHandler for App {
         if self.running.is_some() {
             return;
         }
-        match Running::start(event_loop, &self.document) {
-            Ok(mut running) => {
-                if let Some(screen) = self.options.output_screen
-                    && let Err(error) = running.open_output(event_loop, Some(screen))
-                {
-                    eprintln!("erreur : sortie impossible : {}", describe(error.as_ref()));
-                }
+        match Running::start(event_loop, &self.panel) {
+            Ok(running) => {
                 self.running = Some(running);
+                if let Some(screen) = self.output_screen {
+                    self.handle(event_loop, vec![Action::OpenOutput(screen - 1)]);
+                }
             }
-            Err(error) => self.fail(event_loop, error.as_ref()),
+            Err(error) => {
+                self.error = Some(describe(error.as_ref()));
+                event_loop.exit();
+            }
         }
     }
 
@@ -329,27 +371,47 @@ impl ApplicationHandler for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let Some(running) = &self.running else {
+        let Some(running) = &mut self.running else {
             return;
         };
-        let Some(window) = running.window(window_id) else {
-            return;
-        };
-        let is_control = window.id == running.control.id;
-        match event {
-            WindowEvent::CloseRequested => {
-                if is_control {
-                    event_loop.exit();
-                } else if let Some(running) = &mut self.running {
-                    running.close_output();
+        if running.control.window.id() == window_id {
+            let repaint = running.control.on_event(&event);
+            match event {
+                WindowEvent::CloseRequested => {
+                    if self.panel.request_quit() {
+                        event_loop.exit();
+                    }
+                }
+                WindowEvent::RedrawRequested => self.redraw(event_loop),
+                WindowEvent::DroppedFile(path) => {
+                    let files: Vec<PathBuf> = vec![path];
+                    self.panel.drop_files(&files);
+                    self.handle(event_loop, Vec::new());
+                }
+                _ => {
+                    if repaint {
+                        running.control.window.request_redraw();
+                    }
                 }
             }
-            WindowEvent::Resized(size) => window.shared.set_size(size.width, size.height),
-            WindowEvent::Occluded(occluded) => window.shared.set_visible(!occluded),
+            return;
+        }
+
+        let Some(output) = running
+            .output
+            .as_ref()
+            .filter(|output| output.window.id() == window_id)
+        else {
+            return;
+        };
+        match event {
+            WindowEvent::Resized(size) => output.shared.set_size(size.width, size.height),
+            WindowEvent::Occluded(occluded) => output.shared.set_visible(!occluded),
+            WindowEvent::CloseRequested => running.close_output(),
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed && !event.repeat =>
             {
-                self.key(event_loop, &event.logical_key);
+                self.output_key(event_loop, &event.logical_key);
             }
             _ => {}
         }

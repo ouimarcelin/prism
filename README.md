@@ -44,7 +44,17 @@ scripts/check-clean-room.sh
 cargo run --release -p prism-app -- media/a.mov media/b.mov media/c.mov media/d.mov
 ```
 
-Les vidéos HAP vont dans la première colonne, une par couche, et la première colonne démarre. La fenêtre de contrôle montre l'aperçu ; `F` ouvre la sortie plein écran sur le second écran (ou `--sortie N` au lancement), `Échap` la ferme, `1` à `9` déclenchent les colonnes, `Espace` arrête tout. `prism --help` liste les options.
+Les vidéos sont facultatives : elles vont dans la première colonne, une par couche, et la première colonne démarre. Sinon, glissez des fichiers HAP sur la fenêtre ou utilisez Fichier > Importer des vidéos.
+
+Dans la fenêtre de contrôle :
+
+- cliquer une case lance son clip, cliquer l'en-tête d'une colonne lance toute la colonne ;
+- chaque couche a son opacité, son mode de fusion, B (bypass), S (solo) et son côté du crossfader ;
+- le panneau de droite montre l'aperçu, puis les réglages de la couche et du clip sélectionnés (sens, vitesse, boucle, scratch, points de repère) ;
+- le menu Sortie ouvre la sortie plein écran sur l'écran choisi ; `F` l'ouvre sur le premier écran libre, `Échap` la ferme ;
+- `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
+
+`prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
 ## Tester la lecture HAP
 
