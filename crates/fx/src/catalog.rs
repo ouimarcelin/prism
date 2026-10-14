@@ -2,6 +2,8 @@
 
 use prism_core::Effect;
 
+use crate::FrameTime;
+
 /// Parameters an effect can have at most.
 pub const MAX_PARAMS: usize = 8;
 
@@ -95,6 +97,19 @@ impl EffectInfo {
         let mut values = [0.0; MAX_PARAMS];
         for (value, param) in values.iter_mut().zip(self.params) {
             *value = param.clamp(effect.param(param.id).unwrap_or(param.default));
+        }
+        values
+    }
+
+    /// Values of the parameters of `effect` at `time`: like
+    /// [`EffectInfo::values`], with animated parameters at their current
+    /// value.
+    pub fn values_at(&self, effect: &Effect, time: FrameTime) -> [f32; MAX_PARAMS] {
+        let mut values = self.values(effect);
+        for (value, param) in values.iter_mut().zip(self.params) {
+            if let Some(animation) = effect.animations.get(param.id) {
+                *value = param.clamp(animation.value_at(time.beat, time.seconds));
+            }
         }
         values
     }
@@ -332,6 +347,22 @@ mod tests {
         effect.set_param("contrast", 9.0);
         effect.set_param("hue", -45.0);
         assert_eq!(&info.values(&effect)[..4], &[0.0, 3.0, 1.0, -45.0]);
+
+        // An animated setting: its value follows the beat, within range.
+        let invert = find("invert").unwrap();
+        let mut effect = invert.create();
+        effect.set_param("amount", 0.3);
+        let mut animation = prism_core::Animation::new(-1.0, 2.0);
+        animation.shape = prism_core::Shape::Square;
+        animation.period = prism_core::Period::Beats(1.0);
+        effect.animations.insert("amount".into(), animation);
+        let at = |beat| {
+            let time = FrameTime { seconds: 0.0, beat };
+            invert.values_at(&effect, time)[0]
+        };
+        assert_eq!(at(0.25), 1.0);
+        assert_eq!(at(0.75), 0.0);
+        assert_eq!(invert.values(&effect)[0], 0.3);
 
         let mirror = find("mirror").unwrap();
         let mut effect = mirror.create();

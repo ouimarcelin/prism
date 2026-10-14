@@ -2052,6 +2052,7 @@ version = "0.0.0"
 dependencies = [
  "bytemuck",
  "png",
+ "prism-clock",
  "prism-core",
  "prism-render",
 ]

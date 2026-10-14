@@ -548,8 +548,8 @@ impl EngineState {
 
         // Effects of each clip, then of its layer.
         let time = FrameTime {
-            seconds: now.saturating_duration_since(self.started).as_secs_f32(),
-            beat: self.beat as f32,
+            seconds: now.saturating_duration_since(self.started).as_secs_f64(),
+            beat: self.beat,
         };
         for runtime in &mut self.layers {
             let layer_effects = self
