@@ -456,8 +456,10 @@ impl EngineState {
         let played = Instant::now();
 
         // GPU: frame uploads, mixing and copy to the program image, in one
-        // submission.
+        // submission. Upload buffers the GPU is done with come back first,
+        // without waiting.
         let gpu = Arc::clone(&self.gpu);
+        let _ = gpu.device.poll(wgpu::PollType::Poll);
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -465,9 +467,10 @@ impl EngineState {
             });
         for runtime in &mut self.layers {
             for stream in runtime.streams_mut() {
-                stream.upload(&gpu, &self.uploader, &mut encoder);
+                stream.upload(&gpu, &mut self.uploader, &mut encoder);
             }
         }
+        self.uploader.finish(&encoder);
         let uploaded = Instant::now();
 
         let mut inputs = Vec::with_capacity(self.layers.len());

@@ -83,7 +83,7 @@ fn run(
         gpu.adapter.get_info().name,
         gpu.adapter.get_info().backend
     );
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut video = VideoTexture::new(&gpu.device, track.width, track.height);
     let mut upload_time = Duration::ZERO;
     for index in 0..frames {
@@ -91,6 +91,7 @@ fn run(
         let start = Instant::now();
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)?;
+        uploader.finish(&encoder);
         gpu.queue.submit([encoder.finish()]);
         gpu.device
             .poll(prism_render::wgpu::PollType::wait_indefinitely())?;
@@ -126,6 +127,7 @@ fn run(
     decoder.decode_frame(index, frame.hap_mut())?;
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     uploader.upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)?;
+    uploader.finish(&encoder);
     gpu.queue.submit([encoder.finish()]);
     let pixels = read_texture(&gpu.device, &gpu.queue, video.texture())?;
     let bytes: Vec<u8> = pixels

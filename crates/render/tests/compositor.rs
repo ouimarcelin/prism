@@ -247,3 +247,37 @@ fn transition_mixes_previous_and_new_clip_before_blending() {
         }
     }
 }
+
+#[test]
+fn layer_settings_follow_from_frame_to_frame() {
+    let Some(gpu) = gpu() else { return };
+    let white = layer(&gpu, [1.0; 4], 1.0, BlendMode::Normal);
+    let mut compositor = Compositor::new(&gpu.device, SIZE);
+    // Settings change, stay, then change back; a layer comes and goes.
+    let frames: [&[(f32, BlendMode)]; 5] = [
+        &[(1.0, BlendMode::Normal)],
+        &[(0.25, BlendMode::Normal)],
+        &[(0.25, BlendMode::Normal)],
+        &[(0.25, BlendMode::Normal), (1.0, BlendMode::Difference)],
+        &[(1.0, BlendMode::Normal)],
+    ];
+    for settings in frames {
+        let inputs: Vec<_> = settings
+            .iter()
+            .map(|&(opacity, mode)| LayerInput::new(&white.view, opacity, mode))
+            .collect();
+        let spec: Vec<_> = settings
+            .iter()
+            .map(|&(opacity, mode)| ([1.0; 4], opacity, mode))
+            .collect();
+        let expected = reference(&spec);
+        let output = compositor.render(&gpu.device, &gpu.queue, &inputs);
+        let pixel = read_texture(&gpu.device, &gpu.queue, output).unwrap()[0];
+        for channel in 0..4 {
+            assert!(
+                (pixel[channel] - expected[channel]).abs() < TOLERANCE,
+                "{settings:?}: expected {expected:?}, got {pixel:?}"
+            );
+        }
+    }
+}

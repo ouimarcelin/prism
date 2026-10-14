@@ -4,8 +4,15 @@
 //! copied as BC textures, then one pass converts them into a
 //! [`WORKING_FORMAT`] texture the compositor samples (premultiplied alpha,
 //! YCoCg decoding, block padding removed).
+//!
+//! Frame data goes through a [`StagingBelt`]: upload buffers kept mapped and
+//! reused from frame to frame, so playback allocates no GPU memory once
+//! started. A fresh allocation per frame can stall the render thread when
+//! the machine runs short of memory.
 
 use std::num::NonZeroU64;
+
+use wgpu::util::StagingBelt;
 
 use prism_media::{
     BlockFormat, ChannelOrder, ColorLayout, Frame, HapFrame, Plane, RgbaImage, YuvImage, YuvMatrix,
@@ -27,10 +34,13 @@ pub enum UploadError {
         /// Bytes received.
         actual: usize,
     },
+    /// An upload buffer cannot be written.
+    #[error("upload buffer unavailable: {0}")]
+    Staging(#[from] wgpu::MapRangeError),
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
+#[derive(Clone, Copy, PartialEq, Eq, bytemuck::Pod, bytemuck::Zeroable)]
 struct ConvertParams {
     layout: u32,
     has_alpha_plane: u32,
@@ -42,6 +52,10 @@ struct ConvertParams {
 const LAYOUT_YUV_420: u32 = 3;
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<ConvertParams>() as u64;
+
+/// Size of the upload buffers: the frames of four 1080p HAP Q layers fit in
+/// one. A larger frame gets a buffer of its own size, kept for reuse too.
+const STAGING_CHUNK: u64 = 8 << 20;
 
 fn wgpu_format(format: BlockFormat) -> wgpu::TextureFormat {
     match format {
@@ -61,12 +75,13 @@ fn layout_code(layout: ColorLayout) -> u32 {
     }
 }
 
-/// Pipeline shared by every [`VideoTexture`].
+/// Pipeline and upload buffers shared by every [`VideoTexture`].
 pub struct FrameUploader {
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     no_alpha: wgpu::TextureView,
     chroma_sampler: wgpu::Sampler,
+    staging: StagingBelt,
 }
 
 /// A block-compressed plane on the GPU.
@@ -87,6 +102,7 @@ pub struct VideoTexture {
     luma: Option<(wgpu::Texture, wgpu::TextureView)>,
     chroma: Option<(wgpu::Texture, wgpu::TextureView)>,
     params: wgpu::Buffer,
+    params_written: Option<ConvertParams>,
     output: wgpu::Texture,
     output_view: wgpu::TextureView,
 }
@@ -127,6 +143,7 @@ impl VideoTexture {
             luma: None,
             chroma: None,
             params,
+            params_written: None,
             output,
             output_view,
         }
@@ -273,16 +290,19 @@ impl FrameUploader {
             bind_group_layout,
             no_alpha,
             chroma_sampler,
+            staging: StagingBelt::new(device.clone(), STAGING_CHUNK),
         }
     }
 
-    /// Copies `frame` to the GPU and records, in `encoder`, the pass that
-    /// converts it into `target`.
+    /// Records, in `encoder`, the copy of `frame` to the GPU and the pass
+    /// that converts it into `target`.
     ///
-    /// The copies happen when the next command buffer is submitted, so
-    /// upload a given `target` at most once per submission.
+    /// Call [`FrameUploader::finish`] after the last upload into `encoder`,
+    /// before submitting it. The conversion settings of `target` change
+    /// when the submission starts, so upload a given `target` at most once
+    /// per submission.
     pub fn upload(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -296,8 +316,14 @@ impl FrameUploader {
         }
     }
 
+    /// Closes the upload buffers written into `encoder`. They return to the
+    /// uploader once the GPU has run `encoder`, which must be submitted.
+    pub fn finish(&mut self, encoder: &wgpu::CommandEncoder) {
+        self.staging.finish_and_recall_on_submit(encoder);
+    }
+
     fn upload_hap(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -313,14 +339,23 @@ impl FrameUploader {
         let (width, height) = (target.width, target.height);
         write_plane(
             device,
-            queue,
+            &mut self.staging,
+            encoder,
             &mut target.color,
             &frame.color,
             width,
             height,
         )?;
         match &frame.alpha {
-            Some(plane) => write_plane(device, queue, &mut target.alpha, plane, width, height)?,
+            Some(plane) => write_plane(
+                device,
+                &mut self.staging,
+                encoder,
+                &mut target.alpha,
+                plane,
+                width,
+                height,
+            )?,
             None => target.alpha = None,
         }
         let params = ConvertParams {
@@ -329,7 +364,7 @@ impl FrameUploader {
             yuv_flags: 0,
             _pad: 0,
         };
-        queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
+        target.write_params(queue, params);
         let Some(color) = &target.color else {
             return Ok(());
         };
@@ -342,7 +377,7 @@ impl FrameUploader {
     }
 
     fn upload_rgba(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -386,24 +421,25 @@ impl FrameUploader {
             let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
             (texture, view)
         });
-        queue.write_texture(
-            texture.as_image_copy(),
+        stage_copy(
+            &mut self.staging,
+            encoder,
+            texture,
             &image.pixels,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(target.width * 4),
-                rows_per_image: Some(target.height),
-            },
+            target.width * 4,
+            target.height,
             size,
-        );
-        let params = ConvertParams {
-            layout: layout_code(ColorLayout::Rgba),
-            has_alpha_plane: 0,
-            yuv_flags: 0,
-            _pad: 0,
-        };
-        queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
+        )?;
         let view = view.clone();
+        target.write_params(
+            queue,
+            ConvertParams {
+                layout: layout_code(ColorLayout::Rgba),
+                has_alpha_plane: 0,
+                yuv_flags: 0,
+                _pad: 0,
+            },
+        );
         self.convert(
             device,
             encoder,
@@ -416,7 +452,7 @@ impl FrameUploader {
     }
 
     fn upload_yuv(
-        &self,
+        &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
@@ -471,25 +507,26 @@ impl FrameUploader {
                 let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
                 (texture, view)
             });
-            queue.write_texture(
-                texture.as_image_copy(),
+            stage_copy(
+                &mut self.staging,
+                encoder,
+                texture,
                 data,
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(width * bytes),
-                    rows_per_image: Some(height),
-                },
+                width * bytes,
+                height,
                 size,
-            );
+            )?;
         }
-        let params = ConvertParams {
-            layout: LAYOUT_YUV_420,
-            has_alpha_plane: 0,
-            yuv_flags: u32::from(image.full_range)
-                | (u32::from(image.matrix == YuvMatrix::Bt601) << 1),
-            _pad: 0,
-        };
-        queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
+        target.write_params(
+            queue,
+            ConvertParams {
+                layout: LAYOUT_YUV_420,
+                has_alpha_plane: 0,
+                yuv_flags: u32::from(image.full_range)
+                    | (u32::from(image.matrix == YuvMatrix::Bt601) << 1),
+                _pad: 0,
+            },
+        );
         let (Some((_, luma)), Some((_, chroma))) = (&target.luma, &target.chroma) else {
             return Ok(());
         };
@@ -557,11 +594,68 @@ impl FrameUploader {
     }
 }
 
-/// Copies a plane into its block texture, creating the texture when the
-/// format changes.
+impl VideoTexture {
+    /// Sets the conversion settings, writing them only when they change.
+    fn write_params(&mut self, queue: &wgpu::Queue, params: ConvertParams) {
+        if self.params_written != Some(params) {
+            queue.write_buffer(&self.params, 0, bytemuck::bytes_of(&params));
+            self.params_written = Some(params);
+        }
+    }
+}
+
+/// Records the copy of `rows` rows of `row_bytes` bytes from `data` into
+/// `texture`, through an upload buffer of `staging`.
+fn stage_copy(
+    staging: &mut StagingBelt,
+    encoder: &mut wgpu::CommandEncoder,
+    texture: &wgpu::Texture,
+    data: &[u8],
+    row_bytes: u32,
+    rows: u32,
+    size: wgpu::Extent3d,
+) -> Result<(), UploadError> {
+    // Rows of a buffer-to-texture copy start every 256 bytes.
+    let stride = row_bytes.next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+    let Some(staged) = wgpu::BufferSize::new(u64::from(stride) * u64::from(rows)) else {
+        return Ok(());
+    };
+    let alignment = wgpu::BufferSize::new(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT.into())
+        .expect("the copy alignment is not zero");
+    let slice = staging.allocate(staged, alignment);
+    {
+        let mut view = slice.get_mapped_range_mut()?;
+        let (stride, row_bytes) = (stride as usize, row_bytes as usize);
+        if stride == row_bytes {
+            view.copy_from_slice(&data[..stride * rows as usize]);
+        } else {
+            for (row, line) in data.chunks_exact(row_bytes).take(rows as usize).enumerate() {
+                view.slice(row * stride..row * stride + row_bytes)
+                    .copy_from_slice(line);
+            }
+        }
+    }
+    encoder.copy_buffer_to_texture(
+        wgpu::TexelCopyBufferInfo {
+            buffer: slice.buffer(),
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: slice.offset(),
+                bytes_per_row: Some(stride),
+                rows_per_image: Some(rows),
+            },
+        },
+        texture.as_image_copy(),
+        size,
+    );
+    Ok(())
+}
+
+/// Records the copy of a plane into its block texture, creating the texture
+/// when the format changes.
 fn write_plane(
     device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    staging: &mut StagingBelt,
+    encoder: &mut wgpu::CommandEncoder,
     slot: &mut Option<BlockTexture>,
     plane: &Plane,
     width: u32,
@@ -605,15 +699,13 @@ fn write_plane(
         return Ok(());
     };
     let row_bytes = width.div_ceil(4) * plane.format.block_bytes() as u32;
-    queue.write_texture(
-        block.texture.as_image_copy(),
+    stage_copy(
+        staging,
+        encoder,
+        &block.texture,
         &plane.data,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(row_bytes),
-            rows_per_image: Some(height.div_ceil(4)),
-        },
+        row_bytes,
+        height.div_ceil(4),
         size,
-    );
-    Ok(())
+    )
 }

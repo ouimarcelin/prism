@@ -51,12 +51,13 @@ fn quantized_rgb(rgb: [u8; 3]) -> [f32; 3] {
 
 /// Converts `frame` and returns its pixels, row by row.
 fn convert(gpu: &Gpu, frame: &Frame, width: u32, height: u32) -> Vec<[f32; 4]> {
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, width, height);
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     uploader
         .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, frame)
         .unwrap();
+    uploader.finish(&encoder);
     gpu.queue.submit([encoder.finish()]);
     read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap()
 }
@@ -207,7 +208,7 @@ fn hap_q_alpha_uses_the_alpha_plane() {
 fn a_texture_follows_successive_frames() {
     let Some(gpu) = gpu() else { return };
     let (width, height) = (16, 8);
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, width, height);
 
     // Plain HAP, then HAP Q Alpha, then plain HAP again: formats and the
@@ -245,6 +246,7 @@ fn a_texture_follows_successive_frames() {
         uploader
             .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, &frame)
             .unwrap();
+        uploader.finish(&encoder);
         gpu.queue.submit([encoder.finish()]);
         let pixels = read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap();
         assert_pixel(&pixels, width, 1, 1, expected);
@@ -277,7 +279,7 @@ fn hap_file_plays_through_the_compositor() {
     .unwrap();
     let mut decoder = HapDecoder::new(Cursor::new(file)).unwrap();
 
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut video = VideoTexture::new(&gpu.device, width.into(), height.into());
     let resolution = Resolution {
         width: 32,
@@ -293,6 +295,7 @@ fn hap_file_plays_through_the_compositor() {
         uploader
             .upload(&gpu.device, &gpu.queue, &mut encoder, &mut video, &frame)
             .unwrap();
+        uploader.finish(&encoder);
         gpu.queue.submit([encoder.finish()]);
 
         let layers = [LayerInput::new(video.view(), 0.5, BlendMode::Normal)];
@@ -308,7 +311,7 @@ fn hap_file_plays_through_the_compositor() {
 #[test]
 fn wrong_plane_size_is_reported() {
     let Some(gpu) = gpu() else { return };
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, 16, 8);
     let mut frame = decode(
         &encode_image(
@@ -354,7 +357,7 @@ fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
         pixels,
         ..RgbaImage::default()
     });
-    let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, width, height);
     let hap = decode(
         &encode_image(
@@ -375,6 +378,7 @@ fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
         uploader
             .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, frame)
             .unwrap();
+        uploader.finish(&encoder);
         gpu.queue.submit([encoder.finish()]);
         let pixels = read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap();
         assert_pixel(&pixels, width, 0, 1, expected);
@@ -431,6 +435,42 @@ fn yuv_frames_match_the_cpu_reference() {
         for x in [0, 7] {
             let [r, g, b] = image.rgb_at(x, 1).map(|c| f32::from(c) / 255.0);
             assert_pixel(&pixels, width, x, 1, [r, g, b, 1.0]);
+        }
+    }
+}
+
+#[test]
+fn upload_buffers_are_reused_across_frames() {
+    let Some(gpu) = gpu() else { return };
+    // 64 pixels of 4 bytes: rows fill the upload buffer without padding,
+    // unlike the narrow frames of the other tests.
+    let (width, height) = (64, 4);
+    let mut uploader = FrameUploader::new(&gpu.device, &gpu.queue);
+    let mut target = VideoTexture::new(&gpu.device, width, height);
+    for frame in 0..30u8 {
+        // Row y is the gray level 10 × y + frame.
+        let level = |y: u32| 10 * y as u8 + frame;
+        let pixels = (0..height)
+            .flat_map(|y| [level(y), level(y), level(y), 255].repeat(width as usize))
+            .collect();
+        let image = Frame::Rgba(RgbaImage {
+            width,
+            height,
+            pixels,
+            ..RgbaImage::default()
+        });
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        uploader
+            .upload(&gpu.device, &gpu.queue, &mut encoder, &mut target, &image)
+            .unwrap();
+        uploader.finish(&encoder);
+        gpu.queue.submit([encoder.finish()]);
+        if frame % 10 == 9 {
+            let pixels = read_texture(&gpu.device, &gpu.queue, target.texture()).unwrap();
+            for y in 0..height {
+                let gray = f32::from(level(y)) / 255.0;
+                assert_pixel(&pixels, width, 63, y, [gray, gray, gray, 1.0]);
+            }
         }
     }
 }
