@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
+prism-fx = { path = "../fx" }
 prism-media = { path = "../media" }
 prism-render = { path = "../render" }
 

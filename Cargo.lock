@@ -2038,6 +2038,7 @@ dependencies = [
  "png",
  "prism-clock",
  "prism-core",
+ "prism-fx",
  "prism-media",
  "prism-render",
  "tempfile",

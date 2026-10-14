@@ -12,7 +12,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use prism_core::{Bpm, Clip, Composition, Direction, FrameRate, LoopMode, Resolution, Slot};
+use prism_core::{
+    Bpm, Clip, Composition, Direction, Effect, FrameRate, LoopMode, Resolution, Slot,
+};
 use prism_engine::{ClipState, Command, Engine, EngineState, LayerStatus, Output, ProgramOutput};
 use prism_media::BlockFormat;
 use prism_media::test_support::{
@@ -608,4 +610,54 @@ fn beats_follow_the_tempo_taps_and_resync() {
         "{}",
         status.beat
     );
+}
+
+#[test]
+fn effects_of_clip_layer_and_composition_apply_in_order() {
+    let Some(gpu) = gpu() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let mut clip = Clip::from_file(solid_clip(dir.path(), "red.mov", [255, 0, 0]));
+    // Clip: inverted to cyan.
+    clip.effects.push(Effect::new("invert"));
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    driver.settle(|status| status.state == ClipState::Playing);
+    let program = driver.state.program();
+    let pixel = |driver: &mut Driver| {
+        driver.tick();
+        read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0]
+    };
+    let cyan = pixel(&mut driver);
+    assert!(
+        cyan[0] < 0.01 && cyan[1] > 0.99 && cyan[2] > 0.99,
+        "{cyan:?}"
+    );
+
+    // Layer: no saturation, so the cyan turns gray.
+    let mut gray = Effect::new("color");
+    gray.set_param("saturation", 0.0);
+    comp.layer_mut(slot.layer).unwrap().effects.push(gray);
+    driver.state.set_composition(comp.clone());
+    let gray = pixel(&mut driver);
+    assert!(
+        (gray[0] - gray[2]).abs() < 0.01 && gray[0] > 0.5,
+        "{gray:?}"
+    );
+
+    // Composition: inverted after the mix, a bypassed effect skipped.
+    let mut skipped = Effect::new("invert");
+    skipped.bypass = true;
+    comp.effects = vec![Effect::new("invert"), skipped];
+    driver.state.set_composition(comp.clone());
+    let inverted = pixel(&mut driver);
+    assert!((inverted[0] + gray[0] - 1.0).abs() < 0.01, "{inverted:?}");
+
+    // Without effects, back to the clip as it is.
+    comp.effects.clear();
+    comp.layer_mut(slot.layer).unwrap().effects.clear();
+    comp.clip_mut(slot).unwrap().effects.clear();
+    driver.state.set_composition(comp);
+    let red = pixel(&mut driver);
+    assert!(red[0] > 0.99 && red[1] < 0.01, "{red:?}");
 }

@@ -8,7 +8,8 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use prism_clock::BeatClock;
-use prism_core::{Composition, LayerId, Resolution, Slot};
+use prism_core::{Composition, Effect, LayerId, Resolution, Slot};
+use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, Transition, WORKING_FORMAT, solid_color_texture,
     wgpu,
@@ -295,6 +296,11 @@ pub struct EngineState {
     program: Arc<ProgramOutput>,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
+    fx: EffectRenderer,
+    composition_effects: EffectChain,
+    /// Image the layers are mixed into when the composition has effects.
+    mix: Option<(Resolution, wgpu::TextureView)>,
+    started: Instant,
     clock: BeatClock,
     beat: f64,
     last_tick: Option<Instant>,
@@ -312,6 +318,7 @@ impl EngineState {
         let transparent = solid_color_texture(&gpu.device, &gpu.queue, [0.0; 4])
             .create_view(&wgpu::TextureViewDescriptor::default());
         let program = Arc::new(ProgramOutput::new(&gpu.device, resolution));
+        let fx = EffectRenderer::new(&gpu.device);
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(1, |time| time.as_nanos() as u64);
@@ -325,6 +332,10 @@ impl EngineState {
             program,
             outputs: Vec::new(),
             random: Random::new(seed),
+            fx,
+            composition_effects: EffectChain::default(),
+            mix: None,
+            started: Instant::now(),
             clock: BeatClock::new(composition.tempo.get(), Instant::now()),
             beat: 0.0,
             last_tick: None,
@@ -534,6 +545,36 @@ impl EngineState {
             }
         }
         self.uploader.finish(&encoder);
+
+        // Effects of each clip, then of its layer.
+        let time = FrameTime {
+            seconds: now.saturating_duration_since(self.started).as_secs_f32(),
+            beat: self.beat as f32,
+        };
+        for runtime in &mut self.layers {
+            let layer_effects = self
+                .composition
+                .layer(runtime.id)
+                .map_or(&[][..], |layer| &layer.effects[..]);
+            for stream in runtime.streams_mut() {
+                let clip_effects = self
+                    .composition
+                    .clip(stream.slot())
+                    .map_or(&[][..], |clip| &clip.effects[..]);
+                let effects: Vec<&Effect> = clip_effects.iter().chain(layer_effects).collect();
+                stream.apply_effects(&self.fx, &gpu, &mut encoder, &effects, time);
+            }
+        }
+        // With effects on the composition, the layers are mixed into an
+        // image of their own first.
+        let composition_effects: Vec<&Effect> = self.composition.effects.iter().collect();
+        let resolution = self.program.resolution();
+        let mix = prism_fx::is_active(&composition_effects).then(|| {
+            self.mix
+                .take()
+                .filter(|(size, _)| *size == resolution)
+                .unwrap_or_else(|| (resolution, mix_texture(&gpu.device, resolution)))
+        });
         let uploaded = Instant::now();
 
         let mut inputs = Vec::with_capacity(self.layers.len());
@@ -566,13 +607,24 @@ impl EngineState {
             };
             inputs.push(input);
         }
-        self.compositor.encode(
-            &gpu.device,
-            &gpu.queue,
-            &mut encoder,
-            &inputs,
-            &self.program.view,
-        );
+        let destination = mix.as_ref().map_or(&self.program.view, |(_, view)| view);
+        self.compositor
+            .encode(&gpu.device, &gpu.queue, &mut encoder, &inputs, destination);
+        drop(inputs);
+        if let Some((_, view)) = &mix {
+            self.composition_effects.apply_into(
+                &self.fx,
+                &gpu.device,
+                &gpu.queue,
+                &mut encoder,
+                &composition_effects,
+                view,
+                (resolution.width, resolution.height),
+                time,
+                &self.program.view,
+            );
+        }
+        self.mix = mix;
         gpu.queue.submit([encoder.finish()]);
         self.watch_gpu(&gpu);
         let submitted = Instant::now();
@@ -588,7 +640,29 @@ impl EngineState {
         };
         self.update_stats(now, submitted - started, steps);
     }
+}
 
+/// Image the layers are mixed into before the effects of the composition.
+fn mix_texture(device: &wgpu::Device, resolution: Resolution) -> wgpu::TextureView {
+    device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("mix"),
+            size: wgpu::Extent3d {
+                width: resolution.width,
+                height: resolution.height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: WORKING_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+impl EngineState {
     /// Counts the frame just submitted as finished once the GPU has run it.
     fn watch_gpu(&mut self, gpu: &Gpu) {
         self.submitted += 1;

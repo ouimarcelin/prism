@@ -216,6 +216,12 @@ impl EffectChain {
         self.run(
             renderer, device, queue, encoder, effects, input, size, time, None,
         );
+        self.output()
+    }
+
+    /// Result of the last [`EffectChain::apply`], if an effect changed the
+    /// image.
+    pub fn output(&self) -> Option<&wgpu::TextureView> {
         self.output
             .and_then(|index| self.targets.get(index))
             .map(|target| &target.view)

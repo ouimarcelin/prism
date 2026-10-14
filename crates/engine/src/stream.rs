@@ -1,7 +1,8 @@
 //! A clip playing on a layer: its decoding worker, frame cache, playhead and
 //! layer texture.
 
-use prism_core::{MediaSource, Playback, Slot};
+use prism_core::{Effect, MediaSource, Playback, Slot};
+use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_media::{Frame, MediaInfo};
 use prism_render::{FrameUploader, Gpu, VideoTexture, wgpu};
 
@@ -41,6 +42,7 @@ pub(crate) struct ClipStream {
     /// Frame currently in the texture.
     shown: Option<usize>,
     texture: Option<VideoTexture>,
+    effects: EffectChain,
     late_frames: u64,
     frame_errors: u64,
     pending_seek: Option<(f64, bool)>,
@@ -64,6 +66,7 @@ impl ClipStream {
             wanted: None,
             shown: None,
             texture: None,
+            effects: EffectChain::default(),
             late_frames: 0,
             frame_errors: 0,
             pending_seek: None,
@@ -87,11 +90,36 @@ impl ClipStream {
         matches!(self.phase, Phase::Failed(_))
     }
 
-    /// Layer texture, once a frame is uploaded.
+    /// Image of the clip, once a frame is uploaded: the layer texture after
+    /// the effects of the clip and of its layer.
     pub(crate) fn view(&self) -> Option<&wgpu::TextureView> {
-        self.shown
-            .and(self.texture.as_ref())
-            .map(VideoTexture::view)
+        let texture = self.shown.and(self.texture.as_ref())?;
+        Some(self.effects.output().unwrap_or(texture.view()))
+    }
+
+    /// Records `effects` applied to the frame on screen.
+    pub(crate) fn apply_effects(
+        &mut self,
+        renderer: &EffectRenderer,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        effects: &[&Effect],
+        time: FrameTime,
+    ) {
+        let Some(texture) = self.shown.and(self.texture.as_ref()) else {
+            return;
+        };
+        let size = (texture.width(), texture.height());
+        self.effects.apply(
+            renderer,
+            &gpu.device,
+            &gpu.queue,
+            encoder,
+            effects,
+            texture.view(),
+            size,
+            time,
+        );
     }
 
     /// Updates the playback settings, from the composition.
