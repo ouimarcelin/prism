@@ -12,7 +12,7 @@ use prism_media::test_support::{
     Compression, Image, MovOptions, encode_image, encode_multiple, plane_from_fn, solid_plane,
     write_mov, ycocg_color,
 };
-use prism_media::{BlockFormat, Frame, HapDecoder, HapFrame, RgbaImage};
+use prism_media::{BlockFormat, Frame, HapDecoder, HapFrame, RgbaImage, YuvImage, YuvMatrix};
 use prism_render::{Compositor, FrameUploader, Gpu, LayerInput, VideoTexture, read_texture};
 
 /// BC endpoints are 5 or 6 bits per channel; GPUs expand them slightly
@@ -352,6 +352,7 @@ fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
         width,
         height,
         pixels,
+        ..RgbaImage::default()
     });
     let uploader = FrameUploader::new(&gpu.device, &gpu.queue);
     let mut target = VideoTexture::new(&gpu.device, width, height);
@@ -386,6 +387,7 @@ fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
         width: 1,
         height: 1,
         pixels: vec![0; 4],
+        ..RgbaImage::default()
     });
     let mut encoder = gpu.device.create_command_encoder(&Default::default());
     assert!(matches!(
@@ -395,4 +397,40 @@ fn rgba_frames_are_premultiplied_and_follow_hap_frames() {
             actual: 4
         })
     ));
+}
+
+#[test]
+fn blue_first_pixels_are_reordered_by_the_gpu() {
+    let Some(gpu) = gpu() else { return };
+    // Blue, green, red, alpha: opaque orange.
+    let frame = Frame::Rgba(RgbaImage {
+        width: 2,
+        height: 1,
+        order: prism_media::ChannelOrder::Bgra,
+        pixels: [0, 128, 255, 255].repeat(2),
+    });
+    let pixels = convert(&gpu, &frame, 2, 1);
+    assert_pixel(&pixels, 2, 1, 0, [1.0, 128.0 / 255.0, 0.0, 1.0]);
+}
+
+#[test]
+fn yuv_frames_match_the_cpu_reference() {
+    let Some(gpu) = gpu() else { return };
+    // 8 × 2 pixels: left half red, right half blue, video range.
+    let (width, height) = (8, 2);
+    for matrix in [YuvMatrix::Bt709, YuvMatrix::Bt601] {
+        let image = YuvImage {
+            width,
+            height,
+            luma: [63, 63, 63, 63, 32, 32, 32, 32].repeat(2),
+            chroma: [102, 240, 102, 240, 240, 118, 240, 118].to_vec(),
+            matrix,
+            full_range: false,
+        };
+        let pixels = convert(&gpu, &Frame::Yuv(image.clone()), width, height);
+        for x in [0, 7] {
+            let [r, g, b] = image.rgb_at(x, 1).map(|c| f32::from(c) / 255.0);
+            assert_pixel(&pixels, width, x, 1, [r, g, b, 1.0]);
+        }
+    }
 }

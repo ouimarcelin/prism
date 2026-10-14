@@ -41,3 +41,4 @@ Ce que cela implique pour la suite.
 | [0007](0007-sorties-et-application.md) | Sorties présentées par le thread de rendu | Acceptée |
 | [0008](0008-interface-egui.md) | Interface egui et document édité | Acceptée |
 | [0009](0009-sources-d-images.md) | Sources d'images communes à tous les formats | Acceptée |
+| [0010](0010-h264-prores-avfoundation.md) | H.264 et ProRes par AVFoundation | Acceptée |

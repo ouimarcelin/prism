@@ -5,8 +5,13 @@
 //! replaces the previous one, so the worker never falls behind on frames
 //! that are no longer useful. Frame buffers travel back to the worker once
 //! used, so decoding allocates nothing in the steady state.
+//!
+//! The worker never decodes a frame the render thread still holds or has not
+//! received yet: requests may list them again, since the render thread
+//! cannot see frames in transit. Movie decoders that read forward (H.264)
+//! rely on it: decoding a frame twice would send them back to a key frame.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::error::Error;
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread;
@@ -18,8 +23,9 @@ use prism_media::{Frame, FrameSource, MediaInfo};
 pub(crate) enum Request {
     /// Frames to decode, most urgent first. Replaces the previous list.
     Want(Vec<usize>),
-    /// A frame buffer the render thread no longer needs.
-    Recycle(Frame),
+    /// A frame buffer the render thread no longer needs, with the index of
+    /// the frame it held.
+    Recycle(usize, Frame),
 }
 
 /// Message from a worker to the render thread.
@@ -58,9 +64,10 @@ impl Worker {
         let _ = self.requests.send(Request::Want(frames));
     }
 
-    /// Gives a frame buffer back for reuse.
-    pub(crate) fn recycle(&self, frame: Frame) {
-        let _ = self.requests.send(Request::Recycle(frame));
+    /// Gives back the buffer of frame `index`, which may then be decoded
+    /// again if asked.
+    pub(crate) fn recycle(&self, index: usize, frame: Frame) {
+        let _ = self.requests.send(Request::Recycle(index, frame));
     }
 
     /// Next event, if any, without waiting.
@@ -105,6 +112,8 @@ fn run(source: &MediaSource, requests: Receiver<Request>, events: Sender<Event>)
 
     let mut queue: VecDeque<usize> = VecDeque::new();
     let mut spare: Vec<Frame> = Vec::new();
+    // Frames sent and not yet given back.
+    let mut delivered: HashSet<usize> = HashSet::new();
     loop {
         // Wait when idle; otherwise take pending messages without waiting.
         let message = if queue.is_empty() {
@@ -121,8 +130,16 @@ fn run(source: &MediaSource, requests: Receiver<Request>, events: Sender<Event>)
         };
         if let Some(message) = message {
             match message {
-                Request::Want(frames) => queue = frames.into(),
-                Request::Recycle(frame) => spare.push(frame),
+                Request::Want(frames) => {
+                    queue = frames
+                        .into_iter()
+                        .filter(|index| !delivered.contains(index))
+                        .collect();
+                }
+                Request::Recycle(index, frame) => {
+                    delivered.remove(&index);
+                    spare.push(frame);
+                }
             }
             continue;
         }
@@ -132,7 +149,10 @@ fn run(source: &MediaSource, requests: Receiver<Request>, events: Sender<Event>)
         };
         let mut frame = spare.pop().unwrap_or_default();
         let event = match decoder.decode(index, &mut frame) {
-            Ok(()) => Event::Frame(index, frame),
+            Ok(()) => {
+                delivered.insert(index);
+                Event::Frame(index, frame)
+            }
             Err(error) => {
                 spare.push(frame);
                 Event::FrameFailed(index, error_chain(&error))

@@ -163,7 +163,7 @@ impl ClipStream {
                     if self.requested.contains(&index) && self.cache.len() < CACHE_CAPACITY {
                         self.cache.push((index, frame));
                     } else {
-                        worker.recycle(frame);
+                        worker.recycle(index, frame);
                     }
                 }
                 Event::FrameFailed(index, message) => {
@@ -208,18 +208,20 @@ impl ClipStream {
             if frames.contains(&self.cache[index].0) {
                 index += 1;
             } else {
-                worker.recycle(self.cache.swap_remove(index).1);
+                let (frame_index, frame) = self.cache.swap_remove(index);
+                worker.recycle(frame_index, frame);
             }
         }
 
-        // Ask only for what is neither shown nor cached.
+        // Ask for what is neither shown nor cached, again while something is
+        // missing: the worker skips frames already on their way.
         let missing: Vec<usize> = frames
             .into_iter()
             .filter(|frame| {
                 Some(*frame) != self.shown && !self.cache.iter().any(|(i, _)| i == frame)
             })
             .collect();
-        if missing != self.requested {
+        if missing != self.requested || !missing.is_empty() {
             worker.want(missing.clone());
             self.requested = missing;
         }
@@ -254,7 +256,7 @@ impl ClipStream {
             Err(error) => self.phase = Phase::Failed(error_chain(&error)),
         }
         if let Some(worker) = &self.worker {
-            worker.recycle(frame);
+            worker.recycle(index, frame);
         }
     }
 

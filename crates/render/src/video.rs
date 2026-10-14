@@ -7,7 +7,9 @@
 
 use std::num::NonZeroU64;
 
-use prism_media::{BlockFormat, ColorLayout, Frame, HapFrame, Plane, RgbaImage};
+use prism_media::{
+    BlockFormat, ChannelOrder, ColorLayout, Frame, HapFrame, Plane, RgbaImage, YuvImage, YuvMatrix,
+};
 
 use crate::WORKING_FORMAT;
 
@@ -32,8 +34,12 @@ pub enum UploadError {
 struct ConvertParams {
     layout: u32,
     has_alpha_plane: u32,
-    _pad: [u32; 2],
+    yuv_flags: u32,
+    _pad: u32,
 }
+
+/// Layout code of 4:2:0 video in convert.wgsl.
+const LAYOUT_YUV_420: u32 = 3;
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<ConvertParams>() as u64;
 
@@ -60,6 +66,7 @@ pub struct FrameUploader {
     pipeline: wgpu::RenderPipeline,
     bind_group_layout: wgpu::BindGroupLayout,
     no_alpha: wgpu::TextureView,
+    chroma_sampler: wgpu::Sampler,
 }
 
 /// A block-compressed plane on the GPU.
@@ -76,6 +83,9 @@ pub struct VideoTexture {
     color: Option<BlockTexture>,
     alpha: Option<BlockTexture>,
     rgba: Option<(wgpu::Texture, wgpu::TextureView)>,
+    rgba_format: wgpu::TextureFormat,
+    luma: Option<(wgpu::Texture, wgpu::TextureView)>,
+    chroma: Option<(wgpu::Texture, wgpu::TextureView)>,
     params: wgpu::Buffer,
     output: wgpu::Texture,
     output_view: wgpu::TextureView,
@@ -113,6 +123,9 @@ impl VideoTexture {
             color: None,
             alpha: None,
             rgba: None,
+            rgba_format: wgpu::TextureFormat::Rgba8Unorm,
+            luma: None,
+            chroma: None,
             params,
             output,
             output_view,
@@ -169,6 +182,22 @@ impl FrameUploader {
                 },
                 texture_entry(1),
                 texture_entry(2),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -233,10 +262,17 @@ impl FrameUploader {
         );
         let no_alpha = no_alpha.create_view(&wgpu::TextureViewDescriptor::default());
 
+        let chroma_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("chroma"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
         Self {
             pipeline,
             bind_group_layout,
             no_alpha,
+            chroma_sampler,
         }
     }
 
@@ -256,6 +292,7 @@ impl FrameUploader {
         match frame {
             Frame::Hap(hap) => self.upload_hap(device, queue, encoder, target, hap),
             Frame::Rgba(image) => self.upload_rgba(device, queue, encoder, target, image),
+            Frame::Yuv(image) => self.upload_yuv(device, queue, encoder, target, image),
         }
     }
 
@@ -289,7 +326,8 @@ impl FrameUploader {
         let params = ConvertParams {
             layout: layout_code(frame.layout),
             has_alpha_plane: u32::from(frame.alpha.is_some()),
-            _pad: [0; 2],
+            yuv_flags: 0,
+            _pad: 0,
         };
         queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
         let Some(color) = &target.color else {
@@ -299,7 +337,7 @@ impl FrameUploader {
             .alpha
             .as_ref()
             .map_or(&self.no_alpha, |alpha| &alpha.view);
-        self.convert(device, encoder, target, &color.view, alpha);
+        self.convert(device, encoder, target, &color.view, alpha, &self.no_alpha);
         Ok(())
     }
 
@@ -325,6 +363,15 @@ impl FrameUploader {
             height: target.height,
             depth_or_array_layers: 1,
         };
+        // The GPU reorders blue-first pixels itself.
+        let format = match image.order {
+            ChannelOrder::Rgba => wgpu::TextureFormat::Rgba8Unorm,
+            ChannelOrder::Bgra => wgpu::TextureFormat::Bgra8Unorm,
+        };
+        if target.rgba_format != format {
+            target.rgba = None;
+            target.rgba_format = format;
+        }
         let (texture, view) = target.rgba.get_or_insert_with(|| {
             let texture = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("video pixels"),
@@ -332,7 +379,7 @@ impl FrameUploader {
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
+                format,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
                 view_formats: &[],
             });
@@ -352,15 +399,107 @@ impl FrameUploader {
         let params = ConvertParams {
             layout: layout_code(ColorLayout::Rgba),
             has_alpha_plane: 0,
-            _pad: [0; 2],
+            yuv_flags: 0,
+            _pad: 0,
         };
         queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
         let view = view.clone();
-        self.convert(device, encoder, target, &view, &self.no_alpha);
+        self.convert(
+            device,
+            encoder,
+            target,
+            &view,
+            &self.no_alpha,
+            &self.no_alpha,
+        );
         Ok(())
     }
 
-    /// Records the conversion pass from `color` (and `alpha`) into `target`.
+    fn upload_yuv(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &mut VideoTexture,
+        image: &YuvImage,
+    ) -> Result<(), UploadError> {
+        let (chroma_width, chroma_height) = image.chroma_size();
+        let luma_bytes = target.width as usize * target.height as usize;
+        let chroma_bytes = chroma_width as usize * chroma_height as usize * 2;
+        if (image.width, image.height) != (target.width, target.height)
+            || image.luma.len() != luma_bytes
+            || image.chroma.len() != chroma_bytes
+        {
+            return Err(UploadError::WrongSize {
+                expected: luma_bytes + chroma_bytes,
+                actual: image.luma.len() + image.chroma.len(),
+            });
+        }
+        let planes = [
+            (
+                &mut target.luma,
+                wgpu::TextureFormat::R8Unorm,
+                (target.width, target.height),
+                1,
+                &image.luma,
+            ),
+            (
+                &mut target.chroma,
+                wgpu::TextureFormat::Rg8Unorm,
+                (chroma_width, chroma_height),
+                2,
+                &image.chroma,
+            ),
+        ];
+        for (slot, format, (width, height), bytes, data) in planes {
+            let size = wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            };
+            let (texture, _) = slot.get_or_insert_with(|| {
+                let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("video plane"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                (texture, view)
+            });
+            queue.write_texture(
+                texture.as_image_copy(),
+                data,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(width * bytes),
+                    rows_per_image: Some(height),
+                },
+                size,
+            );
+        }
+        let params = ConvertParams {
+            layout: LAYOUT_YUV_420,
+            has_alpha_plane: 0,
+            yuv_flags: u32::from(image.full_range)
+                | (u32::from(image.matrix == YuvMatrix::Bt601) << 1),
+            _pad: 0,
+        };
+        queue.write_buffer(&target.params, 0, bytemuck::bytes_of(&params));
+        let (Some((_, luma)), Some((_, chroma))) = (&target.luma, &target.chroma) else {
+            return Ok(());
+        };
+        let (luma, chroma) = (luma.clone(), chroma.clone());
+        self.convert(device, encoder, target, &luma, &self.no_alpha, &chroma);
+        Ok(())
+    }
+
+    /// Records the conversion pass from `color` (and `alpha`, `chroma`) into
+    /// `target`.
     fn convert(
         &self,
         device: &wgpu::Device,
@@ -368,6 +507,7 @@ impl FrameUploader {
         target: &VideoTexture,
         color: &wgpu::TextureView,
         alpha: &wgpu::TextureView,
+        chroma: &wgpu::TextureView,
     ) {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("video convert"),
@@ -384,6 +524,14 @@ impl FrameUploader {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(alpha),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(chroma),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(&self.chroma_sampler),
                 },
             ],
         });

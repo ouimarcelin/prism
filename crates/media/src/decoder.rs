@@ -26,6 +26,12 @@ pub enum DecodeError {
     /// An image file is invalid or does not match the sequence.
     #[error("image illisible : {0}")]
     Image(String),
+    /// No decoder of this platform reads the codec.
+    #[error("codec {0} non pris en charge sur cette plateforme")]
+    UnsupportedCodec(String),
+    /// The platform decoder failed.
+    #[error("décodage impossible : {0}")]
+    Platform(String),
     /// The frame index is past the end of the track.
     #[error("frame {index} is past the last frame ({count} frames)")]
     FrameOutOfRange {

@@ -122,9 +122,10 @@ impl Driver {
     }
 
     /// Ticks without advancing time until `done`, giving decoding threads
-    /// real time to work. Fails after two seconds.
+    /// real time to work. Fails after ten seconds: the first use of a system
+    /// decoder, with the other tests running, can take a while.
     fn settle(&mut self, done: impl Fn(&LayerStatus) -> bool) -> LayerStatus {
-        let limit = Instant::now() + Duration::from_secs(2);
+        let limit = Instant::now() + Duration::from_secs(10);
         loop {
             self.state.tick(self.now);
             let status = self.layer();
@@ -479,4 +480,37 @@ fn image_sequences_and_stills_play_like_movies() {
     }
     assert_eq!(driver.program_frame(), 2);
     assert_eq!(driver.layer().state, ClipState::Playing);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn h264_movies_play_through_avfoundation() {
+    let Some(gpu) = gpu() else { return };
+    // 30 frames at 30 per second: ten red, ten green, ten blue.
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../media/tests/fixtures/rgb-thirds-h264.mp4");
+    let (mut comp, slot) = composition_with(Clip::from_file(path));
+    comp.set_resolution(Resolution {
+        width: 64,
+        height: 32,
+    })
+    .unwrap();
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    let status =
+        driver.settle(|status| status.state == ClipState::Playing && status.frame.is_some());
+    assert_eq!(status.frame_count, 30);
+    // Half a second later: a green frame.
+    for _ in 0..30 {
+        driver.tick();
+    }
+    let status =
+        driver.settle(|status| status.frame.is_some_and(|frame| (14..=16).contains(&frame)));
+    let program = driver.state.program();
+    let pixel = read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[32 * 16 + 32];
+    assert!(
+        pixel[1] > pixel[0] && pixel[1] > pixel[2],
+        "frame {:?}: {pixel:?}",
+        status.frame
+    );
 }
