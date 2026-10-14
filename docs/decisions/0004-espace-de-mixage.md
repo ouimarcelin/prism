@@ -1,7 +1,7 @@
 # 0004 – Espace de mixage et pipeline de composition
 
 - Date : 2026-10-13
-- Statut : Acceptée
+- Statut : Acceptée ; la passe par couche est remplacée par l'ADR 0013 (quatre couches par passe)
 
 ## Contexte
 

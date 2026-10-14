@@ -31,6 +31,16 @@ Fermez les autres applications pendant la mesure et lancez-la depuis le Terminal
 
 `engine-run` mesure le moteur seul, sans fenêtre. Le verdict « FLUIDE » exige 59 images/s ou plus à chaque seconde, aucune image en retard, aucune image sautée et aucune saccade (écart de plus de 25 ms entre deux images). Chaque incident s'affiche au moment où il arrive et figure dans le rapport.
 
+## Temps GPU d'une image
+
+`gpu-bench` mesure, sans fenêtre, le travail que le moteur demande au GPU pour une image : envoi des trames HAP 1080p de bruit, conversion en textures de couche, mixage dans l'image programme. Les images partent deux par deux : une fois le GPU limitant, le temps par image est le sien.
+
+```bash
+cargo run --release -p prism-render --example gpu-bench -- --layers 4 --frames 600
+```
+
+Plus ce temps est court, moins un autre programme qui occupe le GPU retarde les images de Prism.
+
 ## Ce que les chiffres veulent dire
 
 - **Images par seconde** : cadence du thread de rendu, sur la dernière seconde.
@@ -51,3 +61,4 @@ Fermez les autres applications pendant la mesure et lancez-la depuis le Terminal
 | [2026-10-14](2026-10-14-phase-1.md) | Apple M1, 8 Go, lancé depuis Claude Code (`nice 5`), machine qui pagine | 4 × bruit HAP et HAP Q 1080p60, 30 min, avant l'ADR 0012 | PAS FLUIDE : 5 saccades, pire écart 139 ms |
 | [2026-10-14](2026-10-14-phase-1.md) | Idem | Idem, thread temps réel et tampons d'envoi réutilisés | FLUIDE côté processeur : 0 saccade, pire écart 16,8 ms, travail moyen 2,5 ms ; retards du GPU non mesurés |
 | [2026-10-14](2026-10-14-phase-1.md) | Idem | Idem, code final (au plus 3 images en attente sur le GPU) | PAS FLUIDE : 2 images sautées sur un blocage du GPU de 80 ms ; processeur à l'heure, mémoire stable (11 tampons GPU) |
+| [2026-10-14](../decisions/0013-quatre-couches-par-passe.md) | Apple M1, 8 Go | `gpu-bench`, 4 et 8 couches HAP 1080p de bruit, avant et après l'ADR 0013 | 4 couches : 3,66 → 2,19 ms de GPU par image ; 8 couches : 6,91 → 5,62 ms ; `engine-run` 60 s : FLUIDE, 2,05 ms de travail par image |
