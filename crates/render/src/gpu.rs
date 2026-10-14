@@ -115,13 +115,34 @@ pub fn solid_color_texture(
     queue: &wgpu::Queue,
     color: [f32; 4],
 ) -> wgpu::Texture {
+    pixels_texture(device, queue, 1, 1, &[color])
+}
+
+/// Creates a [`WORKING_FORMAT`] texture from premultiplied pixels, row by
+/// row from the top, usable as a layer or as the source of an effect.
+///
+/// # Panics
+///
+/// When `pixels` does not hold `width × height` pixels.
+pub fn pixels_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    width: u32,
+    height: u32,
+    pixels: &[[f32; 4]],
+) -> wgpu::Texture {
+    assert_eq!(
+        pixels.len(),
+        width as usize * height as usize,
+        "pixel count does not match the size"
+    );
     let size = wgpu::Extent3d {
-        width: 1,
-        height: 1,
+        width,
+        height,
         depth_or_array_layers: 1,
     };
     let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some("solid color"),
+        label: Some("pixels"),
         size,
         mip_level_count: 1,
         sample_count: 1,
@@ -130,17 +151,18 @@ pub fn solid_color_texture(
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let texel: Vec<u8> = color
+    let texels: Vec<u8> = pixels
         .iter()
+        .flatten()
         .flat_map(|&channel| half::f16::from_f32(channel).to_le_bytes())
         .collect();
     queue.write_texture(
         texture.as_image_copy(),
-        &texel,
+        &texels,
         wgpu::TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(WORKING_FORMAT_BYTES),
-            rows_per_image: Some(1),
+            bytes_per_row: Some(WORKING_FORMAT_BYTES * width),
+            rows_per_image: Some(height),
         },
         size,
     );

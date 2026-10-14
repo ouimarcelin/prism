@@ -2038,10 +2038,20 @@ dependencies = [
  "png",
  "prism-clock",
  "prism-core",
+ "prism-fx",
  "prism-media",
  "prism-render",
  "tempfile",
  "wgpu",
+]
+
+[[package]]
+name = "prism-fx"
+version = "0.0.0"
+dependencies = [
+ "bytemuck",
+ "prism-core",
+ "prism-render",
 ]
 
 [[package]]

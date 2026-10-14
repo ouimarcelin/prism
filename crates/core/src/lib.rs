@@ -14,6 +14,7 @@
 mod clip;
 mod composition;
 mod crossfader;
+mod effect;
 mod ids;
 mod layer;
 mod project;
@@ -28,6 +29,7 @@ pub use composition::{
     ModelError, Resolution,
 };
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
+pub use effect::Effect;
 pub use ids::{ColumnId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};

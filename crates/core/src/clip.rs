@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::Effect;
+
 /// Number of cue points available on each clip.
 pub const CUE_POINT_COUNT: usize = 8;
 
@@ -128,6 +130,9 @@ pub struct Clip {
     /// Playback settings.
     #[serde(default)]
     pub playback: Playback,
+    /// Effects applied to the clip, first to last.
+    #[serde(default)]
+    pub effects: Vec<Effect>,
 }
 
 impl Clip {
@@ -142,6 +147,7 @@ impl Clip {
             name,
             source: MediaSource::File { path },
             playback: Playback::default(),
+            effects: Vec::new(),
         }
     }
 
@@ -156,6 +162,7 @@ impl Clip {
             name,
             source: MediaSource::ImageSequence { path, frame_rate },
             playback: Playback::default(),
+            effects: Vec::new(),
         }
     }
 }

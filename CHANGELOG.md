@@ -24,6 +24,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Moteur d'effets (crate `prism-fx`) : chaînes d'effets GPU sur le clip, la couche et la composition, enregistrées dans le projet ; six premiers effets : couleur, inversion, transformation, miroir, kaléidoscope, flou (ADR 0015). Réglage dans l'interface au ticket suivant.
 - Tempo de la composition (20 à 999 BPM, enregistré dans le projet), tap tempo (bouton et touche T), resync (bouton et touche R), voyants des temps de la mesure ; horloge de tempo sans dérive dans le moteur (crate `prism-clock`) ; fondu automatique du crossfader en temps, au tempo (ADR 0014).
 - Outil `gpu-bench` : temps GPU d'une image du moteur, sans fenêtre.
 - Benchmark et test d'endurance de la phase 1 (`docs/benchmarks/`) : `engine-run` tient la durée voulue, note chaque incident (saccade, images en retard) avec la pagination de la machine, relève l'empreinte mémoire et le nombre de tampons GPU, et écrit un rapport Markdown ; état du moteur enrichi (pire écart entre deux images, saccades, durée de chaque étape d'une image) ; clips de bruit HAP et HAP Q, le contenu le plus lourd, dans `make-test-clip`.
