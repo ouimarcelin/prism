@@ -45,3 +45,4 @@ Ce que cela implique pour la suite.
 | [0011](0011-finitions-phase-1.md) | Finitions de la phase 1 | Acceptée |
 | [0012](0012-cadence-du-thread-de-rendu.md) | Cadence du thread de rendu : temps réel et tampons d'envoi réutilisés | Acceptée |
 | [0013](0013-quatre-couches-par-passe.md) | Quatre couches par passe de mixage | Acceptée |
+| [0014](0014-tempo-et-horloge.md) | Tempo et horloge musicale | Acceptée |
