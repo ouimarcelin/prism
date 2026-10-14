@@ -170,7 +170,133 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/blur.wgsl"),
         passes: &["fs_horizontal", "fs_vertical"],
     },
+    EffectInfo {
+        kind: "pixelate",
+        label: "Pixellisation",
+        params: &[ParamInfo::range("size", "Taille", 1.0, 128.0, 16.0)],
+        source: include_str!("shaders/pixelate.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "posterize",
+        label: "Postérisation",
+        params: &[ParamInfo::range("levels", "Niveaux", 2.0, 32.0, 6.0)],
+        source: include_str!("shaders/posterize.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "threshold",
+        label: "Seuil",
+        params: &[
+            ParamInfo::range("level", "Niveau", 0.0, 1.0, 0.5),
+            ParamInfo::range("softness", "Douceur", 0.0, 0.5, 0.02),
+        ],
+        source: include_str!("shaders/threshold.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "edges",
+        label: "Contours",
+        params: &[
+            ParamInfo::range("strength", "Force", 0.0, 4.0, 1.0),
+            ParamInfo::range("mix", "Mélange", 0.0, 1.0, 1.0),
+        ],
+        source: include_str!("shaders/edges.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "rgb_split",
+        label: "Décalage RVB",
+        params: &[
+            ParamInfo::range("distance", "Distance", 0.0, 64.0, 8.0),
+            ParamInfo::range("angle", "Angle", -180.0, 180.0, 0.0),
+        ],
+        source: include_str!("shaders/rgb_split.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "glitch",
+        label: "Glitch",
+        params: &[
+            ParamInfo::range("amount", "Quantité", 0.0, 1.0, 0.5),
+            ParamInfo::range("bands", "Bandes", 1.0, 64.0, 16.0),
+            ParamInfo::range("rate", "Changements par temps", 0.25, 16.0, 2.0),
+        ],
+        source: include_str!("shaders/glitch.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "wave",
+        label: "Vague",
+        params: &[
+            ParamInfo::range("amplitude", "Amplitude", 0.0, 0.2, 0.03),
+            ParamInfo::range("waves", "Ondulations", 0.5, 20.0, 4.0),
+            ParamInfo::range("speed", "Vitesse (par temps)", -4.0, 4.0, 0.5),
+            ParamInfo::choice("direction", "Sens", WAVE_CHOICES),
+        ],
+        source: include_str!("shaders/wave.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "swirl",
+        label: "Tourbillon",
+        params: &[
+            ParamInfo::range("angle", "Angle", -720.0, 720.0, 180.0),
+            ParamInfo::range("radius", "Rayon", 0.05, 1.0, 0.5),
+        ],
+        source: include_str!("shaders/swirl.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "tile",
+        label: "Mosaïque",
+        params: &[
+            ParamInfo::range("columns", "Colonnes", 1.0, 8.0, 2.0),
+            ParamInfo::range("rows", "Lignes", 1.0, 8.0, 2.0),
+            ParamInfo::choice("mirror", "Reflet", TILE_CHOICES),
+        ],
+        source: include_str!("shaders/tile.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "vignette",
+        label: "Vignette",
+        params: &[
+            ParamInfo::range("amount", "Quantité", 0.0, 1.0, 0.5),
+            ParamInfo::range("size", "Taille", 0.0, 1.0, 0.5),
+        ],
+        source: include_str!("shaders/vignette.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "strobe",
+        label: "Stroboscope",
+        params: &[
+            ParamInfo::range("rate", "Éclairs par temps", 0.25, 16.0, 2.0),
+            ParamInfo::range("duty", "Part d'image", 0.0, 1.0, 0.5),
+            ParamInfo::choice("between", "Entre les éclairs", STROBE_CHOICES),
+        ],
+        source: include_str!("shaders/strobe.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "colorize",
+        label: "Colorisation",
+        params: &[
+            ParamInfo::range("hue", "Teinte", 0.0, 360.0, 200.0),
+            ParamInfo::range("saturation", "Saturation", 0.0, 1.0, 0.8),
+            ParamInfo::range("amount", "Quantité", 0.0, 1.0, 1.0),
+        ],
+        source: include_str!("shaders/colorize.wgsl"),
+        passes: &["fs_main"],
+    },
 ];
+
+const WAVE_CHOICES: &[&str] = &["Horizontale", "Verticale"];
+
+const TILE_CHOICES: &[&str] = &["Non", "Une tuile sur deux"];
+
+const STROBE_CHOICES: &[&str] = &["Noir", "Blanc", "Transparent"];
 
 /// The effect of a kind, if this build knows it.
 pub fn find(kind: &str) -> Option<&'static EffectInfo> {

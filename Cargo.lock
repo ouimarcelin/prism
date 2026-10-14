@@ -2051,6 +2051,7 @@ name = "prism-fx"
 version = "0.0.0"
 dependencies = [
  "bytemuck",
+ "png",
  "prism-core",
  "prism-render",
 ]

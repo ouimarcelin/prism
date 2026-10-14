@@ -35,6 +35,20 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
 
 const PI: f32 = 3.14159265358979;
 
+// Weights of red, green and blue in the brightness of a color (BT.709).
+const LUMA: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
+
+// A pseudo-random value in 0..1, the same for the same input.
+fn hash(value: f32) -> f32 {
+    return fract(sin(value * 12.9898) * 43758.5453);
+}
+
+fn hsv_to_rgb(hsv: vec3<f32>) -> vec3<f32> {
+    let k = vec3<f32>(1.0, 2.0 / 3.0, 1.0 / 3.0);
+    let p = abs(fract(vec3<f32>(hsv.x) + k) * 6.0 - vec3<f32>(3.0));
+    return hsv.z * mix(vec3<f32>(1.0), clamp(p - vec3<f32>(1.0), vec3<f32>(0.0), vec3<f32>(1.0)), hsv.y);
+}
+
 fn param(index: u32) -> f32 {
     return params.values[index / 4u][index % 4u];
 }

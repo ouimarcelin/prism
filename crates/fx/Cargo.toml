@@ -15,3 +15,6 @@ prism-render = { path = "../render" }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+png = "0.18.1"
