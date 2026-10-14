@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Clip, ColumnId, CrossfaderSide, LayerId, Unit};
+use crate::{Clip, ColumnId, CrossfaderSide, Effect, LayerId, Unit};
 
 /// How a layer is combined with the result of the layers below it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -72,6 +72,9 @@ pub struct Layer {
     /// Duration of the fade when the layer switches clips; `0` is a cut.
     #[serde(default)]
     pub transition_ms: u32,
+    /// Effects applied to every clip of the layer, after the clip's own.
+    #[serde(default)]
+    pub effects: Vec<Effect>,
     /// One entry per column, in column order.
     pub(crate) clips: Vec<Option<Clip>>,
     /// Column of the clip currently playing. Runtime state, not saved.
@@ -93,6 +96,7 @@ impl Layer {
             solo: false,
             crossfader_side: None,
             transition_ms: 0,
+            effects: Vec::new(),
             clips: vec![None; column_count],
             active: None,
             trigger_count: 0,
@@ -131,6 +135,7 @@ impl Layer {
             && self.solo == other.solo
             && self.crossfader_side == other.crossfader_side
             && self.transition_ms == other.transition_ms
+            && self.effects == other.effects
             && self.clips == other.clips
     }
 }

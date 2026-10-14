@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Bpm, Clip, ColumnId, Crossfader, Layer, LayerId, Slot};
+use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Slot};
 
 /// Largest width or height accepted for a composition, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -124,6 +124,8 @@ pub struct Composition {
     pub crossfader: Crossfader,
     /// Tempo, for everything that follows the beat.
     pub tempo: Bpm,
+    /// Effects applied to the mixed image, first to last.
+    pub effects: Vec<Effect>,
     next_id: u32,
 }
 
@@ -139,6 +141,8 @@ struct CompositionRepr {
     crossfader: Crossfader,
     #[serde(default)]
     tempo: Bpm,
+    #[serde(default)]
+    effects: Vec<Effect>,
     #[serde(default)]
     next_id: u32,
 }
@@ -194,6 +198,7 @@ impl TryFrom<CompositionRepr> for Composition {
             layers: repr.layers,
             crossfader: repr.crossfader,
             tempo: repr.tempo,
+            effects: repr.effects,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -229,6 +234,7 @@ impl Composition {
             layers: Vec::new(),
             crossfader: Crossfader::default(),
             tempo: Bpm::DEFAULT,
+            effects: Vec::new(),
             next_id: 0,
         }
     }
@@ -512,6 +518,7 @@ impl Composition {
             && self.columns == other.columns
             && self.crossfader == other.crossfader
             && self.tempo == other.tempo
+            && self.effects == other.effects
             && self.layers.len() == other.layers.len()
             && self
                 .layers
