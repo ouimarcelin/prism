@@ -1,10 +1,11 @@
-//! Right panel: program preview, then the properties of the selected layer
-//! and clip.
+//! Right panel: program preview, the effects of the composition, then the
+//! properties of the selected layer and clip.
 
 use egui::{RichText, Vec2};
 use prism_core::{CUE_POINT_COUNT, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit};
 use prism_engine::{Command, LayerStatus};
 
+use crate::effects::effect_section;
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
 
@@ -14,6 +15,12 @@ impl ControlPanel {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 preview(ui, frame);
+                effect_section(
+                    ui,
+                    "Effets de la composition",
+                    "composition",
+                    &mut self.document.composition_mut().effects,
+                );
                 ui.separator();
                 let Some(slot) = self.selected else {
                     ui.label(RichText::new("Sélectionnez une case de la grille.").weak());
@@ -84,6 +91,12 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
+        effect_section(
+            ui,
+            "Effets de la couche",
+            ("layer", slot.layer),
+            &mut layer.effects,
+        );
     }
 
     fn clip_properties(&mut self, ui: &mut egui::Ui, slot: Slot, status: Option<&LayerStatus>) {
@@ -207,6 +220,7 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
+        effect_section(ui, "Effets du clip", ("clip", slot), &mut clip.effects);
         if relocate {
             self.relocate_dialog(slot);
         }

@@ -13,6 +13,7 @@ egui = "0.36.2"
 prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
 prism-engine = { path = "../engine" }
+prism-fx = { path = "../fx" }
 rfd = "0.17.2"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

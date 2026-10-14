@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use egui::{Event, Key, Modifiers, RawInput, Rect, pos2, vec2};
-use prism_core::{Clip, Composition, Slot};
+use prism_core::{Clip, Composition, Effect, Slot};
 use prism_engine::{ClipState, Command, EngineStatus, LayerStatus};
 use prism_ui::{Action, ControlPanel, Document, FrameInfo, Screen, Shortcut};
 
@@ -104,6 +104,31 @@ fn draws_every_part_without_panicking() {
         frame(&ctx, &mut panel, &status, Vec::new());
     }
     assert!(panel.title().starts_with("Prism – Sans titre"));
+}
+
+#[test]
+fn draws_effect_chains_without_changing_them() {
+    let (mut document, slot) = sample_document();
+    let composition = document.composition_mut();
+    let mut blur = Effect::new("blur");
+    blur.set_param("radius", 12.0);
+    composition.clip_mut(slot).unwrap().effects = vec![blur, Effect::new("mirror")];
+    let mut bypassed = Effect::new("color");
+    bypassed.bypass = true;
+    composition.layer_mut(slot.layer).unwrap().effects = vec![bypassed];
+    composition.effects = vec![Effect::new("from a later version")];
+    let saved = composition.clone();
+    let document = Document::new(saved.clone());
+
+    let mut panel = ControlPanel::new(document, Vec::new());
+    let ctx = egui::Context::default();
+    let status = playing_status(slot);
+    for _ in 0..3 {
+        frame(&ctx, &mut panel, &status, Vec::new());
+    }
+    // Showing settings does not write their defaults into the project.
+    assert_eq!(panel.document().composition(), &saved);
+    assert!(!panel.document().is_dirty());
 }
 
 #[test]

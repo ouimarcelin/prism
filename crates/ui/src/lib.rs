@@ -1,7 +1,8 @@
 //! Prism control interface, drawn with egui.
 //!
 //! The [`ControlPanel`] owns the [`Document`] being edited: the clip grid
-//! (layers × columns), layer and clip properties, the crossfader, project
+//! (layers × columns), layer and clip properties, effects, the tempo, the
+//! crossfader, project
 //! files and media import. Each frame it returns [`Action`]s the application
 //! carries out: commands for the engine, opening or closing the output,
 //! quitting. The application sends the composition to the engine whenever
@@ -10,6 +11,7 @@
 mod crossfade;
 mod dialogs;
 mod document;
+mod effects;
 mod grid;
 mod inspector;
 mod labels;
