@@ -525,11 +525,7 @@ impl ControlPanel {
             }
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let late: u64 = status.layers.iter().map(|layer| layer.late_frames).sum();
-                ui.label(format!(
-                    "{:.1} i/s · {:.1} ms par image · images en retard : {late}",
-                    status.fps, status.frame_time_ms
-                ));
+                ui.label(status_line(status)).on_hover_text(STATUS_HELP);
             });
         });
         ui.add_space(4.0);
@@ -741,4 +737,50 @@ fn digit(key: Key) -> Option<usize> {
         Key::Num9,
     ];
     digits.iter().position(|candidate| *candidate == key)
+}
+
+/// Explanation of the counters of the status line.
+const STATUS_HELP: &str = "Saccades : images montrées plus d'une image et demie après la précédente. \
+Sautées : le GPU était encore occupé par les images d'avant. \
+En retard : l'image voulue n'était pas décodée à temps. \
+Compté depuis le lancement.";
+
+/// Frame rate, work per frame and the problems counted since the start.
+fn status_line(status: &EngineStatus) -> String {
+    let late: u64 = status.layers.iter().map(|layer| layer.late_frames).sum();
+    format!(
+        "{:.1} i/s · {:.1} ms par image · saccades : {} · sautées : {} · en retard : {late}",
+        status.fps, status.frame_time_ms, status.hitches, status.gpu_skips
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use prism_engine::LayerStatus;
+
+    #[test]
+    fn status_line_counts_every_kind_of_problem() {
+        let status = EngineStatus {
+            fps: 59.94,
+            frame_time_ms: 2.25,
+            hitches: 3,
+            gpu_skips: 2,
+            layers: vec![
+                LayerStatus {
+                    late_frames: 1,
+                    ..LayerStatus::default()
+                },
+                LayerStatus {
+                    late_frames: 4,
+                    ..LayerStatus::default()
+                },
+            ],
+            ..EngineStatus::default()
+        };
+        assert_eq!(
+            status_line(&status),
+            "59.9 i/s · 2.2 ms par image · saccades : 3 · sautées : 2 · en retard : 5"
+        );
+    }
 }

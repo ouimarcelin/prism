@@ -44,3 +44,4 @@ Ce que cela implique pour la suite.
 | [0010](0010-h264-prores-avfoundation.md) | H.264 et ProRes par AVFoundation | Acceptée |
 | [0011](0011-finitions-phase-1.md) | Finitions de la phase 1 | Acceptée |
 | [0012](0012-cadence-du-thread-de-rendu.md) | Cadence du thread de rendu : temps réel et tampons d'envoi réutilisés | Acceptée |
+| [0013](0013-quatre-couches-par-passe.md) | Quatre couches par passe de mixage | Acceptée |

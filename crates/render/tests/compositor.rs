@@ -163,7 +163,7 @@ fn resize_changes_the_output_size() {
         width: 64,
         height: 36,
     };
-    compositor.resize(&gpu.device, bigger);
+    compositor.resize(bigger);
     let output = compositor.render(&gpu.device, &gpu.queue, &[]);
     assert_eq!((output.width(), output.height()), (64, 36));
     assert_eq!(compositor.resolution(), bigger);
@@ -279,5 +279,71 @@ fn layer_settings_follow_from_frame_to_frame() {
                 "{settings:?}: expected {expected:?}, got {pixel:?}"
             );
         }
+    }
+}
+
+#[test]
+fn layers_beyond_one_pass_match_the_reference() {
+    let Some(gpu) = gpu() else { return };
+    // Six layers: the fifth starts a second pass, with a transition.
+    let colors: [Rgba; 6] = [
+        BASE,
+        [0.9, 0.2, 0.1, 1.0],
+        [0.2, 0.7, 0.4, 0.6],
+        [0.3, 0.3, 0.8, 1.0],
+        [0.6, 0.5, 0.1, 0.8],
+        [0.1, 0.9, 0.9, 1.0],
+    ];
+    let modes = [
+        BlendMode::Normal,
+        BlendMode::Screen,
+        BlendMode::Overlay,
+        BlendMode::Difference,
+        BlendMode::Multiply,
+        BlendMode::Add,
+    ];
+    let opacities = [1.0, 0.7, 0.9, 0.5, 0.8, 0.3];
+    let previous_color = [1.0, 1.0, 0.0, 1.0];
+    let progress = 0.4;
+    let layers: Vec<_> = colors
+        .iter()
+        .zip(modes)
+        .zip(opacities)
+        .map(|((color, mode), opacity)| layer(&gpu, *color, opacity, mode))
+        .collect();
+    let previous = layer(&gpu, previous_color, 1.0, BlendMode::Normal);
+    let inputs: Vec<_> = layers
+        .iter()
+        .enumerate()
+        .map(|(index, layer)| LayerInput {
+            transition: (index == 4).then_some(Transition {
+                previous: &previous.view,
+                progress,
+            }),
+            ..LayerInput::new(&layer.view, layer.opacity, layer.blend_mode)
+        })
+        .collect();
+    let mut compositor = Compositor::new(&gpu.device, SIZE);
+    let output = compositor.render(&gpu.device, &gpu.queue, &inputs);
+    let pixel = read_texture(&gpu.device, &gpu.queue, output).unwrap()[0];
+
+    let spec: Vec<_> = colors
+        .iter()
+        .enumerate()
+        .map(|(index, color)| {
+            let color = if index == 4 {
+                reference::transition(previous_color, *color, progress)
+            } else {
+                *color
+            };
+            (color, opacities[index], modes[index])
+        })
+        .collect();
+    let expected = reference(&spec);
+    for channel in 0..4 {
+        assert!(
+            (pixel[channel] - expected[channel]).abs() < TOLERANCE,
+            "expected {expected:?}, got {pixel:?}"
+        );
     }
 }

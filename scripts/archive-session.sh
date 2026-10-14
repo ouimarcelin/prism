@@ -22,6 +22,11 @@ fi
 
 mkdir -p "$archive_dir"
 name="$(date +%Y-%m-%d)-$(basename "$transcript")"
+# A session archived again the same day keeps its earlier copies, which are
+# read-only: the new copy gets the time in its name.
+if [ -e "$archive_dir/$name" ]; then
+  name="$(date +%Y-%m-%d-%H%M%S)-$(basename "$transcript")"
+fi
 cp "$transcript" "$archive_dir/$name"
 chmod 444 "$archive_dir/$name"
 hash=$(shasum -a 256 "$archive_dir/$name" | cut -d' ' -f1)
