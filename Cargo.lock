@@ -2036,6 +2036,7 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "png",
+ "prism-clock",
  "prism-core",
  "prism-media",
  "prism-render",
