@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Le thread de décodage ne décode plus deux fois une image déjà livrée.
 - Noms par défaut des couches et des colonnes en français.
 - `cargo-deny` ne vérifie que les plateformes livrées (macOS, Windows).
 - wgpu 30 au lieu de 26, Rust 1.95 minimum, en vue de l'interface egui 0.36 (ADR 0005).
@@ -14,6 +15,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Lecture H.264, ProRes et des autres codecs de macOS par AVFoundation, décodage matériel, conversion YUV sur le GPU ; 4 couches H.264 1080p60 tenues sur Apple M1 (ADR 0010). Outil `decode-speed`.
 - Images fixes (PNG, JPEG) et séquences PNG (dossier joué dans l'ordre des numéros, fréquence réglable) : import par dialogue, glisser-déposer ou ligne de commande ; tous les formats passent par une même interface de source d'images (ADR 0009).
 - Six modes de fusion : éclaircir, assombrir, différence, soustraction, incrustation, exclusion.
 - Interface de contrôle egui (crate `prism-ui`) : grille de clips, déclenchement à la souris et au clavier, réglages des couches, crossfader, propriétés du clip (sens, vitesse, fin, entrée et sortie, scratch, points de repère), aperçu du programme, réglages de la composition, choix de l'écran de sortie, fichiers de projet, import par dialogue ou glisser-déposer, médias manquants (ADR 0008).

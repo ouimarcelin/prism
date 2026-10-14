@@ -44,7 +44,9 @@ scripts/check-clean-room.sh
 cargo run --release -p prism-app -- media/a.mov media/b.mov media/c.mov media/d.mov
 ```
 
-Les vidéos sont facultatives : elles vont dans la première colonne, une par couche, et la première colonne démarre. Sinon, glissez des fichiers HAP sur la fenêtre ou utilisez Fichier > Importer des vidéos.
+Les médias sont facultatifs : ils vont dans la première colonne, un par couche, et la première colonne démarre. Sinon, glissez-les sur la fenêtre ou utilisez Fichier > Importer des médias.
+
+Formats : HAP, HAP Alpha, HAP Q et HAP Q Alpha (recommandés : lecture arrière et scratch instantanés), H.264, ProRes et les autres codecs de macOS, images PNG et JPEG, dossiers d'images PNG joués en séquence.
 
 Dans la fenêtre de contrôle :
 
