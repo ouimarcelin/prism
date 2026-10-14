@@ -17,7 +17,9 @@ pub mod reference;
 mod video;
 
 pub use compositor::{Compositor, LayerInput, Transition};
-pub use gpu::{Gpu, GpuError, ReadbackError, WORKING_FORMAT, read_texture, solid_color_texture};
+pub use gpu::{
+    Gpu, GpuError, ReadbackError, WORKING_FORMAT, pixels_texture, read_texture, solid_color_texture,
+};
 pub use plan::{LayerPlan, plan_layers};
 pub use video::{FrameUploader, UploadError, VideoTexture};
 pub use wgpu;
