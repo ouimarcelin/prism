@@ -2017,6 +2017,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-clock"
+version = "0.0.0"
+
+[[package]]
 name = "prism-core"
 version = "0.0.0"
 dependencies = [
