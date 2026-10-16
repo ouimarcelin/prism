@@ -8,7 +8,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use prism_clock::BeatClock;
-use prism_core::{Composition, Effect, LayerId, Resolution, Slot};
+use prism_core::{Composition, Effect, LayerId, Resolution, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, Transition, WORKING_FORMAT, solid_color_texture,
@@ -550,6 +550,7 @@ impl EngineState {
         let time = FrameTime {
             seconds: now.saturating_duration_since(self.started).as_secs_f64(),
             beat: self.beat,
+            ..FrameTime::default()
         };
         for runtime in &mut self.layers {
             let layer_effects = self
@@ -559,6 +560,11 @@ impl EngineState {
             for stream in runtime.streams_mut() {
                 let clip = self.composition.clip(stream.slot());
                 let clip_effects = clip.map_or(&[][..], |clip| &clip.effects[..]);
+                // Settings follow the dashboard of the clip.
+                let mut time = time;
+                if let Some(clip) = clip {
+                    time.dashboard = clip.dashboard.map(Unit::get);
+                }
                 let generator = clip.and_then(|clip| clip.source.generator());
                 match generator {
                     // A generated clip is drawn at the composition size.
@@ -600,7 +606,10 @@ impl EngineState {
 
         let mut inputs = Vec::with_capacity(self.layers.len());
         for runtime in &self.layers {
-            let Some(opacity) = self.composition.effective_opacity(runtime.id) else {
+            let Some(opacity) =
+                self.composition
+                    .effective_opacity_at(runtime.id, self.beat, time.seconds)
+            else {
                 continue;
             };
             let Some(layer) = self.composition.layer(runtime.id) else {

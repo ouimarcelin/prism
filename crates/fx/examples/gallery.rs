@@ -98,6 +98,7 @@ fn main() -> ExitCode {
         let time = FrameTime {
             seconds: 1.0,
             beat: 0.3,
+            ..FrameTime::default()
         };
         let written = chain.apply_into(
             &renderer,
