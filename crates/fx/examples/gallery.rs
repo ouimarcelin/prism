@@ -127,9 +127,11 @@ fn main() -> ExitCode {
         for (index, pixel) in pixels.iter().enumerate() {
             let (x, y) = (index as u32 % WIDTH + left, index as u32 / WIDTH + top);
             let at = ((y * image_width + x) * 4) as usize;
-            for channel in 0..4 {
+            // Premultiplied colors over black.
+            for channel in 0..3 {
                 image[at + channel] = (pixel[channel].clamp(0.0, 1.0) * 255.0).round() as u8;
             }
+            image[at + 3] = 255;
         }
     }
 

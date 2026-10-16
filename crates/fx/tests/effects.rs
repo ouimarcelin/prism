@@ -472,3 +472,54 @@ fn generators_draw_without_input() {
     assert!(lines.iter().any(|pixel| pixel[0] > 0.9));
     assert!(lines.iter().any(|pixel| pixel[0] < 0.1));
 }
+
+#[test]
+fn text_is_drawn_where_and_how_it_is_set() {
+    let Some(gpu) = gpu() else { return };
+    let (width, height) = (256, 128);
+    let blank = vec![[0.0; 4]; width * height];
+    let coverage = |pixels: &[[f32; 4]], columns: std::ops::Range<usize>| -> f32 {
+        pixels
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| columns.contains(&(index % width)))
+            .map(|(_, pixel)| pixel[3])
+            .sum()
+    };
+
+    // Red text in the middle: some pixels red and opaque, none elsewhere
+    // than red, the corners clear.
+    let mut text = generator("text", &[("size", 0.3), ("saturation", 1.0)]);
+    text.text = "Prism".into();
+    let pixels = run(&gpu, &[text.clone()], width as u32, height as u32, &blank).unwrap();
+    assert!(
+        pixels
+            .iter()
+            .any(|pixel| pixel[0] > 0.95 && pixel[3] > 0.95)
+    );
+    assert!(
+        pixels
+            .iter()
+            .all(|pixel| pixel[1] < 0.01 && pixel[0] <= pixel[3] + 0.01)
+    );
+    assert_eq!(pixels[0][3], 0.0);
+    assert_eq!(pixels[width * height - 1][3], 0.0);
+    let centered = coverage(&pixels, 0..width / 2) / coverage(&pixels, width / 2..width);
+    assert!((0.6..1.6).contains(&centered), "{centered}");
+
+    // Moved to the right half, then larger.
+    let mut right = text.clone();
+    right.set_param("x", 0.5);
+    let moved = run(&gpu, &[right], width as u32, height as u32, &blank).unwrap();
+    assert!(coverage(&moved, 0..width / 2) < coverage(&moved, width / 2..width) / 10.0);
+    let mut larger = text.clone();
+    larger.set_param("size", 0.6);
+    let large = run(&gpu, &[larger], width as u32, height as u32, &blank).unwrap();
+    let ratio = coverage(&large, 0..width) / coverage(&pixels, 0..width);
+    assert!((3.0..5.0).contains(&ratio), "{ratio}");
+
+    // No text, nothing drawn.
+    text.text.clear();
+    let empty = run(&gpu, &[text], width as u32, height as u32, &blank).unwrap();
+    assert!(empty.iter().all(|pixel| pixel[3] == 0.0));
+}

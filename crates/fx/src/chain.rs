@@ -6,6 +6,7 @@ use prism_core::{DASHBOARD_SIZE, Effect, Moment};
 use prism_render::{WORKING_FORMAT, wgpu};
 
 use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, find_any};
+use crate::text::{Align, TEXT_KIND, TextCache};
 
 const PRELUDE: &str = include_str!("shaders/prelude.wgsl");
 
@@ -17,6 +18,10 @@ struct PassParams {
     size: [f32; 2],
     time: f32,
     beat: f32,
+    /// Line height of the text mask the pass reads, in pixels; `0.0` for
+    /// passes without one.
+    mask_line: f32,
+    _padding: [f32; 3],
 }
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<PassParams>() as u64;
@@ -205,13 +210,17 @@ pub struct EffectChain {
     params_capacity: usize,
     written: Vec<PassParams>,
     output: Option<usize>,
+    text: TextCache,
 }
 
 /// One pass to run.
-struct Pass {
+struct Pass<'a> {
     info: &'static EffectInfo,
     index: usize,
     values: [f32; MAX_PARAMS],
+    effect: &'a Effect,
+    /// For the text generator: its mask and line height in pixels.
+    mask: Option<(wgpu::TextureView, f32)>,
 }
 
 impl EffectChain {
@@ -296,18 +305,45 @@ impl EffectChain {
             .filter(|effect| !effect.bypass)
             .filter_map(|effect| {
                 let info = find_any(&effect.kind)?;
-                Some((info, info.values_at(effect, time)))
+                Some((info, info.values_at(effect, time), *effect))
             })
-            .flat_map(|(info, values)| {
+            .flat_map(|(info, values, effect)| {
                 (0..info.passes.len()).map(move |index| Pass {
                     info,
                     index,
                     values,
+                    effect,
+                    mask: None,
                 })
             })
             .collect();
         if passes.is_empty() || size.0 == 0 || size.1 == 0 {
             return false;
+        }
+        // The text generator reads its text, rasterized, instead of the
+        // image so far.
+        let mut passes = passes;
+        for pass in &mut passes {
+            if pass.info.kind == TEXT_KIND {
+                let [line, .., font, align] = pass.values;
+                let align = match align as u32 {
+                    0 => Align::Center,
+                    1 => Align::Left,
+                    _ => Align::Right,
+                };
+                pass.mask = self
+                    .text
+                    .view(
+                        device,
+                        queue,
+                        pass.effect,
+                        line,
+                        size.1,
+                        font as usize,
+                        align,
+                    )
+                    .map(|(view, line)| (view.clone(), line as f32));
+            }
         }
         self.write_params(renderer, device, queue, &passes, size, time);
         // Two images in turn hold the result between passes.
@@ -331,9 +367,10 @@ impl EffectChain {
             let Some(pipeline) = renderer.pipeline(pass.info, pass.index) else {
                 continue;
             };
-            let source = match index {
-                0 => input,
-                _ => &self.targets[(index - 1) % 2].view,
+            let source = match (&pass.mask, index) {
+                (Some((mask, _)), _) => mask,
+                (None, 0) => input,
+                (None, _) => &self.targets[(index - 1) % 2].view,
             };
             let target = match destination {
                 Some(destination) if index == last => destination,
@@ -418,6 +455,8 @@ impl EffectChain {
                 size: [size.0 as f32, size.1 as f32],
                 time: time.seconds as f32,
                 beat: time.beat as f32,
+                mask_line: pass.mask.as_ref().map_or(0.0, |(_, line)| *line),
+                _padding: [0.0; 3],
             };
             if self.written.get(index) == Some(&params) {
                 continue;
