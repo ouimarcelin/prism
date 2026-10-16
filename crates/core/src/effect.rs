@@ -24,6 +24,11 @@ pub struct Effect {
     /// value while they are there.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub animations: BTreeMap<String, Animation>,
+    /// Parameters that follow a slider of the clip's dashboard, by name:
+    /// the index of the slider. The slider runs the whole range of the
+    /// parameter. An animation goes first.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub links: BTreeMap<String, usize>,
 }
 
 impl Effect {
@@ -34,6 +39,7 @@ impl Effect {
             params: BTreeMap::new(),
             bypass: false,
             animations: BTreeMap::new(),
+            links: BTreeMap::new(),
         }
     }
 

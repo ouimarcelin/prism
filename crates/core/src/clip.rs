@@ -4,13 +4,16 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::Effect;
+use crate::{Effect, Unit};
 
 /// Number of cue points available on each clip.
 pub const CUE_POINT_COUNT: usize = 8;
 
 /// Highest playback speed multiplier.
 pub const MAX_SPEED: f32 = 10.0;
+
+/// Sliders on the dashboard of a clip.
+pub const DASHBOARD_SIZE: usize = 8;
 
 /// Frame rate given to a new image sequence.
 pub const DEFAULT_SEQUENCE_RATE: f64 = 30.0;
@@ -168,6 +171,10 @@ pub struct Clip {
     /// Effects applied to the clip, first to last.
     #[serde(default)]
     pub effects: Vec<Effect>,
+    /// Sliders the settings of the clip's effects, and of its layer's, can
+    /// follow: each from `0.0` to `1.0`.
+    #[serde(default)]
+    pub dashboard: [Unit; DASHBOARD_SIZE],
 }
 
 impl Clip {
@@ -183,6 +190,7 @@ impl Clip {
             source: MediaSource::File { path },
             playback: Playback::default(),
             effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
         }
     }
 
@@ -196,6 +204,7 @@ impl Clip {
             },
             playback: Playback::default(),
             effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
         }
     }
 
@@ -211,6 +220,7 @@ impl Clip {
             source: MediaSource::ImageSequence { path, frame_rate },
             playback: Playback::default(),
             effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
         }
     }
 }
