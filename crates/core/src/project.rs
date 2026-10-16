@@ -80,13 +80,19 @@ impl Project {
         Self { composition }
     }
 
-    /// Serializes the project to pretty-printed JSON. Media paths located
-    /// inside `base_dir` are stored relative to it, with `/` separators.
+    /// Serializes the project to pretty-printed JSON. Media and effect file
+    /// paths located inside `base_dir` are stored relative to it, with `/`
+    /// separators.
     pub fn to_json(&self, base_dir: Option<&Path>) -> Result<String, ProjectError> {
         let mut composition = self.composition.clone();
         if let Some(base) = base_dir {
             for clip in composition.clips_mut() {
                 map_media_path(clip, |path| relativize(path, base));
+            }
+            for effect in composition.all_effects_mut() {
+                if let Some(file) = &mut effect.file {
+                    *file = relativize(file, base);
+                }
             }
         }
         let document = DocumentOut {
@@ -97,8 +103,8 @@ impl Project {
         Ok(serde_json::to_string_pretty(&document)?)
     }
 
-    /// Parses a project from JSON. Relative media paths are resolved against
-    /// `base_dir`.
+    /// Parses a project from JSON. Relative media and effect file paths are
+    /// resolved against `base_dir`.
     pub fn from_json(json: &str, base_dir: Option<&Path>) -> Result<Self, ProjectError> {
         let value: serde_json::Value = serde_json::from_str(json)?;
         let version = value
@@ -115,6 +121,11 @@ impl Project {
         if let Some(base) = base_dir {
             for clip in composition.clips_mut() {
                 map_media_path(clip, |path| resolve(path, base));
+            }
+            for effect in composition.all_effects_mut() {
+                if let Some(file) = &mut effect.file {
+                    *file = resolve(file, base);
+                }
             }
         }
         Ok(Self { composition })

@@ -172,3 +172,33 @@ fn failed_save_keeps_the_previous_file() {
         .collect();
     assert!(leftovers.is_empty(), "temporary files left: {leftovers:?}");
 }
+
+#[test]
+fn effect_files_inside_project_folder_are_stored_relative() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("show.prism");
+    let mut project = sample_project(dir.path());
+    let comp = &mut project.composition;
+    let mut shader = prism_core::Effect::new("isf");
+    shader.file = Some(dir.path().join("shaders").join("waves.fs"));
+    comp.effects.push(shader.clone());
+    let mut generator = Clip::from_generator("Shader", "isf");
+    *generator.source.generator_mut().unwrap() = shader;
+    comp.set_clip(slot(comp, 1, 1), Some(generator)).unwrap();
+    let mut outside = prism_core::Effect::new("isf");
+    outside.file = Some("/Shaders/glow.fs".into());
+    comp.clip_mut(slot(comp, 0, 0))
+        .unwrap()
+        .effects
+        .push(outside);
+    project.save(&file).unwrap();
+
+    let json = fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        json.matches(r#""file": "shaders/waves.fs""#).count(),
+        2,
+        "{json}"
+    );
+    assert!(json.contains(r#""file": "/Shaders/glow.fs""#), "{json}");
+    assert_eq!(Project::load(&file).unwrap(), project);
+}

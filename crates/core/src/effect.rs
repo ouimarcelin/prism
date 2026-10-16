@@ -5,6 +5,7 @@
 //! does and which parameters it has is up to the renderer.
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +33,10 @@ pub struct Effect {
     /// Text drawn, for a generator that draws one; empty otherwise.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
+    /// File the effect is read from, for effects that are not built in
+    /// (shaders in the ISF format).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<PathBuf>,
 }
 
 impl Effect {
@@ -44,6 +49,7 @@ impl Effect {
             animations: BTreeMap::new(),
             links: BTreeMap::new(),
             text: String::new(),
+            file: None,
         }
     }
 

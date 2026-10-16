@@ -546,6 +546,21 @@ impl Composition {
             .iter_mut()
             .flat_map(|layer| layer.clips.iter_mut().flatten())
     }
+
+    /// Every effect of the composition, its layers and clips, generators
+    /// included, mutable.
+    pub fn all_effects_mut(&mut self) -> impl Iterator<Item = &mut Effect> {
+        let layers = self.layers.iter_mut().flat_map(|layer| {
+            let clips = layer.clips.iter_mut().flatten().flat_map(|clip| {
+                let Clip {
+                    source, effects, ..
+                } = clip;
+                source.generator_mut().into_iter().chain(effects.iter_mut())
+            });
+            layer.effects.iter_mut().chain(clips)
+        });
+        self.effects.iter_mut().chain(layers)
+    }
 }
 
 fn check_resolution(resolution: Resolution) -> Result<(), ModelError> {
