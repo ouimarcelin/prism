@@ -6,7 +6,9 @@ use std::time::Instant;
 
 use egui::{Key, KeyboardShortcut, Modifiers};
 use prism_clock::{BEATS_PER_BAR, TapTempo, beat_in_bar};
-use prism_core::{Bpm, ColumnId, MAX_BPM, MIN_BPM, MissingMedia, Resolution, Slot};
+use prism_core::{
+    BAND_COUNT, Band, Bpm, ColumnId, MAX_BPM, MIN_BPM, MissingMedia, Resolution, Slot,
+};
 use prism_engine::{Command, EngineStatus};
 
 use crate::crossfade::AutoFade;
@@ -52,6 +54,19 @@ pub struct FrameInfo<'a> {
     pub screens: &'a [Screen],
     /// Screen showing the output, if it is open.
     pub output_screen: Option<usize>,
+    /// Audio input in use.
+    pub audio: AudioStatus,
+}
+
+/// State of the audio input, for the interface.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct AudioStatus {
+    /// Name of the input measured, if one is.
+    pub device: Option<String>,
+    /// Why the input asked for could not start.
+    pub error: Option<String>,
+    /// Levels of the bands, from 0 to 1, in the order of [`Band::ALL`].
+    pub levels: [f32; BAND_COUNT],
 }
 
 /// What waits for an answer about unsaved changes.
@@ -84,6 +99,8 @@ pub struct ControlPanel {
     preferences_path: Option<PathBuf>,
     pub(crate) auto_fade: Option<AutoFade>,
     tap: TapTempo,
+    /// Input devices, read when the audio menu opens.
+    audio_devices: Option<Vec<String>>,
 }
 
 impl ControlPanel {
@@ -104,6 +121,7 @@ impl ControlPanel {
             preferences_path: None,
             auto_fade: None,
             tap: TapTempo::default(),
+            audio_devices: None,
         }
     }
 
@@ -262,7 +280,7 @@ impl ControlPanel {
         egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, frame));
         egui::Panel::bottom("transport")
             .resizable(false)
-            .show(ui, |ui| self.transport(ui, frame.status));
+            .show(ui, |ui| self.transport(ui, frame.status, &frame.audio));
         egui::Panel::right("inspector")
             .resizable(true)
             .default_size(340.0)
@@ -470,6 +488,11 @@ impl ControlPanel {
                     self.actions.push(Action::CloseOutput);
                 }
             });
+            let audio = ui.menu_button("Audio", |ui| self.audio_menu(ui, &frame.audio));
+            if audio.inner.is_none() {
+                // Read the devices again next time the menu opens.
+                self.audio_devices = None;
+            }
             ui.menu_button("Aide", |ui| {
                 if ui.button("Raccourcis clavier").clicked() {
                     self.dialogs.shortcuts = true;
@@ -479,6 +502,54 @@ impl ControlPanel {
                 }
             });
         });
+    }
+
+    /// Audio input: on or off, device, sensitivity.
+    fn audio_menu(&mut self, ui: &mut egui::Ui, status: &AudioStatus) {
+        let devices = self
+            .audio_devices
+            .get_or_insert_with(prism_audio::input_devices)
+            .clone();
+        let mut preferences = self.preferences.clone();
+        ui.checkbox(&mut preferences.audio_input, "Écouter une entrée audio")
+            .on_hover_text(
+                "Les réglages reliés à une bande (graves, médiums, aigus, niveau) suivent le son",
+            );
+        ui.add_enabled_ui(preferences.audio_input, |ui| {
+            ui.separator();
+            ui.radio_value(
+                &mut preferences.audio_device,
+                None,
+                "Entrée par défaut du système",
+            );
+            for device in devices {
+                ui.radio_value(&mut preferences.audio_device, Some(device.clone()), device);
+            }
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label("Sensibilité");
+                ui.add(
+                    egui::Slider::new(
+                        &mut preferences.audio_gain_db,
+                        0.0..=prism_audio::MAX_GAIN_DB,
+                    )
+                    .suffix(" dB"),
+                );
+            });
+        });
+        match (&status.device, &status.error) {
+            (_, Some(error)) => {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+            }
+            (Some(device), None) => {
+                ui.label(egui::RichText::new(format!("À l'écoute : {device}")).weak());
+            }
+            (None, None) => {}
+        }
+        if preferences != self.preferences {
+            self.preferences = preferences;
+            self.save_preferences();
+        }
     }
 
     /// Tempo, tap tempo, resync and the beat of the bar.
@@ -511,6 +582,13 @@ impl ControlPanel {
             self.resync();
         }
         beat_lights(ui, status.beat);
+    }
+
+    /// Levels of the bands of the sound, while an input is measured.
+    fn audio_meter(&self, ui: &mut egui::Ui, audio: &AudioStatus) {
+        if audio.device.is_some() {
+            audio_meter(ui, audio.levels);
+        }
     }
 
     /// Duration of the automatic crossfade, as the interface says it.
@@ -556,11 +634,12 @@ impl ControlPanel {
         }
     }
 
-    fn transport(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
+    fn transport(&mut self, ui: &mut egui::Ui, status: &EngineStatus, audio: &AudioStatus) {
         let dt = ui.input(|input| input.stable_dt).min(0.1);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
             self.tempo(ui, status);
+            self.audio_meter(ui, audio);
             ui.separator();
             let bpm = self.document.composition().tempo.get();
             let seconds = self.preferences.crossfade_duration(bpm);
@@ -859,6 +938,43 @@ fn status_line(status: &EngineStatus) -> String {
         "{:.1} i/s · {:.1} ms par image · saccades : {} · sautées : {} · en retard : {late}",
         status.fps, status.frame_time_ms, status.hitches, status.gpu_skips
     )
+}
+
+/// One bar per band of the sound, from 0 to 1.
+fn audio_meter(ui: &mut egui::Ui, levels: [f32; BAND_COUNT]) {
+    let (width, gap, height) = (5.0, 2.0, 14.0);
+    let size = egui::vec2((width + gap) * BAND_COUNT as f32, height);
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let visuals = ui.visuals();
+    for (index, level) in levels.iter().enumerate() {
+        let left = rect.left() + (width + gap) * index as f32;
+        let bar = egui::Rect::from_min_max(
+            egui::pos2(left, rect.top()),
+            egui::pos2(left + width, rect.bottom()),
+        );
+        ui.painter()
+            .rect_filled(bar, 1.0, visuals.widgets.inactive.bg_fill);
+        let filled = egui::Rect::from_min_max(
+            egui::pos2(left, rect.bottom() - height * level.clamp(0.0, 1.0)),
+            bar.max,
+        );
+        ui.painter()
+            .rect_filled(filled, 1.0, visuals.selection.bg_fill);
+    }
+    response.on_hover_text(
+        Band::ALL
+            .iter()
+            .zip(levels)
+            .map(|(band, level)| {
+                format!(
+                    "{} : {:.0} %",
+                    crate::effects::band_label(*band),
+                    level * 100.0
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
 }
 
 /// One light per beat of the bar: the current beat is lit, the first beat

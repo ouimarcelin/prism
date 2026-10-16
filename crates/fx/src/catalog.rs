@@ -106,13 +106,18 @@ impl EffectInfo {
 
     /// Values of the parameters of `effect` at `time`: like
     /// [`EffectInfo::values`], with animated parameters at their current
-    /// value (envelopes from the launch of the clip), and parameters linked to a slider of the dashboard at the
-    /// slider's place in their range.
+    /// value (envelopes from the launch of the clip), parameters following
+    /// a band of the sound at its level in their range, and parameters
+    /// linked to a slider of the dashboard at the slider's place in their
+    /// range.
     pub fn values_at(&self, effect: &Effect, time: FrameTime) -> [f32; MAX_PARAMS] {
         let mut values = self.values(effect);
         for (value, param) in values.iter_mut().zip(self.params) {
             if let Some(animation) = effect.animations.get(param.id) {
                 *value = param.clamp(animation.value_at(time.moment()));
+            } else if let Some(band) = effect.audio.get(param.id) {
+                let level = time.audio[band.index()];
+                *value = param.clamp(param.min + (param.max - param.min) * level);
             } else if let Some(slider) = effect
                 .links
                 .get(param.id)
@@ -548,6 +553,12 @@ mod tests {
             .animations
             .insert("radius".into(), prism_core::Animation::new(5.0, 5.0));
         assert_eq!(blur.values_at(&effect, time)[0], 5.0);
+
+        // A band of the sound goes before a slider, after an animation.
+        effect.animations.clear();
+        effect.audio.insert("radius".into(), prism_core::Band::Bass);
+        time.audio[prism_core::Band::Bass.index()] = 0.5;
+        assert_eq!(blur.values_at(&effect, time)[0], 32.0);
 
         let mirror = find("mirror").unwrap();
         let mut effect = mirror.create();

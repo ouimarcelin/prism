@@ -1,5 +1,5 @@
 //! Preferences kept between sessions: recent projects, output screen,
-//! crossfade time.
+//! crossfade time, audio input.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -24,6 +24,13 @@ pub struct Preferences {
     /// Whether the automatic crossfade lasts [`Preferences::crossfade_beats`]
     /// beats at the tempo of the composition rather than a time in seconds.
     pub crossfade_on_beats: bool,
+    /// Whether the sound of an input is measured, for settings that follow
+    /// it.
+    pub audio_input: bool,
+    /// Name of the audio input; the default input of the system when none.
+    pub audio_device: Option<String>,
+    /// Gain applied to the sound before measuring, in decibels.
+    pub audio_gain_db: f32,
 }
 
 impl Default for Preferences {
@@ -34,6 +41,9 @@ impl Default for Preferences {
             crossfade_seconds: 2.0,
             crossfade_beats: 4.0,
             crossfade_on_beats: false,
+            audio_input: false,
+            audio_device: None,
+            audio_gain_db: 0.0,
         }
     }
 }

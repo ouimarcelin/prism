@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+prism-audio = { path = "../audio" }
 prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
 prism-fx = { path = "../fx" }

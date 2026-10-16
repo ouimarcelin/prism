@@ -20,7 +20,7 @@ mod preferences;
 mod shortcuts;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
-pub use panel::{Action, ControlPanel, FrameInfo, Screen};
+pub use panel::{Action, AudioStatus, ControlPanel, FrameInfo, Screen};
 pub use preferences::{MAX_RECENT, Preferences};
 pub use shortcuts::{SHORTCUT_HELP, Shortcut};
 

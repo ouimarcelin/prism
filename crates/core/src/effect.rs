@@ -30,6 +30,11 @@ pub struct Effect {
     /// parameter. An animation goes first.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub links: BTreeMap<String, usize>,
+    /// Parameters that follow a band of the sound coming in, by name: the
+    /// band's level runs the whole range of the parameter. An animation
+    /// goes first; a slider of the dashboard after.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub audio: BTreeMap<String, Band>,
     /// Text drawn, for a generator that draws one; empty otherwise.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
@@ -48,6 +53,7 @@ impl Effect {
             bypass: false,
             animations: BTreeMap::new(),
             links: BTreeMap::new(),
+            audio: BTreeMap::new(),
             text: String::new(),
             file: None,
         }
@@ -63,6 +69,33 @@ impl Effect {
         if !value.is_nan() {
             self.params.insert(name.into(), value);
         }
+    }
+}
+
+/// A part of the sound coming in, measured from 0 (silence) to 1.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Band {
+    /// The whole sound.
+    Level,
+    /// Low frequencies, up to 250 Hz: kick drum, bass.
+    Bass,
+    /// Middle frequencies, 250 Hz to 2 kHz: voices, most instruments.
+    Mid,
+    /// High frequencies, above 2 kHz: cymbals, hi-hats.
+    High,
+}
+
+/// Number of bands.
+pub const BAND_COUNT: usize = 4;
+
+impl Band {
+    /// Every band, in the order of their levels.
+    pub const ALL: [Self; BAND_COUNT] = [Self::Level, Self::Bass, Self::Mid, Self::High];
+
+    /// Place of the band in a list of levels.
+    pub fn index(self) -> usize {
+        self as usize
     }
 }
 
