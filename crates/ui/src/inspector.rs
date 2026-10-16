@@ -3,12 +3,22 @@
 
 use egui::{RichText, Vec2};
 use prism_core::{
-    CUE_POINT_COUNT, Clip, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit,
+    Animation, CUE_POINT_COUNT, Clip, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit,
 };
 use prism_engine::{Command, LayerStatus};
-use prism_fx::GENERATORS;
+use prism_fx::{GENERATORS, ParamInfo};
 
-use crate::effects::{effect_section, generator_settings};
+/// The opacity of a layer, described as a setting for its animation.
+const OPACITY: ParamInfo = ParamInfo {
+    id: "opacity",
+    label: "Opacité",
+    min: 0.0,
+    max: 1.0,
+    default: 1.0,
+    choices: &[],
+};
+
+use crate::effects::{animation_settings, dashboard_section, effect_section, generator_settings};
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
 
@@ -23,6 +33,7 @@ impl ControlPanel {
                     "Effets de la composition",
                     "composition",
                     &mut self.document.composition_mut().effects,
+                    false,
                 );
                 ui.separator();
                 let Some(slot) = self.selected else {
@@ -54,10 +65,36 @@ impl ControlPanel {
                 ui.end_row();
 
                 ui.label("Opacité");
-                let mut opacity = layer.opacity.get();
-                ui.add(egui::Slider::new(&mut opacity, 0.0..=1.0));
-                layer.opacity = Unit::new(opacity);
+                ui.horizontal(|ui| {
+                    let mut opacity = layer.opacity.get();
+                    let animated = layer.opacity_animation.is_some();
+                    ui.add_enabled(!animated, egui::Slider::new(&mut opacity, 0.0..=1.0));
+                    layer.opacity = Unit::new(opacity);
+                    let hint = if animated {
+                        "Arrêter l'animation de l'opacité"
+                    } else {
+                        "Animer l'opacité : une onde entre deux valeurs, au tempo ou en secondes"
+                    };
+                    if ui
+                        .selectable_label(animated, "~")
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
+                        layer.opacity_animation = if animated {
+                            None
+                        } else {
+                            Some(Animation::new(0.0, 1.0))
+                        };
+                    }
+                });
                 ui.end_row();
+                if let Some(animation) = &mut layer.opacity_animation {
+                    ui.label("");
+                    ui.push_id("opacity animation", |ui| {
+                        animation_settings(ui, &OPACITY, animation);
+                    });
+                    ui.end_row();
+                }
 
                 ui.label("Fusion");
                 egui::ComboBox::from_id_salt("inspector blend")
@@ -99,6 +136,7 @@ impl ControlPanel {
             "Effets de la couche",
             ("layer", slot.layer),
             &mut layer.effects,
+            true,
         );
     }
 
@@ -140,7 +178,14 @@ impl ControlPanel {
             if let Some(generator) = clip.source.generator_mut() {
                 generator_settings(ui, generator);
             }
-            effect_section(ui, "Effets du clip", ("clip", slot), &mut clip.effects);
+            dashboard_section(ui, ("clip", slot), &mut clip.dashboard);
+            effect_section(
+                ui,
+                "Effets du clip",
+                ("clip", slot),
+                &mut clip.effects,
+                true,
+            );
             return;
         }
         let playing = status.filter(|status| status.slot == Some(slot));
@@ -254,7 +299,14 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
-        effect_section(ui, "Effets du clip", ("clip", slot), &mut clip.effects);
+        dashboard_section(ui, ("clip", slot), &mut clip.dashboard);
+        effect_section(
+            ui,
+            "Effets du clip",
+            ("clip", slot),
+            &mut clip.effects,
+            true,
+        );
         if relocate {
             self.relocate_dialog(slot);
         }

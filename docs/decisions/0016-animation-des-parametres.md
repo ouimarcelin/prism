@@ -23,3 +23,4 @@ Le cahier des charges demande que chaque paramètre soit animable (LFO, envelopp
 
 - Le test automatique du critère de la phase 2 vérifie chaque image de la dixième minute à 128 BPM. Le test à la main reste à faire, sur une musique à tempo connu.
 - Restent pour la suite : animer l'opacité des couches et les autres réglages qui ne sont pas des effets, enveloppes, tableau de 8 curseurs par clip, pilotage par l'audio (FFT).
+- **Ajout du 2026-10-16 (ticket 19)** : l'opacité des couches s'anime comme un réglage d'effet (`Layer::opacity_animation`). Chaque clip a un tableau de bord de 8 curseurs ; un réglage d'effet du clip, de sa couche ou d'un générateur peut suivre un curseur (`Effect::links`), qui parcourt toute la plage du réglage. Ordre de priorité : animation, puis curseur, puis valeur réglée. Les effets de la composition n'ont pas de tableau de bord.

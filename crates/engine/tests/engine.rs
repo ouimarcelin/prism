@@ -692,3 +692,39 @@ fn generated_clips_follow_their_settings_without_restarting() {
     let pixel = read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0];
     assert!(pixel[1] > 0.99 && pixel[0] < 0.01, "{pixel:?}");
 }
+
+#[test]
+fn dashboard_sliders_and_animated_opacity_drive_the_image() {
+    let Some(gpu) = gpu() else { return };
+    // White solid color whose brightness follows the first slider.
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .links
+        .insert("brightness".into(), 0);
+    clip.dashboard[0] = prism_core::Unit::new(0.5);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    driver.settle(|status| status.state == ClipState::Playing);
+    let program = driver.state.program();
+    let pixel = |driver: &mut Driver| {
+        driver.tick();
+        read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0]
+    };
+    let half = pixel(&mut driver);
+    assert!((half[0] - 0.5).abs() < 0.01, "{half:?}");
+
+    comp.clip_mut(slot).unwrap().dashboard[0] = prism_core::Unit::ONE;
+    driver.state.set_composition(comp.clone());
+    let full = pixel(&mut driver);
+    assert!(full[0] > 0.99, "{full:?}");
+
+    // An opacity held at a quarter by its animation.
+    comp.layer_mut(slot.layer).unwrap().opacity_animation =
+        Some(prism_core::Animation::new(0.25, 0.25));
+    driver.state.set_composition(comp);
+    let quarter = pixel(&mut driver);
+    assert!((quarter[0] - 0.25).abs() < 0.01, "{quarter:?}");
+}

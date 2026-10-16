@@ -103,12 +103,19 @@ impl EffectInfo {
 
     /// Values of the parameters of `effect` at `time`: like
     /// [`EffectInfo::values`], with animated parameters at their current
-    /// value.
+    /// value, and parameters linked to a slider of the dashboard at the
+    /// slider's place in their range.
     pub fn values_at(&self, effect: &Effect, time: FrameTime) -> [f32; MAX_PARAMS] {
         let mut values = self.values(effect);
         for (value, param) in values.iter_mut().zip(self.params) {
             if let Some(animation) = effect.animations.get(param.id) {
                 *value = param.clamp(animation.value_at(time.beat, time.seconds));
+            } else if let Some(slider) = effect
+                .links
+                .get(param.id)
+                .and_then(|index| time.dashboard.get(*index))
+            {
+                *value = param.clamp(param.min + (param.max - param.min) * slider);
             }
         }
         values
@@ -448,12 +455,28 @@ mod tests {
         animation.period = prism_core::Period::Beats(1.0);
         effect.animations.insert("amount".into(), animation);
         let at = |beat| {
-            let time = FrameTime { seconds: 0.0, beat };
+            let time = FrameTime {
+                beat,
+                ..FrameTime::default()
+            };
             invert.values_at(&effect, time)[0]
         };
         assert_eq!(at(0.25), 1.0);
         assert_eq!(at(0.75), 0.0);
         assert_eq!(invert.values(&effect)[0], 0.3);
+
+        // A slider of the dashboard runs the whole range; an animation goes
+        // first.
+        let blur = find("blur").unwrap();
+        let mut effect = blur.create();
+        effect.links.insert("radius".into(), 3);
+        let mut time = FrameTime::default();
+        time.dashboard[3] = 0.25;
+        assert_eq!(blur.values_at(&effect, time)[0], 16.0);
+        effect
+            .animations
+            .insert("radius".into(), prism_core::Animation::new(5.0, 5.0));
+        assert_eq!(blur.values_at(&effect, time)[0], 5.0);
 
         let mirror = find("mirror").unwrap();
         let mut effect = mirror.create();

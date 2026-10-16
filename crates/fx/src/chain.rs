@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU64;
 
-use prism_core::Effect;
+use prism_core::{DASHBOARD_SIZE, Effect};
 use prism_render::{WORKING_FORMAT, wgpu};
 
 use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, find_any};
@@ -21,13 +21,17 @@ struct PassParams {
 
 const PARAMS_SIZE: u64 = std::mem::size_of::<PassParams>() as u64;
 
-/// Time of the frame, for effects and settings that move on their own.
+/// What settings follow at a frame: the time, for effects and settings that
+/// move on their own, and the dashboard of the clip.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FrameTime {
     /// Seconds since the engine started.
     pub seconds: f64,
     /// Beat position of the tempo clock.
     pub beat: f64,
+    /// Sliders of the dashboard of the clip the chain belongs to, from
+    /// `0.0` to `1.0`; all at `0.0` for the composition.
+    pub dashboard: [f32; DASHBOARD_SIZE],
 }
 
 /// Pipelines of every effect of the catalog, shared by all chains.

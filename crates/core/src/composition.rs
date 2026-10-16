@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Slot};
+use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Slot, Unit};
 
 /// Largest width or height accepted for a composition, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -484,6 +484,19 @@ impl Composition {
     /// crossfader level. Zero when the layer is bypassed, or when another layer
     /// is solo and this one is not.
     pub fn effective_opacity(&self, id: LayerId) -> Option<f32> {
+        self.opacity_with(id, |layer| layer.opacity.get())
+    }
+
+    /// Like [`Composition::effective_opacity`], at beat position `beat`,
+    /// `seconds` after the start: an animated opacity takes its value then.
+    pub fn effective_opacity_at(&self, id: LayerId, beat: f64, seconds: f64) -> Option<f32> {
+        self.opacity_with(id, |layer| match &layer.opacity_animation {
+            Some(animation) => Unit::new(animation.value_at(beat, seconds)).get(),
+            None => layer.opacity.get(),
+        })
+    }
+
+    fn opacity_with(&self, id: LayerId, opacity: impl Fn(&Layer) -> f32) -> Option<f32> {
         let layer = self.layer(id)?;
         let any_solo = self.layers.iter().any(|layer| layer.solo);
         if layer.bypass || (any_solo && !layer.solo) {
@@ -492,7 +505,7 @@ impl Composition {
         let gain = layer
             .crossfader_side
             .map_or(1.0, |side| self.crossfader.gain(side));
-        Some(layer.opacity.get() * gain)
+        Some(opacity(layer) * gain)
     }
 
     /// Every clip of the grid with its slot, layer by layer.
@@ -644,6 +657,44 @@ mod tests {
         value.as_object_mut().unwrap().remove("tempo");
         let old: Composition = serde_json::from_value(value).unwrap();
         assert_eq!(old.tempo, Bpm::DEFAULT);
+    }
+
+    #[test]
+    fn animated_opacity_follows_the_beat() {
+        let mut comp = grid(1, 1);
+        let id = comp.layers()[0].id();
+        comp.layer_mut(id).unwrap().opacity = Unit::new(0.4);
+        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.4));
+        let mut animation = crate::Animation::new(0.0, 2.0);
+        animation.shape = crate::Shape::Ramp;
+        animation.period = crate::Period::Beats(4.0);
+        comp.layer_mut(id).unwrap().opacity_animation = Some(animation);
+        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.5));
+        // Out of range values are clamped; the set opacity is kept.
+        assert_eq!(comp.effective_opacity_at(id, 3.0, 0.0), Some(1.0));
+        assert_eq!(comp.effective_opacity(id), Some(0.4));
+        comp.layer_mut(id).unwrap().bypass = true;
+        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.0));
+    }
+
+    #[test]
+    fn dashboards_and_links_are_saved() {
+        let mut comp = grid(1, 1);
+        let slot = slot(&comp, 0, 0);
+        let mut clip = Clip::from_file("/a.mov");
+        clip.dashboard[2] = Unit::new(0.75);
+        let mut blur = crate::Effect::new("blur");
+        blur.links.insert("radius".into(), 2);
+        clip.effects.push(blur);
+        comp.set_clip(slot, Some(clip)).unwrap();
+        let json = serde_json::to_string(&comp).unwrap();
+        let read: Composition = serde_json::from_str(&json).unwrap();
+        assert_eq!(read, comp);
+        // A clip saved before dashboards existed starts with its sliders at 0.
+        let old: Clip =
+            serde_json::from_str(r#"{"name":"a","source":{"kind":"file","path":"/a.mov"}}"#)
+                .unwrap();
+        assert_eq!(old.dashboard, [Unit::ZERO; crate::DASHBOARD_SIZE]);
     }
 
     #[test]

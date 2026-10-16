@@ -344,7 +344,10 @@ fn strobe_follows_the_beat() {
     let color = [0.3, 0.6, 0.9, 1.0];
     let strobe = [effect("strobe", &[("rate", 1.0), ("duty", 0.5)])];
     let at = |beat: f64| {
-        let time = FrameTime { seconds: 0.0, beat };
+        let time = FrameTime {
+            beat,
+            ..FrameTime::default()
+        };
         run_at(&gpu, &strobe, 1, 1, &[color], time).unwrap()[0]
     };
     assert_close(at(10.25), color, TOLERANCE, "first half of the beat");
@@ -405,6 +408,7 @@ fn a_beat_animation_is_still_on_the_beat_after_ten_minutes() {
         let time = FrameTime {
             seconds,
             beat: clock.beat_at(start + Duration::from_secs_f64(seconds)),
+            ..FrameTime::default()
         };
         let beats = seconds * 128.0 / 60.0;
         let within = beats - beats.floor();
