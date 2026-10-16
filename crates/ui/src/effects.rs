@@ -6,7 +6,7 @@ use std::hash::Hash;
 
 use egui::RichText;
 use prism_core::{Animation, Effect, MIN_PERIOD, Period, Shape};
-use prism_fx::{CATALOG, EffectInfo, ParamInfo, find};
+use prism_fx::{CATALOG, EffectInfo, ParamInfo, find, find_generator};
 
 /// A change asked for in the chain editor.
 #[derive(Clone, Debug, PartialEq)]
@@ -126,6 +126,25 @@ fn effect_chain(ui: &mut egui::Ui, id: impl Hash + Debug, effects: &mut Vec<Effe
 }
 
 /// One line per setting of an effect.
+/// Settings of the generator of a generated clip, animations included.
+pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
+    match find_generator(&generator.kind) {
+        Some(info) => {
+            ui.label(RichText::new(info.label).strong());
+            ui.push_id("generator", |ui| settings(ui, info, generator));
+        }
+        None => {
+            ui.label(
+                RichText::new(format!(
+                    "Générateur « {} » d'une autre version de Prism : gardé dans le projet mais pas dessiné.",
+                    generator.kind
+                ))
+                .weak(),
+            );
+        }
+    }
+}
+
 fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect) {
     egui::Grid::new("settings")
         .num_columns(2)

@@ -5,7 +5,7 @@ use std::num::NonZeroU64;
 use prism_core::Effect;
 use prism_render::{WORKING_FORMAT, wgpu};
 
-use crate::catalog::{CATALOG, EffectInfo, MAX_PARAMS, find};
+use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, find_any};
 
 const PRELUDE: &str = include_str!("shaders/prelude.wgsl");
 
@@ -80,6 +80,7 @@ impl EffectRenderer {
         });
         let pipelines = CATALOG
             .iter()
+            .chain(GENERATORS)
             .map(|info| {
                 let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(info.kind),
@@ -133,7 +134,10 @@ impl EffectRenderer {
     }
 
     fn pipeline(&self, info: &EffectInfo, pass: usize) -> Option<&wgpu::RenderPipeline> {
-        let index = CATALOG.iter().position(|known| known.kind == info.kind)?;
+        let index = CATALOG
+            .iter()
+            .chain(GENERATORS)
+            .position(|known| known.kind == info.kind)?;
         self.pipelines.get(index)?.get(pass)
     }
 }
@@ -143,7 +147,7 @@ impl EffectRenderer {
 pub fn is_active(effects: &[&Effect]) -> bool {
     effects
         .iter()
-        .any(|effect| !effect.bypass && find(&effect.kind).is_some())
+        .any(|effect| !effect.bypass && find_any(&effect.kind).is_some())
 }
 
 struct Target {
@@ -275,7 +279,7 @@ impl EffectChain {
             .iter()
             .filter(|effect| !effect.bypass)
             .filter_map(|effect| {
-                let info = find(&effect.kind)?;
+                let info = find_any(&effect.kind)?;
                 Some((info, info.values_at(effect, time)))
             })
             .flat_map(|(info, values)| {

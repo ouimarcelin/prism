@@ -32,6 +32,13 @@ pub enum MediaSource {
         /// Images shown per second.
         frame_rate: f64,
     },
+    /// An image drawn by the GPU, frame after frame, with no media file:
+    /// a solid color, a gradient, lines… Its kind, settings and animations
+    /// are those of an effect without input.
+    Generator {
+        /// What to draw and how.
+        generator: Effect,
+    },
 }
 
 impl MediaSource {
@@ -39,6 +46,7 @@ impl MediaSource {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
+            Self::Generator { .. } => None,
         }
     }
 
@@ -46,6 +54,33 @@ impl MediaSource {
     pub fn path_mut(&mut self) -> Option<&mut PathBuf> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
+            Self::Generator { .. } => None,
+        }
+    }
+
+    /// The generator, for a clip drawn by the GPU.
+    pub fn generator(&self) -> Option<&Effect> {
+        match self {
+            Self::Generator { generator } => Some(generator),
+            _ => None,
+        }
+    }
+
+    /// The generator, mutable.
+    pub fn generator_mut(&mut self) -> Option<&mut Effect> {
+        match self {
+            Self::Generator { generator } => Some(generator),
+            _ => None,
+        }
+    }
+
+    /// Whether both sources play the same thing: the same file or folder,
+    /// or generators of the same kind, whatever their settings.
+    pub fn same_media(&self, other: &Self) -> bool {
+        match (self.generator(), other.generator()) {
+            (Some(a), Some(b)) => a.kind == b.kind,
+            (None, None) => self == other,
+            _ => false,
         }
     }
 }
@@ -151,6 +186,19 @@ impl Clip {
         }
     }
 
+    /// Creates a clip drawn by a generator of `kind`, every setting at its
+    /// default.
+    pub fn from_generator(name: impl Into<String>, kind: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            source: MediaSource::Generator {
+                generator: Effect::new(kind),
+            },
+            playback: Playback::default(),
+            effects: Vec::new(),
+        }
+    }
+
     /// Creates a clip for a folder of PNG images, named after the folder.
     pub fn from_image_sequence(folder: impl Into<PathBuf>, frame_rate: f64) -> Self {
         let path = folder.into();
@@ -170,6 +218,26 @@ impl Clip {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn generators_have_no_file_and_keep_their_settings() {
+        let mut clip = Clip::from_generator("Dégradé", "gradient");
+        assert_eq!(clip.source.path(), None);
+        clip.source
+            .generator_mut()
+            .unwrap()
+            .set_param("angle", 45.0);
+        let json = serde_json::to_string(&clip).unwrap();
+        let read: Clip = serde_json::from_str(&json).unwrap();
+        assert_eq!(read, clip);
+
+        // Settings changed, same generator; another kind, another one.
+        let other = Clip::from_generator("Dégradé", "gradient");
+        assert!(clip.source.same_media(&other.source));
+        let lines = Clip::from_generator("Lignes", "lines");
+        assert!(!clip.source.same_media(&lines.source));
+        assert!(!clip.source.same_media(&Clip::from_file("/a.mov").source));
+    }
 
     #[test]
     fn clip_is_named_after_its_file() {

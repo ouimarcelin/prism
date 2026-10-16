@@ -25,6 +25,8 @@ enum Phase {
         playhead: Playhead,
     },
     Failed(String),
+    /// Drawn by a generator on the render thread, frame after frame.
+    Generating,
 }
 
 pub(crate) struct ClipStream {
@@ -51,9 +53,13 @@ pub(crate) struct ClipStream {
 impl ClipStream {
     /// Starts decoding `source` for the clip in `slot`.
     pub(crate) fn open(slot: Slot, source: MediaSource, playback: Playback) -> Self {
-        let (worker, phase) = match Worker::spawn(source.clone()) {
-            Ok(worker) => (Some(worker), Phase::Opening),
-            Err(error) => (None, Phase::Failed(error_chain(&error))),
+        let (worker, phase) = if source.generator().is_some() {
+            (None, Phase::Generating)
+        } else {
+            match Worker::spawn(source.clone()) {
+                Ok(worker) => (Some(worker), Phase::Opening),
+                Err(error) => (None, Phase::Failed(error_chain(&error))),
+            }
         };
         Self {
             slot,
@@ -77,13 +83,21 @@ impl ClipStream {
         self.slot
     }
 
+    /// Whether the stream plays this source in this slot. A generator whose
+    /// settings changed still counts as the same: its settings are read at
+    /// every frame.
     pub(crate) fn plays(&self, slot: Slot, source: &MediaSource) -> bool {
-        self.slot == slot && &self.source == source
+        self.slot == slot && self.source.same_media(source)
+    }
+
+    /// Whether the clip is drawn by a generator.
+    pub(crate) fn is_generator(&self) -> bool {
+        matches!(self.phase, Phase::Generating)
     }
 
     /// Whether a frame is on screen.
     pub(crate) fn has_frame(&self) -> bool {
-        self.shown.is_some()
+        self.shown.is_some() || (self.is_generator() && self.effects.output().is_some())
     }
 
     pub(crate) fn has_failed(&self) -> bool {
@@ -93,8 +107,37 @@ impl ClipStream {
     /// Image of the clip, once a frame is uploaded: the layer texture after
     /// the effects of the clip and of its layer.
     pub(crate) fn view(&self) -> Option<&wgpu::TextureView> {
+        if self.is_generator() {
+            return self.effects.output();
+        }
         let texture = self.shown.and(self.texture.as_ref())?;
         Some(self.effects.output().unwrap_or(texture.view()))
+    }
+
+    /// Records the image of a generated clip: `effects`, the generator first,
+    /// drawn at `size` pixels. `blank` stands for the image the generator
+    /// does not read.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn generate(
+        &mut self,
+        renderer: &EffectRenderer,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        effects: &[&Effect],
+        time: FrameTime,
+        blank: &wgpu::TextureView,
+        size: (u32, u32),
+    ) {
+        self.effects.apply(
+            renderer,
+            &gpu.device,
+            &gpu.queue,
+            encoder,
+            effects,
+            blank,
+            size,
+            time,
+        );
     }
 
     /// Records `effects` applied to the frame on screen.
@@ -149,7 +192,7 @@ impl ClipStream {
                 playhead.set_held(hold);
             }
             Phase::Opening => self.pending_seek = Some((position, hold)),
-            Phase::Failed(_) => {}
+            Phase::Failed(_) | Phase::Generating => {}
         }
     }
 
@@ -162,7 +205,7 @@ impl ClipStream {
                     *hold = false;
                 }
             }
-            Phase::Failed(_) => {}
+            Phase::Failed(_) | Phase::Generating => {}
         }
     }
 
@@ -296,6 +339,8 @@ impl ClipStream {
             Phase::Ready { playhead, .. } if playhead.is_finished() => ClipState::Finished,
             Phase::Ready { .. } if self.shown.is_none() => ClipState::Loading,
             Phase::Ready { .. } => ClipState::Playing,
+            Phase::Generating if self.has_frame() => ClipState::Playing,
+            Phase::Generating => ClipState::Loading,
         }
     }
 

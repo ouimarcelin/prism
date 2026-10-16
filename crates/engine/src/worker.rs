@@ -95,6 +95,10 @@ fn open(source: &MediaSource) -> Result<Box<dyn FrameSource>, prism_media::Decod
         MediaSource::ImageSequence { path, frame_rate } => {
             prism_media::open_sequence(path, *frame_rate)
         }
+        // Drawn by the render thread: nothing to decode.
+        MediaSource::Generator { generator } => Err(prism_media::DecodeError::UnsupportedCodec(
+            format!("générateur {}", generator.kind),
+        )),
     }
 }
 
