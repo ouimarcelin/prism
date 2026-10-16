@@ -3,16 +3,19 @@
 
 use std::fmt::Debug;
 use std::hash::Hash;
+use std::path::{Path, PathBuf};
 
 use egui::RichText;
 use prism_core::{Animation, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
-use prism_fx::{CATALOG, EffectInfo, ParamInfo, find, find_generator};
+use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of};
 
 /// A change asked for in the chain editor.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ChainEdit {
     /// Adds an effect of this kind at the end.
     Add(&'static str),
+    /// Adds an effect read from this ISF file at the end.
+    AddFile(PathBuf),
     /// Moves the effect at this index one place earlier.
     MoveUp(usize),
     /// Moves the effect at this index one place later.
@@ -29,6 +32,7 @@ pub(crate) fn apply_edit(effects: &mut Vec<Effect>, edit: &ChainEdit) {
                 effects.push(info.create());
             }
         }
+        ChainEdit::AddFile(ref path) => effects.push(isf_effect(path)),
         ChainEdit::MoveUp(index) if index > 0 && index < effects.len() => {
             effects.swap(index - 1, index);
         }
@@ -40,6 +44,51 @@ pub(crate) fn apply_edit(effects: &mut Vec<Effect>, edit: &ChainEdit) {
         }
         _ => {}
     }
+}
+
+/// An effect read from the ISF file at `path`.
+pub(crate) fn isf_effect(path: &Path) -> Effect {
+    let mut effect = Effect::new(ISF_KIND);
+    effect.file = Some(path.to_path_buf());
+    effect
+}
+
+/// Asks for an ISF file.
+pub(crate) fn pick_isf_file() -> Option<PathBuf> {
+    rfd::FileDialog::new()
+        .set_title("Choisir un shader ISF")
+        .add_filter("Shader ISF", &["fs", "isf", "frag"])
+        .pick_file()
+}
+
+/// What an effect is: its description, or why it is not rendered.
+fn describe(effect: &Effect) -> Result<&'static EffectInfo, String> {
+    if effect.kind == ISF_KIND {
+        return shader_of(effect)
+            .map(|shader| shader.info)
+            .map_err(|error| match &effect.file {
+                Some(path) => format!("{} : {error}", path.display()),
+                None => error.to_string(),
+            });
+    }
+    find(&effect.kind)
+        .or_else(|| find_generator(&effect.kind))
+        .ok_or_else(|| {
+            format!(
+                "« {} » vient d'une autre version de Prism : il est gardé dans le projet mais pas rendu.",
+                effect.kind
+            )
+        })
+}
+
+/// Hover text of an effect read from a file: its path and description.
+fn file_hover(effect: &Effect) -> Option<String> {
+    let path = effect.file.as_ref()?;
+    let description = shader_of(effect).ok().and_then(|shader| shader.description);
+    Some(match description {
+        Some(description) => format!("{description}\n{}", path.display()),
+        None => path.display().to_string(),
+    })
 }
 
 /// A collapsible section editing `effects`, titled `title`. `id` tells the
@@ -75,15 +124,27 @@ fn effect_chain(
     let count = effects.len();
     for (index, effect) in effects.iter_mut().enumerate() {
         ui.push_id(index, |ui| {
-            let info = find(&effect.kind);
+            let info = describe(effect);
             ui.horizontal(|ui| {
-                let name = info.map_or("Effet inconnu", |info| info.label);
+                let name = match (&info, &effect.file) {
+                    (Ok(info), _) => info.label.to_owned(),
+                    (Err(_), Some(path)) => path.file_stem().map_or_else(
+                        || "Shader".into(),
+                        |stem| stem.to_string_lossy().into_owned(),
+                    ),
+                    (Err(_), None) => "Effet inconnu".to_owned(),
+                };
                 let mut on = !effect.bypass;
+                let hover = file_hover(effect).map_or_else(String::new, |text| format!("{text}\n"));
                 ui.checkbox(&mut on, RichText::new(name).strong())
-                    .on_hover_text("Décocher pour passer l'effet (bypass)");
+                    .on_hover_text(format!("{hover}Décocher pour passer l'effet (bypass)"));
                 effect.bypass = !on;
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("×").on_hover_text("Retirer l'effet").clicked() {
+                    if ui
+                        .small_button("×")
+                        .on_hover_text("Retirer l'effet")
+                        .clicked()
+                    {
                         edits.push(ChainEdit::Remove(index));
                     }
                     if ui
@@ -103,15 +164,9 @@ fn effect_chain(
                 });
             });
             match info {
-                Some(info) => settings(ui, info, effect, dashboard),
-                None => {
-                    ui.label(
-                        RichText::new(format!(
-                            "« {} » vient d'une autre version de Prism : il est gardé dans le projet mais pas rendu.",
-                            effect.kind
-                        ))
-                        .weak(),
-                    );
+                Ok(info) => settings(ui, info, effect, dashboard),
+                Err(message) => {
+                    ui.label(RichText::new(message).weak());
                 }
             }
             ui.add_space(4.0);
@@ -126,6 +181,15 @@ fn effect_chain(
                     edits.push(ChainEdit::Add(info.kind));
                 }
             }
+            ui.separator();
+            if ui
+                .selectable_label(false, "Shader ISF…")
+                .on_hover_text("Un effet lu depuis un fichier ISF (.fs)")
+                .clicked()
+                && let Some(path) = pick_isf_file()
+            {
+                edits.push(ChainEdit::AddFile(path));
+            }
         });
     for edit in &edits {
         apply_edit(effects, edit);
@@ -135,9 +199,12 @@ fn effect_chain(
 /// One line per setting of an effect.
 /// Settings of the generator of a generated clip, animations included.
 pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
-    match find_generator(&generator.kind) {
-        Some(info) => {
-            ui.label(RichText::new(info.label).strong());
+    match describe(generator) {
+        Ok(info) => {
+            let title = ui.label(RichText::new(info.label).strong());
+            if let Some(hover) = file_hover(generator) {
+                title.on_hover_text(hover);
+            }
             if info.text.is_some() {
                 ui.add(
                     egui::TextEdit::multiline(&mut generator.text)
@@ -148,14 +215,8 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
             }
             ui.push_id("generator", |ui| settings(ui, info, generator, true));
         }
-        None => {
-            ui.label(
-                RichText::new(format!(
-                    "Générateur « {} » d'une autre version de Prism : gardé dans le projet mais pas dessiné.",
-                    generator.kind
-                ))
-                .weak(),
-            );
+        Err(message) => {
+            ui.label(RichText::new(message).weak());
         }
     }
 }
@@ -397,5 +458,15 @@ mod tests {
         apply_edit(&mut effects, &ChainEdit::Remove(1));
         apply_edit(&mut effects, &ChainEdit::Remove(7));
         assert_eq!(kinds(&effects), ["mirror", "invert"]);
+
+        apply_edit(&mut effects, &ChainEdit::AddFile("/shaders/glow.fs".into()));
+        assert_eq!(kinds(&effects), ["mirror", "invert", ISF_KIND]);
+        assert_eq!(
+            effects[2].file.as_deref(),
+            Some(Path::new("/shaders/glow.fs"))
+        );
+        // A missing file: said so, with its path.
+        let message = describe(&effects[2]).unwrap_err();
+        assert!(message.starts_with("/shaders/glow.fs : "), "{message}");
     }
 }
