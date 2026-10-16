@@ -48,11 +48,19 @@ pub(crate) struct ClipStream {
     late_frames: u64,
     frame_errors: u64,
     pending_seek: Option<(f64, bool)>,
+    /// Beat position and seconds of the engine when the clip was launched.
+    launched: (f64, f64),
 }
 
 impl ClipStream {
-    /// Starts decoding `source` for the clip in `slot`.
-    pub(crate) fn open(slot: Slot, source: MediaSource, playback: Playback) -> Self {
+    /// Starts decoding `source` for the clip in `slot`, launched at
+    /// `launched` (beat position and seconds of the engine).
+    pub(crate) fn open(
+        slot: Slot,
+        source: MediaSource,
+        playback: Playback,
+        launched: (f64, f64),
+    ) -> Self {
         let (worker, phase) = if source.generator().is_some() {
             (None, Phase::Generating)
         } else {
@@ -76,7 +84,13 @@ impl ClipStream {
             late_frames: 0,
             frame_errors: 0,
             pending_seek: None,
+            launched,
         }
+    }
+
+    /// Beat position and seconds of the engine at the last launch.
+    pub(crate) fn launched(&self) -> (f64, f64) {
+        self.launched
     }
 
     pub(crate) fn slot(&self) -> Slot {
@@ -173,7 +187,8 @@ impl ClipStream {
     }
 
     /// Restarts the clip from the beginning of its played range.
-    pub(crate) fn restart(&mut self) {
+    pub(crate) fn restart(&mut self, launched: (f64, f64)) {
+        self.launched = launched;
         if let Phase::Ready {
             timing, playhead, ..
         } = &mut self.phase

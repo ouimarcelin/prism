@@ -103,13 +103,13 @@ impl EffectInfo {
 
     /// Values of the parameters of `effect` at `time`: like
     /// [`EffectInfo::values`], with animated parameters at their current
-    /// value, and parameters linked to a slider of the dashboard at the
+    /// value (envelopes from the launch of the clip), and parameters linked to a slider of the dashboard at the
     /// slider's place in their range.
     pub fn values_at(&self, effect: &Effect, time: FrameTime) -> [f32; MAX_PARAMS] {
         let mut values = self.values(effect);
         for (value, param) in values.iter_mut().zip(self.params) {
             if let Some(animation) = effect.animations.get(param.id) {
-                *value = param.clamp(animation.value_at(time.beat, time.seconds));
+                *value = param.clamp(animation.value_at(time.moment()));
             } else if let Some(slider) = effect
                 .links
                 .get(param.id)
@@ -464,6 +464,18 @@ mod tests {
         assert_eq!(at(0.25), 1.0);
         assert_eq!(at(0.75), 0.0);
         assert_eq!(invert.values(&effect)[0], 0.3);
+
+        // An envelope starts at the launch of the clip.
+        let mut envelope = prism_core::Animation::new(0.0, 1.0);
+        envelope.shape = prism_core::Shape::Ramp;
+        envelope.once = true;
+        effect.animations.insert("amount".into(), envelope);
+        let time = FrameTime {
+            beat: 7.0,
+            launch_beat: 5.0,
+            ..FrameTime::default()
+        };
+        assert_eq!(invert.values_at(&effect, time)[0], 0.5);
 
         // A slider of the dashboard runs the whole range; an animation goes
         // first.
