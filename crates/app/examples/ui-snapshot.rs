@@ -128,6 +128,11 @@ fn main() -> ExitCode {
         preview: None,
         screens: &screens,
         output_screen: None,
+        audio: prism_ui::AudioStatus {
+            device: Some("Micro".into()),
+            error: None,
+            levels: [0.8, 0.9, 0.5, 0.3],
+        },
     };
     let ctx = egui::Context::default();
     let input = || egui::RawInput {

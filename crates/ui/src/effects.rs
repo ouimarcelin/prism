@@ -6,7 +6,7 @@ use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
 use egui::RichText;
-use prism_core::{Animation, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
+use prism_core::{Animation, Band, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
 use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of};
 
 /// A change asked for in the chain editor.
@@ -228,6 +228,7 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard
         .show(ui, |ui| {
             for param in info.params {
                 let driven = effect.animations.contains_key(param.id)
+                    || effect.audio.contains_key(param.id)
                     || (dashboard && effect.links.contains_key(param.id));
                 ui.label(param.label);
                 ui.horizontal(|ui| {
@@ -235,9 +236,7 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard
                     // waits.
                     ui.add_enabled_ui(!driven, |ui| setting(ui, param, effect));
                     animation_toggle(ui, param, effect);
-                    if dashboard {
-                        ui.push_id(param.id, |ui| link_menu(ui, param, effect));
-                    }
+                    ui.push_id(param.id, |ui| link_menu(ui, param, effect, dashboard));
                 });
                 ui.end_row();
                 if let Some(animation) = effect.animations.get_mut(param.id) {
@@ -249,30 +248,92 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard
         });
 }
 
-/// Links a setting to a slider of the dashboard, or unlinks it.
-fn link_menu(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
-    let mut link = effect.links.get(param.id).copied();
-    let text = link.map_or_else(|| "—".to_owned(), |index| format!("C{}", index + 1));
+/// Links a setting to a slider of the dashboard (with `dashboard`) or to a
+/// band of the sound, or unlinks it.
+fn link_menu(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect, dashboard: bool) {
+    let before = match (effect.audio.get(param.id), effect.links.get(param.id)) {
+        (Some(band), _) => Link::Band(*band),
+        (None, Some(index)) if dashboard => Link::Slider(*index),
+        _ => Link::None,
+    };
+    let mut link = before;
+    let text = match link {
+        Link::None => "—".to_owned(),
+        Link::Slider(index) => format!("C{}", index + 1),
+        Link::Band(band) => band_short_label(band).to_owned(),
+    };
+    let hover = if dashboard {
+        "Suivre un curseur du tableau de bord du clip ou une bande du son (menu Audio), sur toute la plage du réglage"
+    } else {
+        "Suivre une bande du son (menu Audio), sur toute la plage du réglage"
+    };
     egui::ComboBox::from_id_salt("link")
-        .width(44.0)
+        .width(48.0)
         .selected_text(text)
         .show_ui(ui, |ui| {
-            ui.selectable_value(&mut link, None, "Aucun curseur");
-            for index in 0..DASHBOARD_SIZE {
-                ui.selectable_value(&mut link, Some(index), format!("Curseur {}", index + 1));
+            ui.selectable_value(&mut link, Link::None, "Aucun lien");
+            if dashboard {
+                ui.separator();
+                for index in 0..DASHBOARD_SIZE {
+                    ui.selectable_value(
+                        &mut link,
+                        Link::Slider(index),
+                        format!("Curseur {}", index + 1),
+                    );
+                }
+            }
+            ui.separator();
+            for band in Band::ALL {
+                ui.selectable_value(
+                    &mut link,
+                    Link::Band(band),
+                    format!("Son : {}", band_label(band)),
+                );
             }
         })
         .response
-        .on_hover_text(
-            "Suivre un curseur du tableau de bord du clip, sur toute la plage du réglage",
-        );
-    match link {
-        Some(index) => {
-            effect.links.insert(param.id.to_owned(), index);
-        }
-        None => {
+        .on_hover_text(hover);
+    if link != before {
+        effect.audio.remove(param.id);
+        if dashboard {
             effect.links.remove(param.id);
         }
+        match link {
+            Link::None => {}
+            Link::Slider(index) => {
+                effect.links.insert(param.id.to_owned(), index);
+            }
+            Link::Band(band) => {
+                effect.audio.insert(param.id.to_owned(), band);
+            }
+        }
+    }
+}
+
+/// What a setting follows besides its own value.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Link {
+    None,
+    Slider(usize),
+    Band(Band),
+}
+
+/// Name of a band of the sound.
+pub(crate) fn band_label(band: Band) -> &'static str {
+    match band {
+        Band::Level => "niveau",
+        Band::Bass => "graves",
+        Band::Mid => "médiums",
+        Band::High => "aigus",
+    }
+}
+
+fn band_short_label(band: Band) -> &'static str {
+    match band {
+        Band::Level => "Niv.",
+        Band::Bass => "Grav.",
+        Band::Mid => "Méd.",
+        Band::High => "Aigus",
     }
 }
 

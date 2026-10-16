@@ -14,10 +14,11 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use prism_audio::AudioInput;
 use prism_engine::{Command, Engine};
 use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
-use prism_ui::{Action, ControlPanel, FrameInfo, Preferences, Screen, Shortcut};
+use prism_ui::{Action, AudioStatus, ControlPanel, FrameInfo, Preferences, Screen, Shortcut};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, StartCause, WindowEvent};
@@ -173,6 +174,16 @@ struct Running {
     screens_read: Instant,
     sent_revision: u64,
     title: String,
+    audio: AudioState,
+}
+
+/// The audio input as last asked for in the preferences.
+#[derive(Default)]
+struct AudioState {
+    /// Whether an input was asked for, and which one.
+    wanted: (bool, Option<String>),
+    input: Option<AudioInput>,
+    error: Option<String>,
 }
 
 impl Running {
@@ -210,9 +221,43 @@ impl Running {
             screens_read: Instant::now(),
             sent_revision: document.revision(),
             title: panel.title(),
+            audio: AudioState::default(),
         };
         running.read_screens(event_loop);
+        running.follow_audio_preferences(panel.preferences());
         Ok(running)
+    }
+
+    /// Starts, stops or changes the audio input to match the preferences.
+    fn follow_audio_preferences(&mut self, preferences: &Preferences) {
+        let levels = self.engine.audio_levels();
+        levels.set_gain_db(preferences.audio_gain_db);
+        let wanted = (preferences.audio_input, preferences.audio_device.clone());
+        if wanted == self.audio.wanted {
+            return;
+        }
+        // The old input stops before the new one starts.
+        self.audio.input = None;
+        self.audio.error = None;
+        if wanted.0 {
+            match AudioInput::start(wanted.1.as_deref(), levels) {
+                Ok(input) => self.audio.input = Some(input),
+                Err(error) => self.audio.error = Some(error.to_string()),
+            }
+        }
+        self.audio.wanted = wanted;
+    }
+
+    fn audio_status(&self) -> AudioStatus {
+        AudioStatus {
+            device: self
+                .audio
+                .input
+                .as_ref()
+                .map(|input| input.name().to_owned()),
+            error: self.audio.error.clone(),
+            levels: self.engine.audio_levels().get(),
+        }
     }
 
     fn read_screens(&mut self, event_loop: &ActiveEventLoop) {
@@ -344,6 +389,7 @@ impl App {
                 eprintln!("erreur : sortie impossible : {}", describe(error.as_ref()));
             }
         }
+        running.follow_audio_preferences(self.panel.preferences());
         // Remember the screen of the output for next time.
         if let Some(name) = running
             .output
@@ -379,6 +425,7 @@ impl App {
         let program = running.engine.program();
         let output_screen = running.output.as_ref().map(|output| output.screen);
         let screens = running.screens.clone();
+        let audio = running.audio_status();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
         running.control.draw(&running.gpu, program, |ui, preview| {
@@ -387,6 +434,7 @@ impl App {
                 preview,
                 screens: &screens,
                 output_screen,
+                audio: audio.clone(),
             };
             // egui may run the interface twice in one frame; only the first
             // pass sees the input, so keep the actions of every pass.
