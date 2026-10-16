@@ -661,3 +661,34 @@ fn effects_of_clip_layer_and_composition_apply_in_order() {
     let red = pixel(&mut driver);
     assert!(red[0] > 0.99 && red[1] < 0.01, "{red:?}");
 }
+
+#[test]
+fn generated_clips_follow_their_settings_without_restarting() {
+    let Some(gpu) = gpu() else { return };
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    let red = clip.source.generator_mut().unwrap();
+    red.set_param("saturation", 1.0);
+    let (mut comp, slot) = composition_with(clip);
+    // A fade would show if a new setting restarted the clip.
+    comp.layer_mut(slot.layer).unwrap().transition_ms = 1000;
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    let status = driver.settle(|status| status.state == ClipState::Playing);
+    assert_eq!(status.slot, Some(slot));
+    let program = driver.state.program();
+    let pixel = read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0];
+    assert!(pixel[0] > 0.99 && pixel[1] < 0.01, "{pixel:?}");
+
+    // Green from the next frame on, without a fade.
+    comp.clip_mut(slot)
+        .unwrap()
+        .source
+        .generator_mut()
+        .unwrap()
+        .set_param("hue", 120.0);
+    driver.state.set_composition(comp);
+    driver.tick();
+    assert_eq!(driver.layer().transition, None);
+    let pixel = read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0];
+    assert!(pixel[1] > 0.99 && pixel[0] < 0.01, "{pixel:?}");
+}

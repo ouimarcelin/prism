@@ -546,7 +546,7 @@ impl EngineState {
         }
         self.uploader.finish(&encoder);
 
-        // Effects of each clip, then of its layer.
+        // Effects of each clip, then of its layer; generated clips drawn.
         let time = FrameTime {
             seconds: now.saturating_duration_since(self.started).as_secs_f64(),
             beat: self.beat,
@@ -557,12 +557,33 @@ impl EngineState {
                 .layer(runtime.id)
                 .map_or(&[][..], |layer| &layer.effects[..]);
             for stream in runtime.streams_mut() {
-                let clip_effects = self
-                    .composition
-                    .clip(stream.slot())
-                    .map_or(&[][..], |clip| &clip.effects[..]);
-                let effects: Vec<&Effect> = clip_effects.iter().chain(layer_effects).collect();
-                stream.apply_effects(&self.fx, &gpu, &mut encoder, &effects, time);
+                let clip = self.composition.clip(stream.slot());
+                let clip_effects = clip.map_or(&[][..], |clip| &clip.effects[..]);
+                let generator = clip.and_then(|clip| clip.source.generator());
+                match generator {
+                    // A generated clip is drawn at the composition size.
+                    Some(generator) if stream.is_generator() => {
+                        let effects: Vec<&Effect> = std::iter::once(generator)
+                            .chain(clip_effects)
+                            .chain(layer_effects)
+                            .collect();
+                        let size = self.composition.resolution();
+                        stream.generate(
+                            &self.fx,
+                            &gpu,
+                            &mut encoder,
+                            &effects,
+                            time,
+                            &self.transparent,
+                            (size.width, size.height),
+                        );
+                    }
+                    _ => {
+                        let effects: Vec<&Effect> =
+                            clip_effects.iter().chain(layer_effects).collect();
+                        stream.apply_effects(&self.fx, &gpu, &mut encoder, &effects, time);
+                    }
+                }
             }
         }
         // With effects on the composition, the layers are mixed into an
