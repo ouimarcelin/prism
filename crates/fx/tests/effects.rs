@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used)]
 
 use prism_core::Effect;
-use prism_fx::{EffectChain, EffectRenderer, FrameTime, find, is_active};
+use prism_fx::{EffectChain, EffectRenderer, FrameTime, find, find_generator, is_active};
 use prism_render::{Gpu, WORKING_FORMAT, pixels_texture, read_texture, wgpu};
 
 /// Half-float precision on values up to 1.
@@ -418,4 +418,53 @@ fn a_beat_animation_is_still_on_the_beat_after_ten_minutes() {
             "frame {frame}"
         );
     }
+}
+
+fn generator(kind: &str, params: &[(&str, f32)]) -> Effect {
+    let mut generator = find_generator(kind).unwrap().create();
+    for (name, value) in params {
+        generator.set_param(*name, *value);
+    }
+    generator
+}
+
+#[test]
+fn generators_draw_without_input() {
+    let Some(gpu) = gpu() else { return };
+    // The input is ignored: a black image.
+    let black = vec![[0.0, 0.0, 0.0, 1.0]; 8];
+
+    let solid = generator("solid", &[("saturation", 1.0), ("opacity", 0.5)]);
+    let red = run(&gpu, &[solid], 4, 2, &black).unwrap();
+    assert_close(red[5], [0.5, 0.0, 0.0, 0.5], TOLERANCE, "solid");
+
+    let checker = generator("checker", &[("count", 2.0), ("rate", 0.0)]);
+    let squares = run(&gpu, &[checker], 4, 2, &black).unwrap();
+    assert_close(squares[0], [0.0, 0.0, 0.0, 1.0], TOLERANCE, "dark square");
+    assert_close(squares[2], [1.0, 1.0, 1.0, 1.0], TOLERANCE, "light square");
+
+    let gradient = generator(
+        "gradient",
+        &[("hue_from", 0.0), ("hue_to", 240.0), ("saturation", 1.0)],
+    );
+    let across = run(&gpu, &[gradient], 32, 1, &[[0.0; 4]; 32]).unwrap();
+    assert!(across[0][0] > 0.9 && across[0][2] < 0.1, "{:?}", across[0]);
+    assert!(
+        across[31][2] > 0.9 && across[31][0] < 0.1,
+        "{:?}",
+        across[31]
+    );
+
+    let noise = run(&gpu, &[generator("noise", &[])], 32, 16, &[[0.0; 4]; 512]).unwrap();
+    let levels: Vec<f32> = noise.iter().map(|pixel| pixel[0]).collect();
+    assert!(levels.iter().all(|level| (0.0..=1.0).contains(level)));
+    let spread = levels.iter().copied().fold(f32::MIN, f32::max)
+        - levels.iter().copied().fold(f32::MAX, f32::min);
+    assert!(spread > 0.2, "noise too flat: {spread}");
+
+    // Generators then effects: inverted lines.
+    let chain = [generator("lines", &[("count", 4.0)]), effect("invert", &[])];
+    let lines = run(&gpu, &chain, 128, 2, &[[0.0; 4]; 256]).unwrap();
+    assert!(lines.iter().any(|pixel| pixel[0] > 0.9));
+    assert!(lines.iter().any(|pixel| pixel[0] < 0.1));
 }

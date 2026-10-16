@@ -313,6 +313,92 @@ const TILE_CHOICES: &[&str] = &["Non", "Une tuile sur deux"];
 
 const STROBE_CHOICES: &[&str] = &["Noir", "Blanc", "Transparent"];
 
+/// Every generator, in display order: effects that draw an image of their
+/// own instead of changing one.
+pub const GENERATORS: &[EffectInfo] = &[
+    EffectInfo {
+        kind: "solid",
+        label: "Couleur unie",
+        params: &[
+            ParamInfo::range("hue", "Teinte", 0.0, 360.0, 0.0),
+            ParamInfo::range("saturation", "Saturation", 0.0, 1.0, 0.0),
+            ParamInfo::range("brightness", "Luminosité", 0.0, 1.0, 1.0),
+            ParamInfo::range("opacity", "Opacité", 0.0, 1.0, 1.0),
+        ],
+        source: include_str!("shaders/solid.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "gradient",
+        label: "Dégradé",
+        params: &[
+            ParamInfo::range("hue_from", "Teinte de départ", 0.0, 360.0, 200.0),
+            ParamInfo::range("hue_to", "Teinte d'arrivée", 0.0, 360.0, 320.0),
+            ParamInfo::range("angle", "Angle", -180.0, 180.0, 0.0),
+            ParamInfo::range("saturation", "Saturation", 0.0, 1.0, 0.8),
+            ParamInfo::range("speed", "Défilement (par temps)", -2.0, 2.0, 0.0),
+        ],
+        source: include_str!("shaders/gradient.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "lines",
+        label: "Lignes",
+        params: &[
+            ParamInfo::range("count", "Nombre", 1.0, 64.0, 8.0),
+            ParamInfo::range("width", "Épaisseur", 0.0, 1.0, 0.3),
+            ParamInfo::range("angle", "Angle", -180.0, 180.0, 0.0),
+            ParamInfo::range("speed", "Défilement (par temps)", -4.0, 4.0, 0.25),
+        ],
+        source: include_str!("shaders/lines.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "rings",
+        label: "Cercles",
+        params: &[
+            ParamInfo::range("count", "Nombre", 1.0, 32.0, 6.0),
+            ParamInfo::range("width", "Épaisseur", 0.0, 1.0, 0.3),
+            ParamInfo::range("speed", "Expansion (par temps)", -4.0, 4.0, 0.5),
+        ],
+        source: include_str!("shaders/rings.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "checker",
+        label: "Damier",
+        params: &[
+            ParamInfo::range("count", "Cases", 1.0, 64.0, 8.0),
+            ParamInfo::range("rate", "Inversions par temps", 0.0, 8.0, 1.0),
+        ],
+        source: include_str!("shaders/checker.wgsl"),
+        passes: &["fs_main"],
+    },
+    EffectInfo {
+        kind: "noise",
+        label: "Bruit",
+        params: &[
+            ParamInfo::range("scale", "Échelle", 1.0, 64.0, 8.0),
+            ParamInfo::range("speed", "Changements par temps", 0.0, 8.0, 0.5),
+            ParamInfo::choice("color", "Couleur", NOISE_CHOICES),
+        ],
+        source: include_str!("shaders/noise.wgsl"),
+        passes: &["fs_main"],
+    },
+];
+
+const NOISE_CHOICES: &[&str] = &["Gris", "Couleur"];
+
+/// The generator of a kind, if this build knows it.
+pub fn find_generator(kind: &str) -> Option<&'static EffectInfo> {
+    GENERATORS.iter().find(|info| info.kind == kind)
+}
+
+/// The effect or generator of a kind.
+pub(crate) fn find_any(kind: &str) -> Option<&'static EffectInfo> {
+    find(kind).or_else(|| find_generator(kind))
+}
+
 /// The effect of a kind, if this build knows it.
 pub fn find(kind: &str) -> Option<&'static EffectInfo> {
     CATALOG.iter().find(|info| info.kind == kind)
@@ -338,6 +424,11 @@ mod tests {
             }
         }
         assert_eq!(find("unknown"), None);
+        for info in GENERATORS {
+            assert!(info.params.len() <= MAX_PARAMS, "{}", info.kind);
+            assert_eq!(find_generator(info.kind), Some(info));
+            assert_eq!(find(info.kind), None, "{} is also an effect", info.kind);
+        }
     }
 
     #[test]

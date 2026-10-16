@@ -1,17 +1,17 @@
-//! Draws every effect of the catalog, at its default settings, on a test
+//! Draws every effect and generator, at its default settings, on a test
 //! pattern, side by side in one PNG image: to judge them by eye.
 //!
 //! ```text
 //! cargo run -p prism-fx --example gallery -- OUTPUT.png
 //! ```
 //!
-//! Tiles follow the order of the catalog, row by row; the first tile is
-//! the pattern without effect.
+//! Tiles follow the order of the catalog, row by row, then the generators;
+//! the first tile is the pattern without effect.
 
 use std::process::ExitCode;
 
 use prism_core::Effect;
-use prism_fx::{CATALOG, EffectChain, EffectRenderer, FrameTime};
+use prism_fx::{CATALOG, EffectChain, EffectRenderer, FrameTime, GENERATORS};
 use prism_render::{Gpu, WORKING_FORMAT, pixels_texture, read_texture, wgpu};
 
 const WIDTH: u32 = 240;
@@ -61,7 +61,7 @@ fn main() -> ExitCode {
     let pattern = pattern();
     let input = pixels_texture(&gpu.device, &gpu.queue, WIDTH, HEIGHT, &pattern)
         .create_view(&wgpu::TextureViewDescriptor::default());
-    let tiles = CATALOG.len() as u32 + 1;
+    let tiles = (CATALOG.len() + GENERATORS.len()) as u32 + 1;
     let rows = tiles.div_ceil(COLUMNS);
     let (image_width, image_height) = (WIDTH * COLUMNS, HEIGHT * rows);
     let mut image = vec![0u8; (image_width * image_height * 4) as usize];
@@ -69,7 +69,14 @@ fn main() -> ExitCode {
     for tile in 0..tiles {
         let effects: Vec<Effect> = match tile {
             0 => Vec::new(),
-            index => vec![CATALOG[index as usize - 1].create()],
+            index => {
+                let info = CATALOG
+                    .iter()
+                    .chain(GENERATORS)
+                    .nth(index as usize - 1)
+                    .expect("one tile per effect and generator");
+                vec![info.create()]
+            }
         };
         let destination = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("tile"),
