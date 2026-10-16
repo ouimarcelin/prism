@@ -6,7 +6,7 @@ use prism_core::{
     Animation, CUE_POINT_COUNT, Clip, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit,
 };
 use prism_engine::{Command, LayerStatus};
-use prism_fx::{GENERATORS, ParamInfo};
+use prism_fx::{GENERATORS, ISF_KIND, ParamInfo};
 
 /// The opacity of a layer, described as a setting for its animation.
 const OPACITY: ParamInfo = ParamInfo {
@@ -160,6 +160,23 @@ impl ControlPanel {
                                 }
                                 let _ = self.document.composition_mut().set_clip(slot, Some(clip));
                             }
+                        }
+                        ui.separator();
+                        if ui
+                            .selectable_label(false, "Shader ISF…")
+                            .on_hover_text("Une image dessinée par un fichier ISF (.fs)")
+                            .clicked()
+                            && let Some(path) = crate::effects::pick_isf_file()
+                        {
+                            let name = path.file_stem().map_or_else(
+                                || "Shader".into(),
+                                |stem| stem.to_string_lossy().into_owned(),
+                            );
+                            let mut clip = Clip::from_generator(name, ISF_KIND);
+                            if let Some(generator) = clip.source.generator_mut() {
+                                *generator = crate::effects::isf_effect(&path);
+                            }
+                            let _ = self.document.composition_mut().set_clip(slot, Some(clip));
                         }
                     })
                     .response

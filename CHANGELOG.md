@@ -25,6 +25,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Shaders ISF : un fichier `.fs` ajouté comme effet ou comme générateur (« Shader ISF… »), ses entrées devenues réglages animables ; fichier relu dès qu'il est enregistré ; deux exemples dans `examples/isf` (ADR 0018). Jusqu'à 16 réglages par effet.
 - Générateur de texte : texte sur plusieurs lignes saisi dans l'inspecteur, police Ubuntu Light ou Hack, alignement, taille, position et couleur réglables et animables (ADR 0017).
 - Enveloppes : une animation réglée « une fois » joue un seul cycle à chaque lancement du clip, puis garde sa dernière valeur (montée avec la rampe, aller-retour avec le triangle ou le sinus).
 - Tableau de bord de 8 curseurs par clip ; un réglage d'effet du clip ou de sa couche (et d'un générateur) peut suivre un curseur sur toute sa plage. Opacité des couches animable (« ~ »).

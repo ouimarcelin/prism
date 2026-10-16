@@ -54,7 +54,11 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
     if let Some(layer) = composition.layer_mut(slot.layer) {
         let mut color = Effect::new("color");
         color.set_param("saturation", 1.6);
-        layer.effects = vec![color];
+        let mut shader = Effect::new("isf");
+        shader.file = Some(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/isf/decalage.fs"),
+        );
+        layer.effects = vec![color, shader];
     }
     composition.effects = vec![Effect::new("mirror")];
     let generated = Slot::new(layers[3], columns[0]);

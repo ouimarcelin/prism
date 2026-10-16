@@ -5,7 +5,7 @@
 
 struct Params {
     // Settings of the effect, in the order of the catalog.
-    values: array<vec4<f32>, 2>,
+    values: array<vec4<f32>, 4>,
     // Size of the image in pixels.
     size: vec2<f32>,
     // Seconds since the engine started.
