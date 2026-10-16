@@ -25,6 +25,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Entrée audio (menu Audio : appareil, sensibilité) mesurée en quatre bandes (niveau, graves, médiums, aigus), vumètres à côté du tempo ; tout réglage d'effet peut suivre une bande (« Son : graves »…) sur toute sa plage (crate `prism-audio`, ADR 0019). Exemple `audio-meter`.
 - Shaders ISF : un fichier `.fs` ajouté comme effet ou comme générateur (« Shader ISF… »), ses entrées devenues réglages animables ; fichier relu dès qu'il est enregistré ; deux exemples dans `examples/isf` (ADR 0018). Jusqu'à 16 réglages par effet.
 - Générateur de texte : texte sur plusieurs lignes saisi dans l'inspecteur, police Ubuntu Light ou Hack, alignement, taille, position et couleur réglables et animables (ADR 0017).
 - Enveloppes : une animation réglée « une fois » joue un seul cycle à chaque lancement du clip, puis garde sa dernière valeur (montée avec la rampe, aller-retour avec le triangle ou le sinus).
