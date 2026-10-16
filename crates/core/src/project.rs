@@ -201,7 +201,7 @@ fn absolute(path: &Path) -> Result<PathBuf, ProjectError> {
 }
 
 /// Writes to a temporary file in the same folder, then renames it over `path`.
-fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
+pub(crate) fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
     let file_name = path
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path has no file name"))?;
