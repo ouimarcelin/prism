@@ -709,7 +709,7 @@ fn dashboard_sliders_and_animated_opacity_drive_the_image() {
     let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
     driver.settle(|status| status.state == ClipState::Playing);
     let program = driver.state.program();
-    let mut pixel = |driver: &mut Driver| {
+    let pixel = |driver: &mut Driver| {
         driver.tick();
         read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0]
     };
