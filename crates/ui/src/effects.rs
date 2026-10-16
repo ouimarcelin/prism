@@ -5,7 +5,7 @@ use std::fmt::Debug;
 use std::hash::Hash;
 
 use egui::RichText;
-use prism_core::{Animation, Effect, MIN_PERIOD, Period, Shape};
+use prism_core::{Animation, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
 use prism_fx::{CATALOG, EffectInfo, ParamInfo, find, find_generator};
 
 /// A change asked for in the chain editor.
@@ -43,12 +43,14 @@ pub(crate) fn apply_edit(effects: &mut Vec<Effect>, edit: &ChainEdit) {
 }
 
 /// A collapsible section editing `effects`, titled `title`. `id` tells the
-/// chains of different layers and clips apart.
+/// chains of different layers and clips apart. With `dashboard`, settings
+/// can follow a slider of the clip's dashboard.
 pub(crate) fn effect_section(
     ui: &mut egui::Ui,
     title: &str,
     id: impl Hash + Debug,
     effects: &mut Vec<Effect>,
+    dashboard: bool,
 ) {
     let active = effects.iter().filter(|effect| !effect.bypass).count();
     let header = if effects.is_empty() {
@@ -59,11 +61,16 @@ pub(crate) fn effect_section(
     egui::CollapsingHeader::new(RichText::new(header).strong())
         .id_salt(("effects", &id))
         .default_open(!effects.is_empty())
-        .show(ui, |ui| effect_chain(ui, &id, effects));
+        .show(ui, |ui| effect_chain(ui, &id, effects, dashboard));
 }
 
 /// Every effect of the chain, then the menu to add one.
-fn effect_chain(ui: &mut egui::Ui, id: impl Hash + Debug, effects: &mut Vec<Effect>) {
+fn effect_chain(
+    ui: &mut egui::Ui,
+    id: impl Hash + Debug,
+    effects: &mut Vec<Effect>,
+    dashboard: bool,
+) {
     let mut edits = Vec::new();
     let count = effects.len();
     for (index, effect) in effects.iter_mut().enumerate() {
@@ -96,7 +103,7 @@ fn effect_chain(ui: &mut egui::Ui, id: impl Hash + Debug, effects: &mut Vec<Effe
                 });
             });
             match info {
-                Some(info) => settings(ui, info, effect),
+                Some(info) => settings(ui, info, effect, dashboard),
                 None => {
                     ui.label(
                         RichText::new(format!(
@@ -131,7 +138,7 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
     match find_generator(&generator.kind) {
         Some(info) => {
             ui.label(RichText::new(info.label).strong());
-            ui.push_id("generator", |ui| settings(ui, info, generator));
+            ui.push_id("generator", |ui| settings(ui, info, generator, true));
         }
         None => {
             ui.label(
@@ -145,19 +152,23 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
     }
 }
 
-fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect) {
+fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard: bool) {
     egui::Grid::new("settings")
         .num_columns(2)
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
             for param in info.params {
-                let animated = effect.animations.contains_key(param.id);
+                let driven = effect.animations.contains_key(param.id)
+                    || (dashboard && effect.links.contains_key(param.id));
                 ui.label(param.label);
                 ui.horizontal(|ui| {
-                    // While animated, the set value waits for the animation
-                    // to stop.
-                    ui.add_enabled_ui(!animated, |ui| setting(ui, param, effect));
+                    // While animated or following a slider, the set value
+                    // waits.
+                    ui.add_enabled_ui(!driven, |ui| setting(ui, param, effect));
                     animation_toggle(ui, param, effect);
+                    if dashboard {
+                        ui.push_id(param.id, |ui| link_menu(ui, param, effect));
+                    }
                 });
                 ui.end_row();
                 if let Some(animation) = effect.animations.get_mut(param.id) {
@@ -166,6 +177,62 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect) {
                     ui.end_row();
                 }
             }
+        });
+}
+
+/// Links a setting to a slider of the dashboard, or unlinks it.
+fn link_menu(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
+    let mut link = effect.links.get(param.id).copied();
+    let text = link.map_or_else(|| "—".to_owned(), |index| format!("C{}", index + 1));
+    egui::ComboBox::from_id_salt("link")
+        .width(44.0)
+        .selected_text(text)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut link, None, "Aucun curseur");
+            for index in 0..DASHBOARD_SIZE {
+                ui.selectable_value(&mut link, Some(index), format!("Curseur {}", index + 1));
+            }
+        })
+        .response
+        .on_hover_text(
+            "Suivre un curseur du tableau de bord du clip, sur toute la plage du réglage",
+        );
+    match link {
+        Some(index) => {
+            effect.links.insert(param.id.to_owned(), index);
+        }
+        None => {
+            effect.links.remove(param.id);
+        }
+    }
+}
+
+/// A collapsible section with the sliders of a clip's dashboard.
+pub(crate) fn dashboard_section(
+    ui: &mut egui::Ui,
+    id: impl Hash + Debug,
+    dashboard: &mut [Unit; DASHBOARD_SIZE],
+) {
+    egui::CollapsingHeader::new(RichText::new("Tableau de bord").strong())
+        .id_salt(("dashboard", &id))
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new("Huit curseurs que les réglages d'effet peuvent suivre (menu « — » à côté d'un réglage).")
+                    .weak()
+                    .small(),
+            );
+            egui::Grid::new("dashboard")
+                .num_columns(2)
+                .spacing([12.0, 4.0])
+                .show(ui, |ui| {
+                    for (index, slider) in dashboard.iter_mut().enumerate() {
+                        ui.label(format!("Curseur {}", index + 1));
+                        let mut value = slider.get();
+                        ui.add(egui::Slider::new(&mut value, 0.0..=1.0));
+                        *slider = Unit::new(value);
+                        ui.end_row();
+                    }
+                });
         });
 }
 
@@ -204,7 +271,7 @@ fn animation_toggle(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
 }
 
 /// Shape, period and range of an animation.
-fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation: &mut Animation) {
+pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation: &mut Animation) {
     ui.vertical(|ui| {
         ui.horizontal(|ui| {
             egui::ComboBox::from_id_salt("shape")
