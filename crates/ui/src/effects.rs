@@ -302,6 +302,16 @@ pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation
             } else {
                 Period::Seconds(length)
             };
+            if ui
+                .selectable_label(animation.once, "une fois")
+                .on_hover_text(
+                    "Enveloppe : un seul cycle à chaque lancement du clip, \
+                     puis la dernière valeur est gardée",
+                )
+                .clicked()
+            {
+                animation.once = !animation.once;
+            }
         });
         ui.horizontal(|ui| {
             ui.spacing_mut().slider_width = 70.0;
