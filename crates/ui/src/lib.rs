@@ -17,6 +17,7 @@ mod inspector;
 mod labels;
 mod panel;
 mod preferences;
+mod presets;
 mod shortcuts;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};

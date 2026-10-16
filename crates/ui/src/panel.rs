@@ -14,6 +14,7 @@ use prism_engine::{Command, EngineStatus};
 use crate::crossfade::AutoFade;
 use crate::document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS};
 use crate::preferences::Preferences;
+use crate::presets::PresetStore;
 use crate::shortcuts::Shortcut;
 
 /// A screen that can show the full-screen output.
@@ -101,6 +102,7 @@ pub struct ControlPanel {
     tap: TapTempo,
     /// Input devices, read when the audio menu opens.
     audio_devices: Option<Vec<String>>,
+    pub(crate) presets: PresetStore,
 }
 
 impl ControlPanel {
@@ -122,12 +124,19 @@ impl ControlPanel {
             auto_fade: None,
             tap: TapTempo::default(),
             audio_devices: None,
+            presets: PresetStore::default(),
         }
     }
 
     /// Uses `preferences`, saved to `path` whenever they change.
     pub fn with_preferences(mut self, preferences: Preferences, path: Option<PathBuf>) -> Self {
         self.preferences = preferences;
+        // Presets live next to the preferences.
+        self.presets = PresetStore::new(
+            path.as_ref()
+                .and_then(|path| path.parent())
+                .map(|folder| folder.join("Préréglages")),
+        );
         self.preferences_path = path;
         self
     }

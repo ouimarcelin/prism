@@ -34,6 +34,7 @@ impl ControlPanel {
                     "composition",
                     &mut self.document.composition_mut().effects,
                     false,
+                    &mut self.presets,
                 );
                 ui.separator();
                 let Some(slot) = self.selected else {
@@ -55,7 +56,11 @@ impl ControlPanel {
         let Some(layer) = self.document.composition_mut().layer_mut(slot.layer) else {
             return;
         };
-        ui.heading("Couche");
+        ui.horizontal(|ui| {
+            ui.heading("Couche");
+            self.presets
+                .layer_menu(ui, egui::Id::new(("layer presets", slot.layer)), layer);
+        });
         egui::Grid::new("layer properties")
             .num_columns(2)
             .spacing([12.0, 6.0])
@@ -137,6 +142,7 @@ impl ControlPanel {
             ("layer", slot.layer),
             &mut layer.effects,
             true,
+            &mut self.presets,
         );
     }
 
@@ -205,6 +211,7 @@ impl ControlPanel {
                 ("clip", slot),
                 &mut clip.effects,
                 true,
+                &mut self.presets,
             );
             return;
         }
@@ -326,6 +333,7 @@ impl ControlPanel {
             ("clip", slot),
             &mut clip.effects,
             true,
+            &mut self.presets,
         );
         if relocate {
             self.relocate_dialog(slot);

@@ -9,6 +9,8 @@ use egui::RichText;
 use prism_core::{Animation, Band, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
 use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of};
 
+use crate::presets::PresetStore;
+
 /// A change asked for in the chain editor.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum ChainEdit {
@@ -100,6 +102,7 @@ pub(crate) fn effect_section(
     id: impl Hash + Debug,
     effects: &mut Vec<Effect>,
     dashboard: bool,
+    presets: &mut PresetStore,
 ) {
     let active = effects.iter().filter(|effect| !effect.bypass).count();
     let header = if effects.is_empty() {
@@ -110,7 +113,7 @@ pub(crate) fn effect_section(
     egui::CollapsingHeader::new(RichText::new(header).strong())
         .id_salt(("effects", &id))
         .default_open(!effects.is_empty())
-        .show(ui, |ui| effect_chain(ui, &id, effects, dashboard));
+        .show(ui, |ui| effect_chain(ui, &id, effects, dashboard, presets));
 }
 
 /// Every effect of the chain, then the menu to add one.
@@ -119,6 +122,7 @@ fn effect_chain(
     id: impl Hash + Debug,
     effects: &mut Vec<Effect>,
     dashboard: bool,
+    presets: &mut PresetStore,
 ) {
     let mut edits = Vec::new();
     let count = effects.len();
@@ -173,24 +177,30 @@ fn effect_chain(
         });
     }
 
-    egui::ComboBox::from_id_salt(("add effect", &id))
-        .selected_text("Ajouter un effet…")
-        .show_ui(ui, |ui| {
-            for info in CATALOG {
-                if ui.selectable_label(false, info.label).clicked() {
-                    edits.push(ChainEdit::Add(info.kind));
+    let mut add_menu = |ui: &mut egui::Ui| {
+        egui::ComboBox::from_id_salt(("add effect", &id))
+            .selected_text("Ajouter un effet…")
+            .show_ui(ui, |ui| {
+                for info in CATALOG {
+                    if ui.selectable_label(false, info.label).clicked() {
+                        edits.push(ChainEdit::Add(info.kind));
+                    }
                 }
-            }
-            ui.separator();
-            if ui
-                .selectable_label(false, "Shader ISF…")
-                .on_hover_text("Un effet lu depuis un fichier ISF (.fs)")
-                .clicked()
-                && let Some(path) = pick_isf_file()
-            {
-                edits.push(ChainEdit::AddFile(path));
-            }
-        });
+                ui.separator();
+                if ui
+                    .selectable_label(false, "Shader ISF…")
+                    .on_hover_text("Un effet lu depuis un fichier ISF (.fs)")
+                    .clicked()
+                    && let Some(path) = pick_isf_file()
+                {
+                    edits.push(ChainEdit::AddFile(path));
+                }
+            })
+    };
+    ui.horizontal(|ui| {
+        add_menu(ui);
+        presets.effects_menu(ui, egui::Id::new(("presets", &id)), effects);
+    });
     for edit in &edits {
         apply_edit(effects, edit);
     }
