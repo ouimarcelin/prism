@@ -6,7 +6,7 @@ use crate::FrameTime;
 use crate::text::TEXT_KIND;
 
 /// Parameters an effect can have at most.
-pub const MAX_PARAMS: usize = 8;
+pub const MAX_PARAMS: usize = 16;
 
 /// One setting of an effect.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,7 +27,7 @@ pub struct ParamInfo {
 }
 
 impl ParamInfo {
-    const fn range(
+    pub(crate) const fn range(
         id: &'static str,
         label: &'static str,
         min: f32,
@@ -44,7 +44,7 @@ impl ParamInfo {
         }
     }
 
-    const fn choice(
+    pub(crate) const fn choice(
         id: &'static str,
         label: &'static str,
         choices: &'static [&'static str],
@@ -447,6 +447,17 @@ const ALIGN_CHOICES: &[&str] = &["Centre", "Gauche", "Droite"];
 /// The generator of a kind, if this build knows it.
 pub fn find_generator(kind: &str) -> Option<&'static EffectInfo> {
     GENERATORS.iter().find(|info| info.kind == kind)
+}
+
+/// Description of `effect`: from the catalog, or from its file for an
+/// effect read from a file. `None` for a kind this build does not know or a
+/// file that cannot be used.
+pub fn info_for(effect: &Effect) -> Option<&'static EffectInfo> {
+    if effect.kind == crate::isf::ISF_KIND {
+        crate::isf::shader_of(effect).ok().map(|shader| shader.info)
+    } else {
+        find_any(&effect.kind)
+    }
 }
 
 /// The effect or generator of a kind.

@@ -523,3 +523,85 @@ fn text_is_drawn_where_and_how_it_is_set() {
     let empty = run(&gpu, &[text], width as u32, height as u32, &blank).unwrap();
     assert!(empty.iter().all(|pixel| pixel[3] == 0.0));
 }
+
+/// An effect read from an ISF file written in a temporary folder.
+fn isf(dir: &std::path::Path, name: &str, source: &str) -> Effect {
+    let path = dir.join(name);
+    std::fs::write(&path, source).unwrap();
+    let mut effect = Effect::new(prism_fx::ISF_KIND);
+    effect.file = Some(path);
+    effect
+}
+
+#[test]
+fn isf_shaders_run_like_built_in_effects() {
+    let Some(gpu) = gpu() else { return };
+    let dir = std::env::temp_dir().join(format!("prism-isf-gpu-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+
+    // A filter that keeps the image, scaled by a setting: the same pixel
+    // read back, the right way up, alpha handled.
+    let scale = isf(
+        &dir,
+        "scale.fs",
+        r#"/*{
+            "INPUTS": [
+                { "NAME": "inputImage", "TYPE": "image" },
+                { "NAME": "gain", "TYPE": "float", "MIN": 0.0, "MAX": 2.0, "DEFAULT": 1.0 }
+            ]
+        }*/
+        void main() {
+            vec4 color = IMG_NORM_PIXEL(inputImage, isf_FragNormCoord);
+            gl_FragColor = vec4(color.rgb * gain, color.a);
+        }"#,
+    );
+    let image = [
+        [1.0, 0.0, 0.0, 1.0],
+        [0.0, 0.5, 0.0, 0.5],
+        [0.0, 0.0, 1.0, 1.0],
+        [0.2, 0.2, 0.2, 1.0],
+    ];
+    let same = run(&gpu, std::slice::from_ref(&scale), 2, 2, &image).unwrap();
+    for (got, want) in same.iter().zip(&image) {
+        assert_close(*got, *want, TOLERANCE, "identity");
+    }
+    let mut dimmer = scale;
+    dimmer.set_param("gain", 0.5);
+    let dim = run(&gpu, &[dimmer], 2, 2, &image).unwrap();
+    assert_close(dim[0], [0.5, 0.0, 0.0, 1.0], TOLERANCE, "gain");
+    assert_close(
+        dim[1],
+        [0.0, 0.25, 0.0, 0.5],
+        TOLERANCE,
+        "gain, premultiplied",
+    );
+
+    // A generator: isf_FragNormCoord and gl_FragCoord start at the bottom.
+    let ramp = isf(
+        &dir,
+        "ramp.fs",
+        r#"/*{ "INPUTS": [ { "NAME": "tint", "TYPE": "color", "DEFAULT": [1.0, 1.0, 1.0, 1.0] } ] }*/
+        void main() {
+            float up = gl_FragCoord.y / RENDERSIZE.y;
+            gl_FragColor = vec4(isf_FragNormCoord.y * tint.r, up, 0.0, 1.0);
+        }"#,
+    );
+    let pixels = run(&gpu, &[ramp], 1, 4, &[[0.0; 4]; 4]).unwrap();
+    assert!(pixels[0][0] > 0.8 && pixels[3][0] < 0.2, "{pixels:?}");
+    assert!((pixels[0][0] - pixels[0][1]).abs() < 0.01, "{pixels:?}");
+
+    // A file that does not compile, or is missing: skipped.
+    let broken = isf(&dir, "broken.fs", "/*{}*/ void main() { nope }");
+    assert!(!is_active(&[&broken]));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert!(!is_active(&[&broken]));
+}
+
+#[test]
+fn example_isf_shaders_compile() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/isf");
+    for (name, filter) in [("plasma.fs", false), ("decalage.fs", true)] {
+        let shader = prism_fx::load_isf(&dir.join(name)).unwrap();
+        assert_eq!(shader.filter, filter, "{name}");
+    }
+}

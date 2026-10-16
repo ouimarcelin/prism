@@ -1,11 +1,14 @@
 //! Chains of effects on the GPU.
 
+use std::collections::HashMap;
 use std::num::NonZeroU64;
+use std::sync::Mutex;
 
 use prism_core::{DASHBOARD_SIZE, Effect, Moment};
 use prism_render::{WORKING_FORMAT, wgpu};
 
-use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, find_any};
+use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, info_for};
+use crate::isf::ISF_KIND;
 use crate::text::{Align, TEXT_KIND, TextCache};
 
 const PRELUDE: &str = include_str!("shaders/prelude.wgsl");
@@ -57,6 +60,12 @@ pub struct EffectRenderer {
     sampler: wgpu::Sampler,
     /// By effect of the catalog, then by pass.
     pipelines: Vec<Vec<wgpu::RenderPipeline>>,
+    /// Effects read from files, made when first used, by address of their
+    /// description.
+    loaded: Mutex<HashMap<usize, wgpu::RenderPipeline>>,
+    layout: wgpu::PipelineLayout,
+    /// The prelude alone: vertex stage of effects read from files.
+    vertex: wgpu::ShaderModule,
     params_stride: u64,
 }
 
@@ -110,35 +119,15 @@ impl EffectRenderer {
                 info.passes
                     .iter()
                     .map(|entry| {
-                        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                            label: Some(info.kind),
-                            layout: Some(&layout),
-                            vertex: wgpu::VertexState {
-                                module: &module,
-                                entry_point: Some("vs_main"),
-                                compilation_options: Default::default(),
-                                buffers: &[],
-                            },
-                            fragment: Some(wgpu::FragmentState {
-                                module: &module,
-                                entry_point: Some(entry),
-                                compilation_options: Default::default(),
-                                targets: &[Some(wgpu::ColorTargetState {
-                                    format: WORKING_FORMAT,
-                                    blend: None,
-                                    write_mask: wgpu::ColorWrites::ALL,
-                                })],
-                            }),
-                            primitive: wgpu::PrimitiveState::default(),
-                            depth_stencil: None,
-                            multisample: wgpu::MultisampleState::default(),
-                            multiview_mask: None,
-                            cache: None,
-                        })
+                        render_pipeline(device, &layout, info.kind, &module, &module, entry)
                     })
                     .collect()
             })
             .collect();
+        let vertex = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("effect vertex"),
+            source: wgpu::ShaderSource::Wgsl(PRELUDE.into()),
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("effect"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -150,17 +139,86 @@ impl EffectRenderer {
             bind_group_layout,
             sampler,
             pipelines,
+            loaded: Mutex::default(),
+            layout,
+            vertex,
             params_stride: PARAMS_SIZE.div_ceil(alignment) * alignment,
         }
     }
 
-    fn pipeline(&self, info: &EffectInfo, pass: usize) -> Option<&wgpu::RenderPipeline> {
+    fn pipeline(
+        &self,
+        device: &wgpu::Device,
+        info: &'static EffectInfo,
+        pass: usize,
+    ) -> Option<wgpu::RenderPipeline> {
+        if info.kind == ISF_KIND {
+            // One pass, compiled the first time it is drawn.
+            let mut loaded = self
+                .loaded
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let pipeline = loaded
+                .entry(std::ptr::from_ref(info) as usize)
+                .or_insert_with(|| {
+                    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                        label: Some(info.label),
+                        source: wgpu::ShaderSource::Wgsl(info.source.into()),
+                    });
+                    render_pipeline(
+                        device,
+                        &self.layout,
+                        info.label,
+                        &self.vertex,
+                        &module,
+                        crate::isf::ENTRY_POINT,
+                    )
+                });
+            return Some(pipeline.clone());
+        }
         let index = CATALOG
             .iter()
             .chain(GENERATORS)
             .position(|known| known.kind == info.kind)?;
-        self.pipelines.get(index)?.get(pass)
+        self.pipelines.get(index)?.get(pass).cloned()
     }
+}
+
+/// A full-screen pass of an effect: `vs_main` of `vertex`, `entry` of
+/// `fragment`.
+fn render_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    label: &str,
+    vertex: &wgpu::ShaderModule,
+    fragment: &wgpu::ShaderModule,
+    entry: &str,
+) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(label),
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: vertex,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: fragment,
+            entry_point: Some(entry),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: WORKING_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 /// Whether any of `effects` changes the image: not bypassed, and of a kind
@@ -168,7 +226,7 @@ impl EffectRenderer {
 pub fn is_active(effects: &[&Effect]) -> bool {
     effects
         .iter()
-        .any(|effect| !effect.bypass && find_any(&effect.kind).is_some())
+        .any(|effect| !effect.bypass && info_for(effect).is_some())
 }
 
 struct Target {
@@ -304,7 +362,7 @@ impl EffectChain {
             .iter()
             .filter(|effect| !effect.bypass)
             .filter_map(|effect| {
-                let info = find_any(&effect.kind)?;
+                let info = info_for(effect)?;
                 Some((info, info.values_at(effect, time), *effect))
             })
             .flat_map(|(info, values, effect)| {
@@ -325,7 +383,7 @@ impl EffectChain {
         let mut passes = passes;
         for pass in &mut passes {
             if pass.info.kind == TEXT_KIND {
-                let [line, .., font, align] = pass.values;
+                let [line, font, align] = [0, 6, 7].map(|index| pass.values[index]);
                 let align = match align as u32 {
                     0 => Align::Center,
                     1 => Align::Left,
@@ -364,7 +422,7 @@ impl EffectChain {
 
         let last = passes.len() - 1;
         for (index, pass) in passes.iter().enumerate() {
-            let Some(pipeline) = renderer.pipeline(pass.info, pass.index) else {
+            let Some(pipeline) = renderer.pipeline(device, pass.info, pass.index) else {
                 continue;
             };
             let source = match (&pass.mask, index) {
@@ -414,7 +472,7 @@ impl EffectChain {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            render_pass.set_pipeline(pipeline);
+            render_pass.set_pipeline(&pipeline);
             let offset = u32::try_from(index as u64 * renderer.params_stride)
                 .expect("effect settings exceed the uniform offset range");
             render_pass.set_bind_group(0, &bind_group, &[offset]);
