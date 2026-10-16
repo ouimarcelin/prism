@@ -2,12 +2,13 @@
 //! layout of the interface.
 //!
 //! ```text
-//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT]
+//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator]]
 //! ```
 //!
 //! The window shows a sample project: clips in the grid, the first one
 //! playing, effects on the clip, its layer and the composition, one
-//! setting animated.
+//! setting animated, a generated clip. With `generator`, the generated clip
+//! is the one selected.
 
 use std::process::ExitCode;
 
@@ -19,7 +20,8 @@ use prism_ui::{ControlPanel, Document, FrameInfo, Screen};
 /// Format of the image, as in the control window.
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
-fn sample() -> (Document, Slot, EngineStatus) {
+/// The sample project, the playing slot and a slot holding a generator.
+fn sample() -> (Document, Slot, Slot, EngineStatus) {
     let mut composition = Composition::default();
     let layers: Vec<_> = composition
         .layers()
@@ -55,6 +57,12 @@ fn sample() -> (Document, Slot, EngineStatus) {
         layer.effects = vec![color];
     }
     composition.effects = vec![Effect::new("mirror")];
+    let generated = Slot::new(layers[3], columns[0]);
+    let mut gradient = Clip::from_generator("Dégradé", "gradient");
+    if let Some(generator) = gradient.source.generator_mut() {
+        generator.set_param("angle", 45.0);
+    }
+    let _ = composition.set_clip(generated, Some(gradient));
     let status = EngineStatus {
         fps: 60.0,
         frame_time_ms: 2.1,
@@ -72,13 +80,13 @@ fn sample() -> (Document, Slot, EngineStatus) {
         }],
         ..EngineStatus::default()
     };
-    (Document::new(composition), slot, status)
+    (Document::new(composition), slot, generated, status)
 }
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT]");
+        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator]]");
         return ExitCode::FAILURE;
     };
     let size = |index: usize, default: u32| {
@@ -95,9 +103,10 @@ fn main() -> ExitCode {
         }
     };
 
-    let (document, slot, status) = sample();
+    let (document, slot, generated, status) = sample();
     let mut panel = ControlPanel::new(document, Vec::new());
-    panel.select(Some(slot));
+    let show_generator = args.get(3).is_some_and(|arg| arg == "generator");
+    panel.select(Some(if show_generator { generated } else { slot }));
     let screens = [Screen {
         name: "Intégré".into(),
         width: 2880,

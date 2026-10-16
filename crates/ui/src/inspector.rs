@@ -2,10 +2,13 @@
 //! properties of the selected layer and clip.
 
 use egui::{RichText, Vec2};
-use prism_core::{CUE_POINT_COUNT, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit};
+use prism_core::{
+    CUE_POINT_COUNT, Clip, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit,
+};
 use prism_engine::{Command, LayerStatus};
+use prism_fx::GENERATORS;
 
-use crate::effects::effect_section;
+use crate::effects::{effect_section, generator_settings};
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
 
@@ -104,9 +107,40 @@ impl ControlPanel {
         let missing = self.is_missing(slot);
         if self.document.composition().clip(slot).is_none() {
             ui.label(RichText::new("Case vide.").weak());
-            if ui.button("Importer des médias…").clicked() {
-                self.import_dialog(Some(slot));
+            ui.horizontal(|ui| {
+                if ui.button("Importer des médias…").clicked() {
+                    self.import_dialog(Some(slot));
+                }
+                egui::ComboBox::from_id_salt("new generator")
+                    .selected_text("Générateur…")
+                    .show_ui(ui, |ui| {
+                        for info in GENERATORS {
+                            if ui.selectable_label(false, info.label).clicked() {
+                                let clip = Clip::from_generator(info.label, info.kind);
+                                let _ = self.document.composition_mut().set_clip(slot, Some(clip));
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Une image dessinée par le GPU, sans fichier");
+            });
+            return;
+        }
+        if let Some(clip) = self.document.composition_mut().clip_mut(slot)
+            && clip.source.generator().is_some()
+        {
+            egui::Grid::new("generated clip")
+                .num_columns(2)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("Nom");
+                    ui.text_edit_singleline(&mut clip.name);
+                    ui.end_row();
+                });
+            if let Some(generator) = clip.source.generator_mut() {
+                generator_settings(ui, generator);
             }
+            effect_section(ui, "Effets du clip", ("clip", slot), &mut clip.effects);
             return;
         }
         let playing = status.filter(|status| status.slot == Some(slot));
