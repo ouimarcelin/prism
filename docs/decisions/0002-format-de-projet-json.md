@@ -28,3 +28,9 @@ Option 2, implémentée dans `crates/core/src/project.rs` :
 
 - Chaque changement incompatible du format augmente `FORMAT_VERSION` et ajoute une conversion depuis les versions précédentes, avec un test.
 - Les champs ajoutés plus tard ont une valeur par défaut, pour que les anciens fichiers restent lisibles sans conversion.
+
+## Ajout du 2026-10-17 (ticket 24) : préréglages
+
+- Un préréglage est un fichier JSON à son nom, avec `format_version` (1) et `kind` : `effects` (liste d'effets) ou `layer` (opacité, fusion, côté du crossfader, transition, effets, animation de l'opacité ; ni nom, ni clips, ni état).
+- Dossiers `Préréglages/Effets` et `Préréglages/Couches` à côté du fichier de préférences (sur macOS : `~/Library/Application Support/Prism`). Les chemins de fichiers d'effets (shaders ISF) y restent absolus.
+- Appliquer un préréglage d'effets ajoute ses effets à la fin de la chaîne ; appliquer un préréglage de couche remplace ses réglages et ses effets. Un nom déjà pris remplace le préréglage.
