@@ -91,3 +91,35 @@ fn prores_4444_alpha_is_straight() {
     // Straight alpha keeps full red; premultiplied would halve it.
     assert!(r >= 245 && g <= 10 && b <= 10, "color {:?}", [r, g, b]);
 }
+
+/// Frequency of a channel, from its rising zero crossings.
+fn frequency(samples: &[i16], channel: usize) -> f64 {
+    let channel: Vec<i16> = samples.iter().skip(channel).step_by(2).copied().collect();
+    let crossings = channel
+        .windows(2)
+        .filter(|pair| pair[0] < 0 && pair[1] >= 0)
+        .count();
+    crossings as f64 * f64::from(prism_media::AUDIO_RATE) / channel.len() as f64
+}
+
+#[test]
+fn sound_tracks_are_decoded_whole_in_stereo() {
+    // 0.25 s: 440 Hz on the left, 1 kHz on the right, 16-bit PCM.
+    let audio = prism_media::decode_audio(&fixture("tone-440-1000.mov"))
+        .unwrap()
+        .unwrap();
+    assert!(
+        (audio.duration() - 0.25).abs() < 0.01,
+        "{}",
+        audio.duration()
+    );
+    let left = frequency(&audio.samples, 0);
+    let right = frequency(&audio.samples, 1);
+    assert!((left - 440.0).abs() < 10.0, "{left}");
+    assert!((right - 1000.0).abs() < 10.0, "{right}");
+    // Movies without sound.
+    assert_eq!(
+        prism_media::decode_audio(&fixture("rgb-thirds-h264.mp4")).unwrap(),
+        None
+    );
+}

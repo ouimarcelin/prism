@@ -14,7 +14,12 @@ use std::path::Path;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::AnyObject;
 use objc2_av_foundation::{
-    AVAssetReader, AVAssetReaderTrackOutput, AVAssetTrack, AVMediaTypeVideo, AVURLAsset,
+    AVAssetReader, AVAssetReaderTrackOutput, AVAssetTrack, AVMediaTypeAudio, AVMediaTypeVideo,
+    AVURLAsset,
+};
+use objc2_avf_audio::{
+    AVFormatIDKey, AVLinearPCMBitDepthKey, AVLinearPCMIsBigEndianKey, AVLinearPCMIsFloatKey,
+    AVLinearPCMIsNonInterleaved, AVNumberOfChannelsKey, AVSampleRateKey,
 };
 use objc2_core_foundation::CFString;
 use objc2_core_media::{CMTime, CMTimeRange, kCMTimePositiveInfinity};
@@ -29,6 +34,7 @@ use objc2_core_video::{
 };
 use objc2_foundation::{NSDictionary, NSError, NSNumber, NSString, NSURL};
 
+use crate::audio::{AUDIO_RATE, ClipAudio, MAX_AUDIO_SECONDS};
 use crate::decoder::DecodeError;
 use crate::source::{ChannelOrder, Frame, FrameSource, MediaInfo, RgbaImage, YuvImage, YuvMatrix};
 
@@ -344,4 +350,116 @@ fn matrix(buffer: &CVPixelBuffer, height: usize) -> YuvMatrix {
         None if height < 720 => YuvMatrix::Bt601,
         None => YuvMatrix::Bt709,
     }
+}
+
+/// Linear PCM, as Core Audio names it.
+const LINEAR_PCM: u32 = u32::from_be_bytes(*b"lpcm");
+
+/// Decodes the first sound track of a file whole, as 16-bit stereo at
+/// [`AUDIO_RATE`]. `None` when the file has no sound track.
+pub(crate) fn decode_audio(path: &Path) -> Result<Option<ClipAudio>, DecodeError> {
+    autoreleasepool(|_| {
+        let url = NSURL::from_file_path(path).ok_or_else(|| {
+            DecodeError::Platform(format!("chemin invalide : {}", path.display()))
+        })?;
+        // SAFETY: plain constructor; no options dictionary is passed.
+        let asset = unsafe { AVURLAsset::URLAssetWithURL_options(&url, None) };
+        // SAFETY: reading an immutable framework constant.
+        let audio = unsafe { AVMediaTypeAudio }
+            .ok_or_else(|| DecodeError::Platform("type de média audio indisponible".into()))?;
+        // SAFETY: synchronous track list of a local file asset, on a worker
+        // thread.
+        #[allow(deprecated)]
+        let tracks = unsafe { asset.tracksWithMediaType(audio) };
+        let Some(track) = tracks.firstObject() else {
+            return Ok(None);
+        };
+        // SAFETY: the asset is valid for this call.
+        let reader = unsafe { AVAssetReader::assetReaderWithAsset_error(&asset) }
+            .map_err(|error| platform_error("lecteur audio impossible", Some(error)))?;
+
+        // SAFETY: reading immutable framework constants.
+        let keys = unsafe {
+            [
+                AVFormatIDKey,
+                AVSampleRateKey,
+                AVNumberOfChannelsKey,
+                AVLinearPCMBitDepthKey,
+                AVLinearPCMIsFloatKey,
+                AVLinearPCMIsBigEndianKey,
+                AVLinearPCMIsNonInterleaved,
+            ]
+        };
+        let keys: Vec<&NSString> = keys
+            .into_iter()
+            .collect::<Option<_>>()
+            .ok_or_else(|| DecodeError::Platform("réglages audio indisponibles".into()))?;
+        let values = [
+            NSNumber::numberWithUnsignedInt(LINEAR_PCM),
+            NSNumber::numberWithUnsignedInt(AUDIO_RATE),
+            NSNumber::numberWithUnsignedInt(2),
+            NSNumber::numberWithUnsignedInt(16),
+            NSNumber::numberWithBool(false),
+            NSNumber::numberWithBool(false),
+            NSNumber::numberWithBool(false),
+        ];
+        let values: Vec<&AnyObject> = values.iter().map(|value| -> &AnyObject { value }).collect();
+        let settings = NSDictionary::from_slices(&keys, &values);
+        // SAFETY: the settings ask for linear PCM with the keys AVFoundation
+        // documents for it.
+        let output = unsafe {
+            AVAssetReaderTrackOutput::assetReaderTrackOutputWithTrack_outputSettings(
+                &track,
+                Some(&settings),
+            )
+        };
+        // SAFETY: setters and start of a fresh reader, before reading.
+        let started = unsafe {
+            output.setAlwaysCopiesSampleData(false);
+            reader.addOutput(&output);
+            reader.startReading()
+        };
+        if !started {
+            // SAFETY: property getter of a valid reader.
+            return Err(platform_error("lecture audio impossible", unsafe {
+                reader.error()
+            }));
+        }
+        let limit = (MAX_AUDIO_SECONDS * f64::from(AUDIO_RATE)) as usize * 2;
+        let mut samples: Vec<i16> = Vec::new();
+        let mut bytes: Vec<u8> = Vec::new();
+        // SAFETY: the output belongs to the started reader.
+        while let Some(sample) = unsafe { output.copyNextSampleBuffer() } {
+            // SAFETY: getter of a valid sample buffer.
+            let Some(block) = (unsafe { sample.data_buffer() }) else {
+                continue;
+            };
+            // SAFETY: getter of a valid block buffer.
+            let length = unsafe { block.data_length() };
+            bytes.resize(length, 0);
+            if let Some(destination) = std::ptr::NonNull::new(bytes.as_mut_ptr().cast()) {
+                // SAFETY: `bytes` holds `length` bytes, the length copied.
+                let status = unsafe { block.copy_data_bytes(0, length, destination) };
+                if status != 0 {
+                    return Err(DecodeError::Platform(format!(
+                        "échantillons audio illisibles ({status})"
+                    )));
+                }
+            }
+            samples.extend(
+                bytes
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|pair| i16::from_le_bytes(*pair)),
+            );
+            if samples.len() >= limit {
+                samples.truncate(limit);
+                // SAFETY: stops a reader this function owns.
+                unsafe { reader.cancelReading() };
+                break;
+            }
+        }
+        Ok(Some(ClipAudio { samples }))
+    })
 }

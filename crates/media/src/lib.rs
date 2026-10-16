@@ -15,6 +15,7 @@
 //! This crate does not depend on the GPU: uploading textures is the job of
 //! `prism-render`.
 
+mod audio;
 #[cfg(target_os = "macos")]
 mod avf;
 mod decoder;
@@ -25,6 +26,7 @@ mod source;
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
 
+pub use audio::{AUDIO_RATE, ClipAudio, MAX_AUDIO_SECONDS, decode_audio};
 pub use decoder::{DecodeError, HapDecoder, is_hap};
 pub use hap::{BlockFormat, ColorLayout, HapError, HapFrame, Plane};
 pub use image::{IMAGE_EXTENSIONS, ImageSequence, StillImage, decode_image, natural_order};
