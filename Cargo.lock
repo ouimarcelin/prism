@@ -2152,6 +2152,7 @@ dependencies = [
  "egui-winit",
  "png",
  "pollster 1.0.1",
+ "prism-audio",
  "prism-core",
  "prism-engine",
  "prism-output",
@@ -2190,6 +2191,7 @@ version = "0.0.0"
 dependencies = [
  "libc",
  "png",
+ "prism-audio",
  "prism-clock",
  "prism-core",
  "prism-fx",
@@ -2264,6 +2266,7 @@ name = "prism-ui"
 version = "0.0.0"
 dependencies = [
  "egui",
+ "prism-audio",
  "prism-clock",
  "prism-core",
  "prism-engine",

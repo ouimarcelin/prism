@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::num::NonZeroU64;
 use std::sync::Mutex;
 
-use prism_core::{DASHBOARD_SIZE, Effect, Moment};
+use prism_core::{BAND_COUNT, DASHBOARD_SIZE, Effect, Moment};
 use prism_render::{WORKING_FORMAT, wgpu};
 
 use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, info_for};
@@ -45,6 +45,9 @@ pub struct FrameTime {
     /// Sliders of the dashboard of the clip the chain belongs to, from
     /// `0.0` to `1.0`; all at `0.0` for the composition.
     pub dashboard: [f32; DASHBOARD_SIZE],
+    /// Levels of the sound coming in, from `0.0` to `1.0`, in the order of
+    /// [`prism_core::Band::ALL`].
+    pub audio: [f32; BAND_COUNT],
 }
 
 impl FrameTime {

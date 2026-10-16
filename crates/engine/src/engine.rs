@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use prism_audio::AudioLevels;
 use prism_clock::BeatClock;
 use prism_core::{Composition, Effect, LayerId, Resolution, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
@@ -307,6 +308,7 @@ pub struct EngineState {
     submitted: u64,
     gpu_progress: Arc<GpuProgress>,
     stats: Stats,
+    audio: Arc<AudioLevels>,
 }
 
 impl EngineState {
@@ -341,6 +343,7 @@ impl EngineState {
             last_tick: None,
             submitted: 0,
             gpu_progress: Arc::default(),
+            audio: Arc::default(),
             stats: Stats {
                 frames: 0,
                 late_ticks: 0,
@@ -371,6 +374,12 @@ impl EngineState {
     /// Program image. Replaced when the composition resolution changes.
     pub fn program(&self) -> Arc<ProgramOutput> {
         Arc::clone(&self.program)
+    }
+
+    /// Levels of the sound that settings follow: whoever measures the
+    /// sound writes them here.
+    pub fn audio_levels(&self) -> Arc<AudioLevels> {
+        Arc::clone(&self.audio)
     }
 
     /// Plays `composition` from the next frame.
@@ -558,6 +567,7 @@ impl EngineState {
         let time = FrameTime {
             seconds: now.saturating_duration_since(self.started).as_secs_f64(),
             beat: self.beat,
+            audio: self.audio.get(),
             ..FrameTime::default()
         };
         for runtime in &mut self.layers {
@@ -826,12 +836,14 @@ pub struct Engine {
     commands: Sender<Command>,
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
+    audio: Arc<AudioLevels>,
 }
 
 impl Engine {
     /// Starts the render thread on `composition`.
     pub fn start(gpu: Arc<Gpu>, composition: Composition) -> std::io::Result<Self> {
         let state = EngineState::new(gpu, composition);
+        let audio = state.audio_levels();
         let shared = Arc::new(Shared {
             status: Mutex::new(state.status()),
             program: Mutex::new(state.program()),
@@ -845,7 +857,14 @@ impl Engine {
             commands,
             shared,
             thread: Some(thread),
+            audio,
         })
+    }
+
+    /// Levels of the sound that settings follow, see
+    /// [`EngineState::audio_levels`].
+    pub fn audio_levels(&self) -> Arc<AudioLevels> {
+        Arc::clone(&self.audio)
     }
 
     /// Sends a command to the render thread.

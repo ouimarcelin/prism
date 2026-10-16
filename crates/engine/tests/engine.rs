@@ -780,3 +780,29 @@ fn envelopes_start_at_each_launch() {
     let again = brightness(&mut driver);
     assert!(again < 0.1, "{again}");
 }
+
+#[test]
+fn settings_follow_the_bands_of_the_sound() {
+    let Some(gpu) = gpu() else { return };
+    // White solid color whose brightness follows the bass.
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .audio
+        .insert("brightness".into(), prism_core::Band::Bass);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    driver.settle(|status| status.state == ClipState::Playing);
+    let program = driver.state.program();
+    let levels = driver.state.audio_levels();
+    let brightness = |driver: &mut Driver| {
+        driver.tick();
+        read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0][0]
+    };
+    assert!(brightness(&mut driver) < 0.01);
+    levels.set([0.0, 0.75, 0.0, 0.0]);
+    let loud = brightness(&mut driver);
+    assert!((loud - 0.75).abs() < 0.01, "{loud}");
+}
