@@ -728,3 +728,55 @@ fn dashboard_sliders_and_animated_opacity_drive_the_image() {
     let quarter = pixel(&mut driver);
     assert!((quarter[0] - 0.25).abs() < 0.01, "{quarter:?}");
 }
+
+#[test]
+fn envelopes_start_at_each_launch() {
+    let Some(gpu) = gpu() else { return };
+    // White solid color whose brightness ramps up over one beat from the
+    // launch, then holds.
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    let mut envelope = prism_core::Animation::new(0.0, 1.0);
+    envelope.shape = prism_core::Shape::Ramp;
+    envelope.period = prism_core::Period::Beats(1.0);
+    envelope.once = true;
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .animations
+        .insert("brightness".into(), envelope);
+    let (mut comp, slot) = composition_with(clip);
+    comp.tempo = prism_core::Bpm::new(60.0);
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    // Half a minute in, long after the start of the engine.
+    for _ in 0..(30.0 * FPS) as usize {
+        driver.now += Duration::from_secs_f64(1.0 / FPS);
+    }
+    driver.tick();
+    comp.trigger_clip(slot).unwrap();
+    driver.state.set_composition(comp.clone());
+    driver.settle(|status| status.state == ClipState::Playing);
+    let program = driver.state.program();
+    let brightness = |driver: &mut Driver| {
+        driver.tick();
+        read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0][0]
+    };
+    // At 60 BPM a beat lasts a second: dark at the launch, half way after
+    // half a second, then full and held.
+    let start = brightness(&mut driver);
+    assert!(start < 0.1, "{start}");
+    for _ in 0..(FPS / 2.0) as usize - 2 {
+        driver.tick();
+    }
+    let half = brightness(&mut driver);
+    assert!((half - 0.5).abs() < 0.1, "{half}");
+    for _ in 0..(FPS * 2.0) as usize {
+        driver.tick();
+    }
+    assert!(brightness(&mut driver) > 0.99);
+
+    // Launched again: back to the start.
+    comp.trigger_clip(slot).unwrap();
+    driver.state.set_composition(comp);
+    let again = brightness(&mut driver);
+    assert!(again < 0.1, "{again}");
+}

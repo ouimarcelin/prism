@@ -444,6 +444,13 @@ impl EngineState {
 
     /// Starts, restarts or stops clips to match the composition.
     fn sync_layers(&mut self) {
+        // Clips launched now start their envelopes at the last frame, on the
+        // clock frames are rendered with.
+        let now = self.last_tick.unwrap_or_else(Instant::now);
+        let launch = (
+            self.clock.beat_at(now),
+            now.saturating_duration_since(self.started).as_secs_f64(),
+        );
         let composition = &self.composition;
         self.layers
             .retain(|runtime| composition.layer(runtime.id).is_some());
@@ -470,11 +477,12 @@ impl EngineState {
                     Some(stream) if stream.plays(slot, source) => {
                         stream.set_playback(playback);
                         if retriggered {
-                            stream.restart();
+                            stream.restart(launch);
                         }
                     }
                     _ => {
-                        let stream = ClipStream::open(slot, source.clone(), playback.clone());
+                        let stream =
+                            ClipStream::open(slot, source.clone(), playback.clone(), launch);
                         runtime.switch(Some(stream), layer.transition_ms);
                     }
                 },
@@ -560,11 +568,13 @@ impl EngineState {
             for stream in runtime.streams_mut() {
                 let clip = self.composition.clip(stream.slot());
                 let clip_effects = clip.map_or(&[][..], |clip| &clip.effects[..]);
-                // Settings follow the dashboard of the clip.
+                // Settings follow the dashboard of the clip, envelopes its
+                // launch.
                 let mut time = time;
                 if let Some(clip) = clip {
                     time.dashboard = clip.dashboard.map(Unit::get);
                 }
+                (time.launch_beat, time.launch_seconds) = stream.launched();
                 let generator = clip.and_then(|clip| clip.source.generator());
                 match generator {
                     // A generated clip is drawn at the composition size.
@@ -606,10 +616,13 @@ impl EngineState {
 
         let mut inputs = Vec::with_capacity(self.layers.len());
         for runtime in &self.layers {
-            let Some(opacity) =
-                self.composition
-                    .effective_opacity_at(runtime.id, self.beat, time.seconds)
-            else {
+            // An opacity envelope starts with the clip playing on the layer.
+            let (beat, seconds) = runtime
+                .current
+                .as_ref()
+                .map_or((0.0, 0.0), ClipStream::launched);
+            let moment = time.moment().launched_at(beat, seconds);
+            let Some(opacity) = self.composition.effective_opacity_at(runtime.id, moment) else {
                 continue;
             };
             let Some(layer) = self.composition.layer(runtime.id) else {
@@ -642,6 +655,16 @@ impl EngineState {
             .encode(&gpu.device, &gpu.queue, &mut encoder, &inputs, destination);
         drop(inputs);
         if let Some((_, view)) = &mix {
+            // Envelopes of the composition start at the last launch.
+            let mut time = time;
+            if let Some((beat, seconds)) = self
+                .layers
+                .iter()
+                .filter_map(|runtime| runtime.current.as_ref().map(ClipStream::launched))
+                .max_by(|a, b| a.1.total_cmp(&b.1))
+            {
+                (time.launch_beat, time.launch_seconds) = (beat, seconds);
+            }
             self.composition_effects.apply_into(
                 &self.fx,
                 &gpu.device,

@@ -2,7 +2,7 @@
 
 use std::num::NonZeroU64;
 
-use prism_core::{DASHBOARD_SIZE, Effect};
+use prism_core::{DASHBOARD_SIZE, Effect, Moment};
 use prism_render::{WORKING_FORMAT, wgpu};
 
 use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, find_any};
@@ -29,9 +29,21 @@ pub struct FrameTime {
     pub seconds: f64,
     /// Beat position of the tempo clock.
     pub beat: f64,
+    /// Beat position when the clip the chain belongs to was launched, for
+    /// envelopes; the last launch of any clip for the composition.
+    pub launch_beat: f64,
+    /// Seconds since the engine started, when the clip was launched.
+    pub launch_seconds: f64,
     /// Sliders of the dashboard of the clip the chain belongs to, from
     /// `0.0` to `1.0`; all at `0.0` for the composition.
     pub dashboard: [f32; DASHBOARD_SIZE],
+}
+
+impl FrameTime {
+    /// Where the clocks stand, for animations.
+    pub fn moment(&self) -> Moment {
+        Moment::new(self.beat, self.seconds).launched_at(self.launch_beat, self.launch_seconds)
+    }
 }
 
 /// Pipelines of every effect of the catalog, shared by all chains.

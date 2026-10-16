@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Slot, Unit};
+use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Moment, Slot, Unit};
 
 /// Largest width or height accepted for a composition, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -487,11 +487,11 @@ impl Composition {
         self.opacity_with(id, |layer| layer.opacity.get())
     }
 
-    /// Like [`Composition::effective_opacity`], at beat position `beat`,
-    /// `seconds` after the start: an animated opacity takes its value then.
-    pub fn effective_opacity_at(&self, id: LayerId, beat: f64, seconds: f64) -> Option<f32> {
+    /// Like [`Composition::effective_opacity`], at moment `at`: an animated
+    /// opacity takes its value then.
+    pub fn effective_opacity_at(&self, id: LayerId, at: Moment) -> Option<f32> {
         self.opacity_with(id, |layer| match &layer.opacity_animation {
-            Some(animation) => Unit::new(animation.value_at(beat, seconds)).get(),
+            Some(animation) => Unit::new(animation.value_at(at)).get(),
             None => layer.opacity.get(),
         })
     }
@@ -664,17 +664,29 @@ mod tests {
         let mut comp = grid(1, 1);
         let id = comp.layers()[0].id();
         comp.layer_mut(id).unwrap().opacity = Unit::new(0.4);
-        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.4));
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            Some(0.4)
+        );
         let mut animation = crate::Animation::new(0.0, 2.0);
         animation.shape = crate::Shape::Ramp;
         animation.period = crate::Period::Beats(4.0);
         comp.layer_mut(id).unwrap().opacity_animation = Some(animation);
-        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.5));
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            Some(0.5)
+        );
         // Out of range values are clamped; the set opacity is kept.
-        assert_eq!(comp.effective_opacity_at(id, 3.0, 0.0), Some(1.0));
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(3.0, 0.0)),
+            Some(1.0)
+        );
         assert_eq!(comp.effective_opacity(id), Some(0.4));
         comp.layer_mut(id).unwrap().bypass = true;
-        assert_eq!(comp.effective_opacity_at(id, 1.0, 0.0), Some(0.0));
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            Some(0.0)
+        );
     }
 
     #[test]
