@@ -12,6 +12,9 @@ struct Params {
     time: f32,
     // Beat position of the tempo clock.
     beat: f32,
+    // Line height of the text mask read as `source`, in pixels (text
+    // generator only).
+    mask_line: f32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;

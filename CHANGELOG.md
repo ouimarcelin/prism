@@ -25,6 +25,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Générateur de texte : texte sur plusieurs lignes saisi dans l'inspecteur, police Ubuntu Light ou Hack, alignement, taille, position et couleur réglables et animables (ADR 0017).
 - Enveloppes : une animation réglée « une fois » joue un seul cycle à chaque lancement du clip, puis garde sa dernière valeur (montée avec la rampe, aller-retour avec le triangle ou le sinus).
 - Tableau de bord de 8 curseurs par clip ; un réglage d'effet du clip ou de sa couche (et d'un générateur) peut suivre un curseur sur toute sa plage. Opacité des couches animable (« ~ »).
 - Générateurs : clips dessinés par le GPU sans fichier (couleur unie, dégradé, lignes, cercles, damier, bruit), créés depuis une case vide de l'inspecteur, réglables et animables comme les effets ; lignes, cercles, damier, bruit et dégradé peuvent bouger au tempo ; un réglage modifié ne relance pas le clip.

@@ -3,6 +3,7 @@
 use prism_core::Effect;
 
 use crate::FrameTime;
+use crate::text::TEXT_KIND;
 
 /// Parameters an effect can have at most.
 pub const MAX_PARAMS: usize = 8;
@@ -85,6 +86,8 @@ pub struct EffectInfo {
     pub label: &'static str,
     /// Settings, in display order.
     pub params: &'static [ParamInfo],
+    /// For generators that draw a text: the text of a new one.
+    pub text: Option<&'static str>,
     pub(crate) source: &'static str,
     pub(crate) passes: Passes,
 }
@@ -123,7 +126,9 @@ impl EffectInfo {
 
     /// A new effect of this kind, every parameter at its default.
     pub fn create(&self) -> Effect {
-        Effect::new(self.kind)
+        let mut effect = Effect::new(self.kind);
+        effect.text = self.text.unwrap_or_default().into();
+        effect
     }
 }
 
@@ -147,6 +152,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/color.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "invert",
@@ -154,6 +160,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("amount", "Quantité", 0.0, 1.0, 1.0)],
         source: include_str!("shaders/invert.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "transform",
@@ -166,6 +173,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/transform.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "mirror",
@@ -173,6 +181,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::choice("mode", "Sens", MIRROR_CHOICES)],
         source: include_str!("shaders/mirror.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "kaleidoscope",
@@ -184,6 +193,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/kaleidoscope.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "blur",
@@ -191,6 +201,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("radius", "Rayon", 0.0, 64.0, 8.0)],
         source: include_str!("shaders/blur.wgsl"),
         passes: &["fs_horizontal", "fs_vertical"],
+        text: None,
     },
     EffectInfo {
         kind: "pixelate",
@@ -198,6 +209,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("size", "Taille", 1.0, 128.0, 16.0)],
         source: include_str!("shaders/pixelate.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "posterize",
@@ -205,6 +217,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("levels", "Niveaux", 2.0, 32.0, 6.0)],
         source: include_str!("shaders/posterize.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "threshold",
@@ -215,6 +228,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/threshold.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "edges",
@@ -225,6 +239,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/edges.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "rgb_split",
@@ -235,6 +250,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/rgb_split.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "glitch",
@@ -246,6 +262,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/glitch.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "wave",
@@ -258,6 +275,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/wave.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "swirl",
@@ -268,6 +286,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/swirl.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "tile",
@@ -279,6 +298,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/tile.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "vignette",
@@ -289,6 +309,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/vignette.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "strobe",
@@ -300,6 +321,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/strobe.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "colorize",
@@ -311,6 +333,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/colorize.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
 ];
 
@@ -334,6 +357,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/solid.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "gradient",
@@ -347,6 +371,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/gradient.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "lines",
@@ -359,6 +384,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/lines.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "rings",
@@ -370,6 +396,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/rings.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "checker",
@@ -380,6 +407,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/checker.wgsl"),
         passes: &["fs_main"],
+        text: None,
     },
     EffectInfo {
         kind: "noise",
@@ -391,10 +419,30 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/noise.wgsl"),
         passes: &["fs_main"],
+        text: None,
+    },
+    EffectInfo {
+        kind: TEXT_KIND,
+        label: "Texte",
+        params: &[
+            ParamInfo::range("size", "Taille", 0.02, 1.0, 0.15),
+            ParamInfo::range("x", "Position X", -1.0, 1.0, 0.0),
+            ParamInfo::range("y", "Position Y", -1.0, 1.0, 0.0),
+            ParamInfo::range("hue", "Teinte", 0.0, 360.0, 0.0),
+            ParamInfo::range("saturation", "Saturation", 0.0, 1.0, 0.0),
+            ParamInfo::range("brightness", "Luminosité", 0.0, 1.0, 1.0),
+            ParamInfo::choice("font", "Police", FONT_CHOICES),
+            ParamInfo::choice("align", "Alignement", ALIGN_CHOICES),
+        ],
+        text: Some("Texte"),
+        source: include_str!("shaders/text.wgsl"),
+        passes: &["fs_main"],
     },
 ];
 
 const NOISE_CHOICES: &[&str] = &["Gris", "Couleur"];
+const FONT_CHOICES: &[&str] = &["Ubuntu Light", "Hack"];
+const ALIGN_CHOICES: &[&str] = &["Centre", "Gauche", "Droite"];
 
 /// The generator of a kind, if this build knows it.
 pub fn find_generator(kind: &str) -> Option<&'static EffectInfo> {

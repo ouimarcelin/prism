@@ -13,6 +13,8 @@
 
 mod catalog;
 mod chain;
+mod text;
 
 pub use catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, ParamInfo, find, find_generator};
 pub use chain::{EffectChain, EffectRenderer, FrameTime, is_active};
+pub use text::TEXT_KIND;

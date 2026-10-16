@@ -138,6 +138,14 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
     match find_generator(&generator.kind) {
         Some(info) => {
             ui.label(RichText::new(info.label).strong());
+            if info.text.is_some() {
+                ui.add(
+                    egui::TextEdit::multiline(&mut generator.text)
+                        .desired_rows(2)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Texte à afficher"),
+                );
+            }
             ui.push_id("generator", |ui| settings(ui, info, generator, true));
         }
         None => {

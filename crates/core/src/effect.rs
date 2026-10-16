@@ -29,6 +29,9 @@ pub struct Effect {
     /// parameter. An animation goes first.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub links: BTreeMap<String, usize>,
+    /// Text drawn, for a generator that draws one; empty otherwise.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
 }
 
 impl Effect {
@@ -40,6 +43,7 @@ impl Effect {
             bypass: false,
             animations: BTreeMap::new(),
             links: BTreeMap::new(),
+            text: String::new(),
         }
     }
 

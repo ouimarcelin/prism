@@ -2050,11 +2050,14 @@ dependencies = [
 name = "prism-fx"
 version = "0.0.0"
 dependencies = [
+ "ab_glyph_rasterizer",
  "bytemuck",
+ "epaint_default_fonts",
  "png",
  "prism-clock",
  "prism-core",
  "prism-render",
+ "skrifa",
 ]
 
 [[package]]

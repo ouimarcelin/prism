@@ -7,8 +7,8 @@
 //!
 //! The window shows a sample project: clips in the grid, the first one
 //! playing, effects on the clip, its layer and the composition, one
-//! setting animated, a generated clip. With `generator`, the generated clip
-//! is the one selected.
+//! setting animated, generated clips. With `generator`, the generated text
+//! clip is the one selected.
 
 use std::process::ExitCode;
 
@@ -58,11 +58,17 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
     }
     composition.effects = vec![Effect::new("mirror")];
     let generated = Slot::new(layers[3], columns[0]);
+    let mut text = Clip::from_generator("Texte", "text");
+    if let Some(generator) = text.source.generator_mut() {
+        generator.text = "Bienvenue\nau club".into();
+        generator.set_param("size", 0.2);
+    }
+    let _ = composition.set_clip(generated, Some(text));
     let mut gradient = Clip::from_generator("Dégradé", "gradient");
     if let Some(generator) = gradient.source.generator_mut() {
         generator.set_param("angle", 45.0);
     }
-    let _ = composition.set_clip(generated, Some(gradient));
+    let _ = composition.set_clip(Slot::new(layers[3], columns[1]), Some(gradient));
     let status = EngineStatus {
         fps: 60.0,
         frame_time_ms: 2.1,

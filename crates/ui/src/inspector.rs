@@ -154,7 +154,10 @@ impl ControlPanel {
                     .show_ui(ui, |ui| {
                         for info in GENERATORS {
                             if ui.selectable_label(false, info.label).clicked() {
-                                let clip = Clip::from_generator(info.label, info.kind);
+                                let mut clip = Clip::from_generator(info.label, info.kind);
+                                if let Some(generator) = clip.source.generator_mut() {
+                                    *generator = info.create();
+                                }
                                 let _ = self.document.composition_mut().set_clip(slot, Some(clip));
                             }
                         }
