@@ -2,7 +2,7 @@
 //! layout of the interface.
 //!
 //! ```text
-//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator]]
+//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator|learn]]
 //! ```
 //!
 //! The window shows a sample project: clips in the grid, the first one
@@ -61,6 +61,13 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
         layer.effects = vec![color, shader];
     }
     composition.effects = vec![Effect::new("mirror")];
+    composition.mappings.push(prism_core::Mapping {
+        source: prism_core::ControlSource::MidiControl {
+            channel: 0,
+            number: 7,
+        },
+        target: prism_core::ControlTarget::Crossfader,
+    });
     let generated = Slot::new(layers[3], columns[0]);
     let mut text = Clip::from_generator("Texte", "text");
     if let Some(generator) = text.source.generator_mut() {
@@ -96,7 +103,7 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator]]");
+        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator|learn]]");
         return ExitCode::FAILURE;
     };
     let size = |index: usize, default: u32| {
@@ -116,6 +123,7 @@ fn main() -> ExitCode {
     let (document, slot, generated, status) = sample();
     let mut panel = ControlPanel::new(document, Vec::new());
     let show_generator = args.get(3).is_some_and(|arg| arg == "generator");
+    panel.set_midi_learn(args.get(3).is_some_and(|arg| arg == "learn"));
     panel.select(Some(if show_generator { generated } else { slot }));
     let screens = [Screen {
         name: "Intégré".into(),
@@ -133,6 +141,11 @@ fn main() -> ExitCode {
             error: None,
             levels: [0.8, 0.9, 0.5, 0.3],
             ..Default::default()
+        },
+        midi: prism_ui::MidiStatus {
+            ports: vec!["Contrôleur".into()],
+            connected: vec!["Contrôleur".into()],
+            errors: Vec::new(),
         },
     };
     let ctx = egui::Context::default();

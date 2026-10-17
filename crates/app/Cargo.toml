@@ -18,6 +18,7 @@ egui-wgpu = "0.36.2"
 egui-winit = "0.36.2"
 pollster = "1.0.1"
 prism-audio = { path = "../audio" }
+prism-control = { path = "../control" }
 prism-core = { path = "../core" }
 prism-engine = { path = "../engine" }
 prism-output = { path = "../output" }

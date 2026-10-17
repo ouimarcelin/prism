@@ -35,6 +35,8 @@ pub struct Preferences {
     pub clip_sound: bool,
     /// Volume of the sound of the clips, from 0 to 1.
     pub clip_sound_volume: f32,
+    /// MIDI inputs not listened to; every other input is.
+    pub midi_disabled: Vec<String>,
 }
 
 impl Default for Preferences {
@@ -50,6 +52,7 @@ impl Default for Preferences {
             audio_gain_db: 0.0,
             clip_sound: true,
             clip_sound_volume: 1.0,
+            midi_disabled: Vec::new(),
         }
     }
 }

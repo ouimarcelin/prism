@@ -2,14 +2,24 @@
 //! menu to add one.
 
 use std::fmt::Debug;
-use std::hash::Hash;
 use std::path::{Path, PathBuf};
 
 use egui::RichText;
-use prism_core::{Animation, Band, DASHBOARD_SIZE, Effect, MIN_PERIOD, Period, Shape, Unit};
+use prism_core::{
+    Animation, Band, ControlTarget, DASHBOARD_SIZE, Effect, EffectOwner, MIN_PERIOD, Period, Shape,
+    Slot, Unit,
+};
 use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of};
 
+use crate::learn::Learn;
 use crate::presets::PresetStore;
+
+/// What effect editors share with the rest of the window: presets, and the
+/// learn mode.
+pub(crate) struct Tools<'a> {
+    pub(crate) presets: &'a mut PresetStore,
+    pub(crate) learn: &'a mut Learn,
+}
 
 /// A change asked for in the chain editor.
 #[derive(Clone, Debug, PartialEq)]
@@ -94,16 +104,18 @@ fn file_hover(effect: &Effect) -> Option<String> {
 }
 
 /// A collapsible section editing `effects`, titled `title`. `id` tells the
-/// chains of different layers and clips apart. With `dashboard`, settings
-/// can follow a slider of the clip's dashboard.
+/// chains of different layers and clips apart, `owner` names it for
+/// mappings. With `dashboard`, settings can follow a slider of the clip's
+/// dashboard.
 pub(crate) fn effect_section(
     ui: &mut egui::Ui,
     title: &str,
-    id: impl Hash + Debug,
+    owner: EffectOwner,
     effects: &mut Vec<Effect>,
     dashboard: bool,
-    presets: &mut PresetStore,
+    tools: Tools<'_>,
 ) {
+    let id = owner;
     let active = effects.iter().filter(|effect| !effect.bypass).count();
     let header = if effects.is_empty() {
         title.to_owned()
@@ -113,17 +125,18 @@ pub(crate) fn effect_section(
     egui::CollapsingHeader::new(RichText::new(header).strong())
         .id_salt(("effects", &id))
         .default_open(!effects.is_empty())
-        .show(ui, |ui| effect_chain(ui, &id, effects, dashboard, presets));
+        .show(ui, |ui| effect_chain(ui, owner, effects, dashboard, tools));
 }
 
 /// Every effect of the chain, then the menu to add one.
 fn effect_chain(
     ui: &mut egui::Ui,
-    id: impl Hash + Debug,
+    owner: EffectOwner,
     effects: &mut Vec<Effect>,
     dashboard: bool,
-    presets: &mut PresetStore,
+    tools: Tools<'_>,
 ) {
+    let id = owner;
     let mut edits = Vec::new();
     let count = effects.len();
     for (index, effect) in effects.iter_mut().enumerate() {
@@ -140,9 +153,15 @@ fn effect_chain(
                 };
                 let mut on = !effect.bypass;
                 let hover = file_hover(effect).map_or_else(String::new, |text| format!("{text}\n"));
-                ui.checkbox(&mut on, RichText::new(name).strong())
+                let checkbox = ui
+                    .checkbox(&mut on, RichText::new(name).strong())
                     .on_hover_text(format!("{hover}Décocher pour passer l'effet (bypass)"));
                 effect.bypass = !on;
+                tools.learn.cover(
+                    ui,
+                    checkbox.rect,
+                    ControlTarget::EffectBypass { owner, index },
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
                         .small_button("×")
@@ -168,7 +187,7 @@ fn effect_chain(
                 });
             });
             match info {
-                Ok(info) => settings(ui, info, effect, dashboard),
+                Ok(info) => settings(ui, info, effect, dashboard, tools.learn, (owner, index)),
                 Err(message) => {
                     ui.label(RichText::new(message).weak());
                 }
@@ -199,7 +218,9 @@ fn effect_chain(
     };
     ui.horizontal(|ui| {
         add_menu(ui);
-        presets.effects_menu(ui, egui::Id::new(("presets", &id)), effects);
+        tools
+            .presets
+            .effects_menu(ui, egui::Id::new(("presets", &id)), effects);
     });
     for edit in &edits {
         apply_edit(effects, edit);
@@ -208,7 +229,12 @@ fn effect_chain(
 
 /// One line per setting of an effect.
 /// Settings of the generator of a generated clip, animations included.
-pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
+pub(crate) fn generator_settings(
+    ui: &mut egui::Ui,
+    generator: &mut Effect,
+    learn: &mut Learn,
+    slot: Slot,
+) {
     match describe(generator) {
         Ok(info) => {
             let title = ui.label(RichText::new(info.label).strong());
@@ -223,7 +249,10 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
                         .hint_text("Texte à afficher"),
                 );
             }
-            ui.push_id("generator", |ui| settings(ui, info, generator, true));
+            let owner = (EffectOwner::Generator { slot }, 0);
+            ui.push_id("generator", |ui| {
+                settings(ui, info, generator, true, learn, owner)
+            });
         }
         Err(message) => {
             ui.label(RichText::new(message).weak());
@@ -231,7 +260,15 @@ pub(crate) fn generator_settings(ui: &mut egui::Ui, generator: &mut Effect) {
     }
 }
 
-fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard: bool) {
+/// `place` is the chain and index of the effect, for mappings.
+fn settings(
+    ui: &mut egui::Ui,
+    info: &EffectInfo,
+    effect: &mut Effect,
+    dashboard: bool,
+    learn: &mut Learn,
+    place: (EffectOwner, usize),
+) {
     egui::Grid::new("settings")
         .num_columns(2)
         .spacing([12.0, 4.0])
@@ -244,7 +281,18 @@ fn settings(ui: &mut egui::Ui, info: &EffectInfo, effect: &mut Effect, dashboard
                 ui.horizontal(|ui| {
                     // While animated or following a slider, the set value
                     // waits.
-                    ui.add_enabled_ui(!driven, |ui| setting(ui, param, effect));
+                    let rect = ui
+                        .add_enabled_ui(!driven, |ui| setting(ui, param, effect))
+                        .inner;
+                    learn.cover(
+                        ui,
+                        rect,
+                        ControlTarget::EffectParam {
+                            owner: place.0,
+                            index: place.1,
+                            param: param.id.to_owned(),
+                        },
+                    );
                     animation_toggle(ui, param, effect);
                     ui.push_id(param.id, |ui| link_menu(ui, param, effect, dashboard));
                 });
@@ -366,11 +414,12 @@ fn band_short_label(band: Band) -> &'static str {
 /// A collapsible section with the sliders of a clip's dashboard.
 pub(crate) fn dashboard_section(
     ui: &mut egui::Ui,
-    id: impl Hash + Debug,
+    slot: Slot,
     dashboard: &mut [Unit; DASHBOARD_SIZE],
+    learn: &mut Learn,
 ) {
     egui::CollapsingHeader::new(RichText::new("Tableau de bord").strong())
-        .id_salt(("dashboard", &id))
+        .id_salt(("dashboard", slot))
         .show(ui, |ui| {
             ui.label(
                 RichText::new("Huit curseurs que les réglages d'effet peuvent suivre (menu « — » à côté d'un réglage).")
@@ -384,8 +433,16 @@ pub(crate) fn dashboard_section(
                     for (index, slider) in dashboard.iter_mut().enumerate() {
                         ui.label(format!("Curseur {}", index + 1));
                         let mut value = slider.get();
-                        ui.add(egui::Slider::new(&mut value, 0.0..=1.0));
+                        let response = ui.add(egui::Slider::new(&mut value, 0.0..=1.0));
                         *slider = Unit::new(value);
+                        learn.cover(
+                            ui,
+                            response.rect,
+                            ControlTarget::Dashboard {
+                                slot,
+                                slider: index,
+                            },
+                        );
                         ui.end_row();
                     }
                 });
@@ -482,7 +539,8 @@ pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation
     });
 }
 
-fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
+/// Returns where the control is drawn.
+fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) -> egui::Rect {
     let mut value = param.clamp(effect.param(param.id).unwrap_or(param.default));
     let response = if param.choices.is_empty() {
         ui.add(egui::Slider::new(&mut value, param.min..=param.max))
@@ -497,6 +555,7 @@ fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
             })
             .response
     };
+    let rect = response.rect;
     let mut reset = false;
     response
         .on_hover_text("Clic droit : valeur par défaut")
@@ -514,6 +573,7 @@ fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) {
     if stored != Some(value) && (stored.is_some() || value != param.default) {
         effect.set_param(param.id, value);
     }
+    rect
 }
 
 #[cfg(test)]

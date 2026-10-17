@@ -3,7 +3,8 @@
 
 use egui::{RichText, Vec2};
 use prism_core::{
-    Animation, CUE_POINT_COUNT, Clip, CrossfaderSide, Direction, LoopMode, MAX_SPEED, Slot, Unit,
+    Animation, CUE_POINT_COUNT, Clip, ControlTarget, CrossfaderSide, Direction, EffectOwner,
+    LoopMode, MAX_SPEED, Slot, Unit,
 };
 use prism_engine::{Command, LayerStatus};
 use prism_fx::{GENERATORS, ISF_KIND, ParamInfo};
@@ -19,7 +20,7 @@ const OPACITY: ParamInfo = ParamInfo {
 };
 
 use crate::effects::{
-    animation_settings, band_menu, dashboard_section, effect_section, generator_settings,
+    Tools, animation_settings, band_menu, dashboard_section, effect_section, generator_settings,
 };
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
@@ -33,10 +34,13 @@ impl ControlPanel {
                 effect_section(
                     ui,
                     "Effets de la composition",
-                    "composition",
+                    EffectOwner::Composition,
                     &mut self.document.composition_mut().effects,
                     false,
-                    &mut self.presets,
+                    Tools {
+                        presets: &mut self.presets,
+                        learn: &mut self.learn,
+                    },
                 );
                 ui.separator();
                 let Some(slot) = self.selected else {
@@ -76,7 +80,13 @@ impl ControlPanel {
                     let mut opacity = layer.opacity.get();
                     let animated = layer.opacity_animation.is_some();
                     let driven = animated || layer.opacity_audio.is_some();
-                    ui.add_enabled(!driven, egui::Slider::new(&mut opacity, 0.0..=1.0));
+                    let slider =
+                        ui.add_enabled(!driven, egui::Slider::new(&mut opacity, 0.0..=1.0));
+                    self.learn.cover(
+                        ui,
+                        slider.rect,
+                        ControlTarget::LayerOpacity { layer: slot.layer },
+                    );
                     layer.opacity = Unit::new(opacity);
                     let hint = if animated {
                         "Arrêter l'animation de l'opacité"
@@ -143,10 +153,13 @@ impl ControlPanel {
         effect_section(
             ui,
             "Effets de la couche",
-            ("layer", slot.layer),
+            EffectOwner::Layer { layer: slot.layer },
             &mut layer.effects,
             true,
-            &mut self.presets,
+            Tools {
+                presets: &mut self.presets,
+                learn: &mut self.learn,
+            },
         );
     }
 
@@ -206,16 +219,19 @@ impl ControlPanel {
                     ui.end_row();
                 });
             if let Some(generator) = clip.source.generator_mut() {
-                generator_settings(ui, generator);
+                generator_settings(ui, generator, &mut self.learn, slot);
             }
-            dashboard_section(ui, ("clip", slot), &mut clip.dashboard);
+            dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
             effect_section(
                 ui,
                 "Effets du clip",
-                ("clip", slot),
+                EffectOwner::Clip { slot },
                 &mut clip.effects,
                 true,
-                &mut self.presets,
+                Tools {
+                    presets: &mut self.presets,
+                    learn: &mut self.learn,
+                },
             );
             return;
         }
@@ -337,14 +353,17 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
-        dashboard_section(ui, ("clip", slot), &mut clip.dashboard);
+        dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
         effect_section(
             ui,
             "Effets du clip",
-            ("clip", slot),
+            EffectOwner::Clip { slot },
             &mut clip.effects,
             true,
-            &mut self.presets,
+            Tools {
+                presets: &mut self.presets,
+                learn: &mut self.learn,
+            },
         );
         if relocate {
             self.relocate_dialog(slot);

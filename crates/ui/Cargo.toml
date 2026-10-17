@@ -12,6 +12,7 @@ publish.workspace = true
 egui = "0.36.2"
 prism-audio = { path = "../audio" }
 prism-clock = { path = "../clock" }
+prism-control = { path = "../control" }
 prism-core = { path = "../core" }
 prism-engine = { path = "../engine" }
 prism-fx = { path = "../fx" }
@@ -21,7 +22,6 @@ serde_json.workspace = true
 
 [dev-dependencies]
 egui = "0.36.2"
-prism-audio = { path = "../audio" }
 tempfile.workspace = true
 
 [lints]
