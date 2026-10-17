@@ -84,6 +84,10 @@ fn main() -> ExitCode {
         .as_deref()
         .map(Preferences::load)
         .unwrap_or_default();
+    // Syphon servers of other applications announce themselves on the run
+    // loop of the main thread.
+    #[cfg(target_os = "macos")]
+    prism_io_video::start_syphon_directory();
     let (control_sender, control_messages) = std::sync::mpsc::channel();
     let proxy = event_loop.create_proxy();
     let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
@@ -136,6 +140,19 @@ fn describe(error: &dyn Error) -> String {
         source = cause.source();
     }
     message
+}
+
+/// The program image published over Syphon, as an output of the engine.
+#[cfg(target_os = "macos")]
+struct SyphonOutput(prism_io_video::SyphonServer);
+
+#[cfg(target_os = "macos")]
+impl prism_engine::Output for SyphonOutput {
+    fn present(&mut self, gpu: &prism_render::Gpu, program: &prism_engine::ProgramOutput) {
+        let size = program.resolution();
+        self.0
+            .publish(gpu, program.view(), (size.width, size.height));
+    }
 }
 
 /// Events sent to the event loop from other threads.
@@ -393,7 +410,7 @@ impl Running {
                 self.next_output += 1;
                 self.engine.send(Command::AddOutput {
                     id,
-                    output: Box::new(prism_io_video::SyphonOutput::new("Prism")),
+                    output: Box::new(SyphonOutput(prism_io_video::SyphonServer::new("Prism"))),
                 });
                 self.audio.syphon = Some(id);
             }

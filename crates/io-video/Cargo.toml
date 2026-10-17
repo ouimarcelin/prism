@@ -10,7 +10,6 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
-prism-engine = { path = "../engine" }
 prism-render = { path = "../render" }
 wgpu = "30"
 

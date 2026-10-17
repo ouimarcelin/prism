@@ -114,3 +114,117 @@ void prism_syphon_server_free(void *server)
         object = nil;
     }
 }
+
+// ---- Clients: images published by other applications. ----
+
+#import "SyphonServerDirectory.h"
+#import "SyphonMetalClient.h"
+#import "SyphonPrivate.h"
+
+void prism_syphon_directory_start(void)
+{
+    @autoreleasepool {
+        [SyphonServerDirectory sharedDirectory];
+    }
+}
+
+// Servers as lines of "application<TAB>name", to be freed with free().
+char *prism_syphon_servers(void)
+{
+    @autoreleasepool {
+        NSMutableString *list = [NSMutableString string];
+        for (NSDictionary *server in [[SyphonServerDirectory sharedDirectory] servers]) {
+            NSString *app = server[SyphonServerDescriptionAppNameKey] ?: @"";
+            NSString *name = server[SyphonServerDescriptionNameKey] ?: @"";
+            [list appendFormat:@"%@\t%@\n", app, name];
+        }
+        return strdup(list.UTF8String);
+    }
+}
+
+static void *prism_syphon_client_with(NSDictionary *description, void *device)
+{
+    SyphonMetalClient *client =
+        [[SyphonMetalClient alloc] initWithServerDescription:description
+                                                      device:(__bridge id<MTLDevice>)device
+                                                     options:nil
+                                             newFrameHandler:nil];
+    return (client && client.isValid) ? (__bridge_retained void *)client : NULL;
+}
+
+void *prism_syphon_client_new(const char *app, const char *name, void *device)
+{
+    @autoreleasepool {
+        NSArray *servers = [[SyphonServerDirectory sharedDirectory]
+            serversMatchingName:[NSString stringWithUTF8String:name]
+                        appName:[NSString stringWithUTF8String:app]];
+        NSDictionary *description = servers.firstObject;
+        return description ? prism_syphon_client_with(description, device) : NULL;
+    }
+}
+
+// A client of a server of this process, without the directory.
+void *prism_syphon_client_of_server(void *server, void *device)
+{
+    @autoreleasepool {
+        PrismSyphonServer *object = (__bridge PrismSyphonServer *)server;
+        return prism_syphon_client_with(object.serverDescription, device);
+    }
+}
+
+int prism_syphon_client_is_valid(void *client)
+{
+    return ((__bridge SyphonMetalClient *)client).isValid ? 1 : 0;
+}
+
+// The current frame of the server, or NULL; to be released with
+// prism_syphon_texture_release().
+void *prism_syphon_client_frame(void *client, unsigned *width, unsigned *height)
+{
+    @autoreleasepool {
+        id<MTLTexture> texture = [(__bridge SyphonMetalClient *)client newFrameImage];
+        if (!texture) {
+            return NULL;
+        }
+        *width = (unsigned)texture.width;
+        *height = (unsigned)texture.height;
+        return (__bridge_retained void *)texture;
+    }
+}
+
+void prism_syphon_texture_release(void *texture)
+{
+    id<MTLTexture> object = (__bridge_transfer id<MTLTexture>)texture;
+    object = nil;
+}
+
+// Copies `source` into `destination` (same size and format) on `queue`.
+void prism_syphon_copy(void *source, void *destination, void *queue)
+{
+    @autoreleasepool {
+        id<MTLTexture> from = (__bridge id<MTLTexture>)source;
+        id<MTLTexture> to = (__bridge id<MTLTexture>)destination;
+        id<MTLCommandBuffer> commands = [(__bridge id<MTLCommandQueue>)queue commandBuffer];
+        id<MTLBlitCommandEncoder> blit = [commands blitCommandEncoder];
+        [blit copyFromTexture:from
+                  sourceSlice:0
+                  sourceLevel:0
+                 sourceOrigin:MTLOriginMake(0, 0, 0)
+                   sourceSize:MTLSizeMake(MIN(from.width, to.width), MIN(from.height, to.height), 1)
+                    toTexture:to
+             destinationSlice:0
+             destinationLevel:0
+            destinationOrigin:MTLOriginMake(0, 0, 0)];
+        [blit endEncoding];
+        [commands commit];
+    }
+}
+
+void prism_syphon_client_free(void *client)
+{
+    @autoreleasepool {
+        SyphonMetalClient *object = (__bridge_transfer SyphonMetalClient *)client;
+        [object stop];
+        object = nil;
+    }
+}

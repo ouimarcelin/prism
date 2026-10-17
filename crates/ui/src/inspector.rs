@@ -220,13 +220,41 @@ impl ControlPanel {
                     })
                     .response
                     .on_hover_text("L'image en direct d'une caméra ou d'une carte de capture");
+                if cfg!(target_os = "macos") {
+                    egui::ComboBox::from_id_salt("new syphon")
+                        .selected_text("Syphon…")
+                        .show_ui(ui, |ui| {
+                            let servers = prism_engine::syphon_servers();
+                            if servers.is_empty() {
+                                ui.label(RichText::new("Aucune application ne publie").weak());
+                            }
+                            for (app, name) in servers {
+                                let label = if name.is_empty() {
+                                    app.clone()
+                                } else {
+                                    format!("{app} – {name}")
+                                };
+                                if ui.selectable_label(false, label).clicked() {
+                                    let clip = Clip::from_syphon(app, name);
+                                    let _ =
+                                        self.document.composition_mut().set_clip(slot, Some(clip));
+                                }
+                            }
+                        })
+                        .response
+                        .on_hover_text("L'image qu'une autre application publie sur Syphon");
+                }
             });
             return;
         }
         if let Some(clip) = self.document.composition_mut().clip_mut(slot)
-            && let prism_core::MediaSource::Camera { name: device, .. } = &clip.source
+            && clip.source.is_live()
         {
-            let device = device.clone();
+            let device = match &clip.source {
+                prism_core::MediaSource::Camera { name, .. } => format!("Caméra : {name}"),
+                prism_core::MediaSource::Syphon { app, name } => format!("Syphon : {app} – {name}"),
+                _ => String::new(),
+            };
             egui::Grid::new("camera clip")
                 .num_columns(2)
                 .spacing([12.0, 6.0])
@@ -234,7 +262,7 @@ impl ControlPanel {
                     ui.label("Nom");
                     ui.text_edit_singleline(&mut clip.name);
                     ui.end_row();
-                    ui.label("Caméra");
+                    ui.label("Source");
                     ui.label(device);
                     ui.end_row();
                 });

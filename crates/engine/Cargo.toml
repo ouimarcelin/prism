@@ -17,6 +17,7 @@ prism-media = { path = "../media" }
 prism-render = { path = "../render" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+prism-io-video = { path = "../io-video" }
 libc = "0.2"
 
 [dev-dependencies]

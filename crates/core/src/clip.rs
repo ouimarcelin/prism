@@ -49,6 +49,13 @@ pub enum MediaSource {
         /// Name of the device when it was chosen.
         name: String,
     },
+    /// The image another application publishes over Syphon (macOS), live.
+    Syphon {
+        /// Application publishing.
+        app: String,
+        /// Name of its server.
+        name: String,
+    },
 }
 
 impl MediaSource {
@@ -56,7 +63,7 @@ impl MediaSource {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } | Self::Camera { .. } => None,
+            Self::Generator { .. } | Self::Camera { .. } | Self::Syphon { .. } => None,
         }
     }
 
@@ -64,14 +71,14 @@ impl MediaSource {
     pub fn path_mut(&mut self) -> Option<&mut PathBuf> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } | Self::Camera { .. } => None,
+            Self::Generator { .. } | Self::Camera { .. } | Self::Syphon { .. } => None,
         }
     }
 
     /// Whether the frames come live from a device, without position or
     /// duration.
     pub fn is_live(&self) -> bool {
-        matches!(self, Self::Camera { .. })
+        matches!(self, Self::Camera { .. } | Self::Syphon { .. })
     }
 
     /// The generator, for a clip drawn by the GPU.
@@ -219,6 +226,23 @@ impl Clip {
                 id: id.into(),
                 name,
             },
+            playback: Playback::default(),
+            effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
+        }
+    }
+
+    /// Creates a clip showing the Syphon server `name` of the application
+    /// `app`.
+    pub fn from_syphon(app: impl Into<String>, name: impl Into<String>) -> Self {
+        let (app, name) = (app.into(), name.into());
+        Self {
+            name: if name.is_empty() {
+                app.clone()
+            } else {
+                format!("{app} – {name}")
+            },
+            source: MediaSource::Syphon { app, name },
             playback: Playback::default(),
             effects: Vec::new(),
             dashboard: [Unit::ZERO; DASHBOARD_SIZE],

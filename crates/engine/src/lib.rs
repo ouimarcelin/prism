@@ -21,5 +21,5 @@ mod stream;
 mod worker;
 
 pub use engine::{Command, Engine, EngineState, Output, ProgramOutput};
-pub use live::cameras;
+pub use live::{cameras, syphon_servers};
 pub use status::{ClipState, EngineStatus, FrameSteps, Hitch, LayerStatus};

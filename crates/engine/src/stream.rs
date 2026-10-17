@@ -31,6 +31,19 @@ enum Phase {
     Generating,
     /// Read live from a camera.
     Live(Live),
+    /// Read live from another application over Syphon.
+    #[cfg(target_os = "macos")]
+    Syphon(SyphonInput),
+}
+
+/// A Syphon server to read, connected when it is published.
+#[cfg(target_os = "macos")]
+struct SyphonInput {
+    app: String,
+    name: String,
+    client: Option<prism_io_video::SyphonClient>,
+    /// Last attempt to connect: retried every second.
+    tried: Option<std::time::Instant>,
 }
 
 pub(crate) struct ClipStream {
@@ -72,6 +85,17 @@ impl ClipStream {
             (None, Phase::Generating)
         } else if let MediaSource::Camera { id, .. } = &source {
             (None, Phase::Live(Live::open(id.clone())))
+        } else if let MediaSource::Syphon { app, name } = &source {
+            #[cfg(target_os = "macos")]
+            let phase = Phase::Syphon(SyphonInput {
+                app: app.clone(),
+                name: name.clone(),
+                client: None,
+                tried: None,
+            });
+            #[cfg(not(target_os = "macos"))]
+            let phase = Phase::Failed(format!("Syphon ({app} – {name}) : macOS seulement"));
+            (None, phase)
         } else {
             match Worker::spawn(source.clone()) {
                 Ok(worker) => (Some(worker), Phase::Opening),
@@ -188,8 +212,21 @@ impl ClipStream {
         if self.is_generator() {
             return self.effects.output();
         }
-        let texture = self.shown.and(self.texture.as_ref())?;
-        Some(self.effects.output().unwrap_or(texture.view()))
+        let (view, _) = self.source_image()?;
+        Some(self.effects.output().unwrap_or(view))
+    }
+
+    /// The image of the clip before its effects, and its size.
+    fn source_image(&self) -> Option<(&wgpu::TextureView, (u32, u32))> {
+        self.shown?;
+        #[cfg(target_os = "macos")]
+        if let Phase::Syphon(input) = &self.phase {
+            let client = input.client.as_ref()?;
+            let texture = client.texture()?;
+            return Some((client.view()?, (texture.width(), texture.height())));
+        }
+        let texture = self.texture.as_ref()?;
+        Some((texture.view(), (texture.width(), texture.height())))
     }
 
     /// Records the image of a generated clip: `effects`, the generator first,
@@ -227,17 +264,19 @@ impl ClipStream {
         effects: &[&Effect],
         time: FrameTime,
     ) {
-        let Some(texture) = self.shown.and(self.texture.as_ref()) else {
+        let Some((view, size)) = self.source_image() else {
             return;
         };
-        let size = (texture.width(), texture.height());
+        // The chain keeps its own images: the borrow of the source ends
+        // with this call.
+        let view = view.clone();
         self.effects.apply(
             renderer,
             &gpu.device,
             &gpu.queue,
             encoder,
             effects,
-            texture.view(),
+            &view,
             size,
             time,
         );
@@ -271,7 +310,7 @@ impl ClipStream {
                 playhead.set_held(hold);
             }
             Phase::Opening => self.pending_seek = Some((position, hold)),
-            Phase::Failed(_) | Phase::Generating | Phase::Live(_) => {}
+            _ => {}
         }
     }
 
@@ -284,7 +323,7 @@ impl ClipStream {
                     *hold = false;
                 }
             }
-            Phase::Failed(_) | Phase::Generating | Phase::Live(_) => {}
+            _ => {}
         }
     }
 
@@ -392,6 +431,31 @@ impl ClipStream {
         uploader: &mut FrameUploader,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        #[cfg(target_os = "macos")]
+        if let Phase::Syphon(input) = &mut self.phase {
+            if input
+                .client
+                .as_ref()
+                .is_some_and(|client| !client.is_valid())
+            {
+                input.client = None;
+                self.shown = None;
+            }
+            if input.client.is_none()
+                && input
+                    .tried
+                    .is_none_or(|tried| tried.elapsed() >= std::time::Duration::from_secs(1))
+            {
+                input.tried = Some(std::time::Instant::now());
+                input.client = prism_io_video::SyphonClient::connect(gpu, &input.app, &input.name);
+            }
+            if let Some(client) = &mut input.client
+                && client.update(gpu)
+            {
+                self.shown = Some(self.shown.map_or(0, |count| count.wrapping_add(1)));
+            }
+            return;
+        }
         if let Phase::Live(live) = &self.phase {
             let Some(frame) = live.take_frame() else {
                 return;
@@ -455,6 +519,15 @@ impl ClipStream {
             Phase::Generating => ClipState::Loading,
             Phase::Live(_) if self.shown.is_some() => ClipState::Playing,
             Phase::Live(_) => ClipState::Loading,
+            #[cfg(target_os = "macos")]
+            Phase::Syphon(input) if input.client.is_none() => ClipState::Error(format!(
+                "serveur Syphon « {} » de {} absent : en attente",
+                input.name, input.app
+            )),
+            #[cfg(target_os = "macos")]
+            Phase::Syphon(_) if self.shown.is_some() => ClipState::Playing,
+            #[cfg(target_os = "macos")]
+            Phase::Syphon(_) => ClipState::Loading,
         }
     }
 

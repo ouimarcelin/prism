@@ -38,6 +38,19 @@ pub fn cameras() -> Vec<(String, String)> {
     }
 }
 
+/// The Syphon servers other applications publish, as application and
+/// name (macOS).
+pub fn syphon_servers() -> Vec<(String, String)> {
+    #[cfg(target_os = "macos")]
+    {
+        prism_io_video::syphon_servers()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Vec::new()
+    }
+}
+
 enum State {
     Opening(Receiver<Result<Device, String>>),
     Ready(Device),
