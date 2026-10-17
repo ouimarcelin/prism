@@ -7,7 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
-- Fenêtre de démarrage : le logo s'affiche au centre de l'écran pendant que le GPU et le moteur démarrent (logo provisoire).
+- Fenêtre de démarrage : le logo s'affiche sur fond transparent au centre de l'écran pendant que le moteur démarre ; le GPU ouvert pour elle sert ensuite à l'application. Nouveau logo.
 
 ### Modifié
 

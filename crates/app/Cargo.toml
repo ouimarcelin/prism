@@ -31,7 +31,6 @@ prism-io-video = { path = "../io-video" }
 prism-output = { path = "../output" }
 prism-render = { path = "../render" }
 prism-ui = { path = "../ui" }
-softbuffer = { version = "0.4.8", default-features = false }
 winit = "0.30.13"
 
 [lints]

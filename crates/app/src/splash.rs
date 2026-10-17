@@ -1,13 +1,14 @@
-//! Window showing the application logo while the GPU and the engine start.
+//! Transparent window showing the application logo while the engine and
+//! the control window start.
 //!
-//! The window is drawn on the CPU, so it appears before any GPU work.
+//! The GPU opened for this window is handed over to the application.
 
 use std::error::Error;
 use std::io::Cursor;
-use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use prism_render::{Gpu, wgpu};
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowLevel};
@@ -18,9 +19,6 @@ const LOGO: &[u8] = include_bytes!("../../../assets/icon-1024.png");
 /// Side of the window, in logical pixels.
 const SIDE: f64 = 320.0;
 
-/// Background behind the logo, 0RGB.
-const BACKGROUND: [u8; 3] = [0x12, 0x13, 0x16];
-
 /// Time left to the window server to show the painted window before the
 /// start blocks the event loop.
 const SETTLE: Duration = Duration::from_millis(50);
@@ -30,7 +28,8 @@ const PAINT_TIMEOUT: Duration = Duration::from_secs(1);
 
 pub struct Splash {
     window: Arc<Window>,
-    surface: softbuffer::Surface<Arc<Window>, Arc<Window>>,
+    gpu: Arc<Gpu>,
+    surface: wgpu::Surface<'static>,
     opened: Instant,
     painted: Option<Instant>,
 }
@@ -40,12 +39,12 @@ impl Splash {
         let mut attributes = Window::default_attributes()
             .with_title("Prism")
             .with_decorations(false)
+            .with_transparent(true)
             .with_resizable(false)
             .with_window_level(WindowLevel::AlwaysOnTop)
             .with_inner_size(LogicalSize::new(SIDE, SIDE));
         if let Some(monitor) = event_loop.primary_monitor() {
-            let scale = monitor.scale_factor();
-            let side = (SIDE * scale) as i32;
+            let side = (SIDE * monitor.scale_factor()) as i32;
             let size = monitor.size();
             let origin = monitor.position();
             attributes = attributes.with_position(PhysicalPosition::new(
@@ -54,11 +53,21 @@ impl Splash {
             ));
         }
         let window = Arc::new(event_loop.create_window(attributes)?);
-        let context = softbuffer::Context::new(Arc::clone(&window))?;
-        let surface = softbuffer::Surface::new(&context, Arc::clone(&window))?;
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::PRIMARY,
+            ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
+                event_loop.owned_display_handle(),
+            ))
+        });
+        let surface = instance.create_surface(Arc::clone(&window))?;
+        let gpu = Arc::new(pollster::block_on(Gpu::from_instance(
+            &instance,
+            Some(&surface),
+        ))?);
         window.request_redraw();
         Ok(Self {
             window,
+            gpu,
             surface,
             opened: Instant::now(),
             painted: None,
@@ -69,38 +78,80 @@ impl Splash {
         self.window.id()
     }
 
-    /// Draws the logo, scaled to the window, over the background.
+    /// The GPU, for the rest of the application.
+    pub fn gpu(&self) -> Arc<Gpu> {
+        Arc::clone(&self.gpu)
+    }
+
+    /// Copies the logo, scaled to the window, into the window surface.
     pub fn paint(&mut self) -> Result<(), Box<dyn Error>> {
         let size = self.window.inner_size();
-        let (Some(width), Some(height)) =
-            (NonZeroU32::new(size.width), NonZeroU32::new(size.height))
-        else {
-            return Ok(());
-        };
-        self.surface.resize(width, height)?;
-        let logo = decode_logo()?;
-        let mut buffer = self.surface.buffer_mut()?;
         let side = size.width.min(size.height);
-        let pixels = scale(&logo, side);
-        let left = (size.width - side) / 2;
-        let top = (size.height - side) / 2;
-        let background = pack(BACKGROUND);
-        buffer.fill(background);
-        for y in 0..side {
-            let row = ((top + y) * size.width + left) as usize;
-            for x in 0..side {
-                let [r, g, b, a] = pixels[(y * side + x) as usize];
-                let over = |channel: u8, under: u8| {
-                    ((channel as u32 * a as u32 + under as u32 * (255 - a as u32)) / 255) as u8
-                };
-                buffer[row + x as usize] = pack([
-                    over(r, BACKGROUND[0]),
-                    over(g, BACKGROUND[1]),
-                    over(b, BACKGROUND[2]),
-                ]);
+        if side == 0 {
+            return Ok(());
+        }
+        let capabilities = self.surface.get_capabilities(&self.gpu.adapter);
+        if !capabilities.usages.contains(wgpu::TextureUsages::COPY_DST) {
+            return Err("la fenêtre de démarrage n'accepte pas de copie".into());
+        }
+        let format = [
+            wgpu::TextureFormat::Bgra8Unorm,
+            wgpu::TextureFormat::Rgba8Unorm,
+        ]
+        .into_iter()
+        .find(|format| capabilities.formats.contains(format))
+        .ok_or("format de fenêtre non pris en charge")?;
+        let alpha_mode = [
+            wgpu::CompositeAlphaMode::PreMultiplied,
+            wgpu::CompositeAlphaMode::PostMultiplied,
+        ]
+        .into_iter()
+        .find(|mode| capabilities.alpha_modes.contains(mode))
+        .ok_or("transparence non prise en charge")?;
+        let mut config = self
+            .surface
+            .get_default_config(&self.gpu.adapter, side, side)
+            .ok_or("le GPU ne peut pas afficher dans la fenêtre de démarrage")?;
+        config.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST;
+        config.format = format;
+        config.alpha_mode = alpha_mode;
+        config.view_formats.clear();
+        self.surface.configure(&self.gpu.device, &config);
+        let logo = decode_logo()?;
+        let premultiplied = alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
+        let mut bytes = Vec::with_capacity((side * side * 4) as usize);
+        for [r, g, b, a] in scale(&logo, side) {
+            let [r, g, b] = if premultiplied {
+                [r, g, b].map(|channel| ((channel as u32 * a as u32 + 127) / 255) as u8)
+            } else {
+                [r, g, b]
+            };
+            match format {
+                wgpu::TextureFormat::Bgra8Unorm => bytes.extend_from_slice(&[b, g, r, a]),
+                _ => bytes.extend_from_slice(&[r, g, b, a]),
             }
         }
-        buffer.present()?;
+        let frame = match self.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            // Not shown yet: next redraw.
+            _ => {
+                self.window.request_redraw();
+                return Ok(());
+            }
+        };
+        self.gpu.queue.write_texture(
+            frame.texture.as_image_copy(),
+            &bytes,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(side * 4),
+                rows_per_image: Some(side),
+            },
+            frame.texture.size(),
+        );
+        self.gpu.queue.submit([]);
+        self.gpu.queue.present(frame);
         self.painted.get_or_insert_with(Instant::now);
         Ok(())
     }
@@ -112,10 +163,6 @@ impl Splash {
             None => self.opened + PAINT_TIMEOUT,
         }
     }
-}
-
-fn pack([r, g, b]: [u8; 3]) -> u32 {
-    (r as u32) << 16 | (g as u32) << 8 | b as u32
 }
 
 /// The logo as RGBA pixels, row by row.
