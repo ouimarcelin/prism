@@ -326,6 +326,10 @@ impl ControlPanel {
                 })
                 .response
                 .on_hover_text("La sortie plein écran ouverte sur cet écran du système montre cet écran de la scène");
+            ui.checkbox(&mut screen.flip.horizontal, "Miroir H")
+                .on_hover_text("Tout l'écran retourné de gauche à droite : projection par l'arrière");
+            ui.checkbox(&mut screen.flip.vertical, "Miroir V")
+                .on_hover_text("Tout l'écran retourné de haut en bas ; avec « Miroir H » : projecteur accroché à l'envers");
             ui.checkbox(&mut screen.test_pattern, "Mire")
                 .on_hover_text("Les découpes montrent une grille au lieu de la composition, pour aligner les projecteurs");
             if ui.button("Supprimer l'écran").clicked() {
@@ -456,6 +460,18 @@ impl ControlPanel {
                 height: height.min(1.0),
             };
         }
+        ui.horizontal(|ui| {
+            ui.label("Rotation");
+            ui.add(
+                egui::Slider::new(&mut slice.rotation, -180.0..=180.0)
+                    .suffix("°")
+                    .max_decimals(1),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut slice.flip.horizontal, "Miroir horizontal");
+            ui.checkbox(&mut slice.flip.vertical, "vertical");
+        });
         ui.label(RichText::new("Sortie (pixels de l'écran)").weak());
         let (width, height) = (screen_size.0 as f32, screen_size.1 as f32);
         egui::Grid::new("slice output")
@@ -711,7 +727,11 @@ impl ControlPanel {
             } else {
                 OTHER.gamma_multiply(if slice.enabled { 1.0 } else { 0.4 })
             };
-            let corners = slice.input.corners().map(|point| to_screen(input, point));
+            // The area as the slice reads it: turned and mirrored.
+            let aspect = resolution.width as f32 / resolution.height.max(1) as f32;
+            let corners = Area::FULL
+                .corners()
+                .map(|local| to_screen(input, slice.source(local.x, local.y, aspect)));
             ui.painter().add(egui::Shape::closed_line(
                 corners.to_vec(),
                 Stroke::new(1.5, color),

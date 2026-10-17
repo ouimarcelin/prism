@@ -42,7 +42,7 @@ pub use preset::{
 };
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
 pub use stage::{
-    Area, EdgeBlend, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, Point, Quad, Screen, ScreenId,
+    Area, EdgeBlend, Flip, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, Point, Quad, Screen, ScreenId,
     Simulation, Slice, SliceId, Stage,
 };
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};

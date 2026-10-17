@@ -30,12 +30,15 @@ struct Slice {
 struct VertexInput {
     @location(0) position: vec2<f32>,
     @location(1) source: vec3<f32>,
+    @location(2) local: vec2<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
     @location(0) source: vec3<f32>,
     @location(1) @interpolate(flat) slice: u32,
+    // Position in the slice times q (q is source.z).
+    @location(2) local: vec2<f32>,
 }
 
 @vertex
@@ -43,6 +46,7 @@ fn vs_main(in: VertexInput, @builtin(instance_index) slice: u32) -> VertexOutput
     var out: VertexOutput;
     out.position = vec4<f32>(in.position.x * 2.0 - 1.0, 1.0 - in.position.y * 2.0, 0.0, 1.0);
     out.source = in.source;
+    out.local = in.local;
     out.slice = slice;
     return out;
 }
@@ -136,7 +140,7 @@ fn pattern(local: vec2<f32>, index: f32) -> vec4<f32> {
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let slice = slices[in.slice];
     let uv = in.source.xy / in.source.z;
-    let local = (uv - slice.input.xy) / max(slice.input.zw, vec2<f32>(1e-6));
+    let local = in.local / in.source.z;
     let image = textureSample(program, program_sampler, uv);
     let test = pattern(local, slice.curve.w);
     let color = select(image, test, slice.curve.z > 0.5);

@@ -119,6 +119,12 @@ pub struct Slice {
     /// Part of the composition shown.
     #[serde(default)]
     pub input: Area,
+    /// Turn of the part shown about its center, in degrees, clockwise.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rotation: f32,
+    /// Mirroring of the part shown.
+    #[serde(default, skip_serializing_if = "Flip::is_none")]
+    pub flip: Flip,
     /// Where it lands on the screen.
     #[serde(default)]
     pub output: Quad,
@@ -260,10 +266,73 @@ fn enabled() -> bool {
     true
 }
 
+fn is_zero(value: &f32) -> bool {
+    *value == 0.0
+}
+
+/// Mirroring of an image.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Flip {
+    /// Left and right swapped.
+    pub horizontal: bool,
+    /// Top and bottom swapped.
+    pub vertical: bool,
+}
+
+impl Flip {
+    /// Whether nothing is mirrored.
+    pub fn is_none(&self) -> bool {
+        !self.horizontal && !self.vertical
+    }
+
+    /// `point` (fractions of an image) mirrored.
+    pub fn apply(&self, point: Point) -> Point {
+        Point::new(
+            if self.horizontal {
+                1.0 - point.x
+            } else {
+                point.x
+            },
+            if self.vertical {
+                1.0 - point.y
+            } else {
+                point.y
+            },
+        )
+    }
+}
+
 impl Slice {
     /// Identifier of the slice.
     pub fn id(&self) -> SliceId {
         self.id
+    }
+
+    /// The point of the composition shown at `u`, `v` of the slice (fractions
+    /// across and down), after its mirroring and rotation; `aspect` is the
+    /// composition's width over its height.
+    pub fn source(&self, u: f32, v: f32, aspect: f32) -> Point {
+        let local = self.flip.apply(Point::new(u, v));
+        let area = self.input;
+        if self.rotation == 0.0 {
+            return Point::new(
+                area.x + local.x * area.width,
+                area.y + local.y * area.height,
+            );
+        }
+        // Turned in pixels (heights as the unit), so angles stay true.
+        let (dx, dy) = (
+            (local.x - 0.5) * area.width * aspect,
+            (local.y - 0.5) * area.height,
+        );
+        let (sin, cos) = self.rotation.to_radians().sin_cos();
+        // Clockwise on the screen: y grows downwards.
+        let (rx, ry) = (dx * cos + dy * sin, -dx * sin + dy * cos);
+        Point::new(
+            area.x + area.width / 2.0 + rx / aspect.max(1e-6),
+            area.y + area.height / 2.0 + ry,
+        )
     }
 }
 
@@ -283,6 +352,10 @@ pub struct Screen {
     /// Slices, drawn first to last: a later slice covers an earlier one.
     #[serde(default)]
     pub slices: Vec<Slice>,
+    /// Mirroring of the whole screen, for a projector hung upside down or
+    /// projecting from behind.
+    #[serde(default, skip_serializing_if = "Flip::is_none")]
+    pub flip: Flip,
     /// Whether the slices show a test pattern instead of the composition,
     /// to line projectors up.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -465,6 +538,7 @@ impl Stage {
             height,
             display: None,
             slices: Vec::new(),
+            flip: Flip::default(),
             test_pattern: false,
         });
         self.add_slice(id, "Découpe 1");
@@ -487,6 +561,8 @@ impl Stage {
             name: name.into(),
             enabled: true,
             input: Area::FULL,
+            rotation: 0.0,
+            flip: Flip::default(),
             output: Quad::FULL,
             warp: None,
             mask: None,
@@ -635,6 +711,39 @@ mod tests {
         let (placed, size) = stage.simulation_layout();
         assert_eq!(placed, [(a, 0), (b, 1720)]);
         assert_eq!(size, (3000, 1080));
+    }
+
+    #[test]
+    fn sources_are_mirrored_and_turned_about_the_center() {
+        let mut stage = Stage::default();
+        let screen = stage.add_screen("A", 100, 100).unwrap();
+        let slice = &mut stage.screen_mut(screen).unwrap().slices[0];
+        slice.input = Area {
+            x: 0.25,
+            y: 0.0,
+            width: 0.5,
+            height: 1.0,
+        };
+        let near = |a: Point, b: Point| (a.x - b.x).abs() < 1e-5 && (a.y - b.y).abs() < 1e-5;
+        assert!(near(slice.source(0.0, 0.0, 2.0), Point::new(0.25, 0.0)));
+        slice.flip.horizontal = true;
+        assert!(near(slice.source(0.0, 0.0, 2.0), Point::new(0.75, 0.0)));
+        slice.flip = Flip::default();
+        // A half turn: the top left of the slice shows the bottom right.
+        slice.rotation = 180.0;
+        assert!(near(slice.source(0.0, 0.0, 2.0), Point::new(0.75, 1.0)));
+        // A quarter turn clockwise in a square area: the top left of the
+        // slice shows the bottom left of the area.
+        slice.input = Area {
+            x: 0.25,
+            y: 0.0,
+            width: 0.5,
+            height: 1.0,
+        };
+        slice.rotation = 90.0;
+        // 0.5 × 2.0 wide = 1.0 high: a square in pixels.
+        assert!(near(slice.source(0.0, 0.0, 2.0), Point::new(0.25, 1.0)));
+        assert!(near(slice.source(1.0, 0.0, 2.0), Point::new(0.25, 0.0)));
     }
 
     #[test]

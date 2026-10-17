@@ -66,6 +66,7 @@ fn draw(gpu: &Gpu, stage: &Stage, id: ScreenId, rows: bool) -> (Vec<[f32; 4]>, u
         &gpu.queue,
         &mut encoder,
         &program,
+        (32, 16),
         &[ScreenTarget {
             screen,
             view: &view,
@@ -321,4 +322,34 @@ fn simulated_projectors_add_their_light_where_they_overlap() {
     // Twice the light: 0.5^2.2 × 2, back to pixel values.
     let expected = (2.0 * grey.powf(2.2)).powf(1.0 / 2.2);
     assert!((both - expected).abs() < 0.01, "{both} vs {expected}");
+}
+
+#[test]
+fn turned_slices_and_mirrored_screens_move_the_image() {
+    let Some(gpu) = gpu() else { return };
+    let mut stage = Stage::default();
+    let id = stage.add_screen("Écran", 40, 20).unwrap();
+    // Half a turn: the red left half of the program shows on the right.
+    stage.screen_mut(id).unwrap().slices[0].rotation = 180.0;
+    let (pixels, width) = draw(&gpu, &stage, id, false);
+    let at = |pixels: &[[f32; 4]], x: u32, y: u32| pixels[(y * width + x) as usize];
+    assert!(close(at(&pixels, 35, 10), RED), "{:?}", at(&pixels, 35, 10));
+    assert!(close(at(&pixels, 5, 10), GREEN));
+
+    // Mirrored screen, slice mirrored too: back to the program.
+    let screen = stage.screen_mut(id).unwrap();
+    screen.slices[0].rotation = 0.0;
+    screen.slices[0].flip.horizontal = true;
+    screen.flip.horizontal = true;
+    let (pixels, _) = draw(&gpu, &stage, id, false);
+    assert!(close(at(&pixels, 5, 10), RED));
+    assert!(close(at(&pixels, 35, 10), GREEN));
+
+    // Mirrored screen only: the blend follows the slice, now on the right.
+    let screen = stage.screen_mut(id).unwrap();
+    screen.slices[0].flip.horizontal = false;
+    screen.slices[0].blend.left = 0.25;
+    let (pixels, _) = draw(&gpu, &stage, id, false);
+    assert!(at(&pixels, 39, 10)[0] < 0.2, "{:?}", at(&pixels, 39, 10));
+    assert!(close(at(&pixels, 5, 10), GREEN));
 }
