@@ -36,12 +36,25 @@ pub struct Cue {
 /// on: a longer step, or a step back, is a jump, which launches nothing.
 pub const MAX_TIMECODE_STEP: f64 = 1.0;
 
+/// Where the timecode comes from.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TimecodeSource {
+    /// MIDI timecode (MTC) on the MIDI inputs listened to.
+    #[default]
+    Midi,
+    /// Linear timecode (LTC) on the first channel of the audio input.
+    Audio,
+}
+
 /// Cues launched by the timecode.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Timeline {
     /// Whether the cues follow the timecode received.
     pub enabled: bool,
+    /// Where the timecode comes from.
+    pub source: TimecodeSource,
     /// The cues, in any order.
     pub cues: Vec<Cue>,
 }
@@ -78,6 +91,7 @@ mod tests {
     fn cues_fire_once_when_passed_and_not_on_jumps() {
         let timeline = Timeline {
             enabled: true,
+            source: TimecodeSource::Midi,
             cues: vec![
                 Cue {
                     at: 10.0,

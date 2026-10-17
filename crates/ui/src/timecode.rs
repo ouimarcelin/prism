@@ -3,7 +3,7 @@
 
 use egui::RichText;
 use prism_clock::{Timecode, TimecodeRate};
-use prism_core::{Cue, CueTarget};
+use prism_core::{Cue, CueTarget, TimecodeSource};
 
 use crate::panel::{Action, ControlPanel};
 
@@ -69,8 +69,14 @@ impl ControlPanel {
             .default_width(420.0)
             .show(ctx, |ui| {
                 let timeline = &mut self.document.composition_mut().timeline;
-                ui.checkbox(&mut timeline.enabled, "Suivre le timecode MIDI (MTC)")
+                ui.checkbox(&mut timeline.enabled, "Suivre le timecode")
                     .on_hover_text("Les repères se déclenchent quand le timecode reçu passe leur heure ; un saut ne déclenche rien");
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut timeline.source, TimecodeSource::Midi, "MIDI (MTC)")
+                        .on_hover_text("Le timecode des entrées MIDI écoutées (menu Contrôle)");
+                    ui.radio_value(&mut timeline.source, TimecodeSource::Audio, "Audio (LTC)")
+                        .on_hover_text("Le timecode audio sur le premier canal de l'entrée audio (menu Audio, « Écouter une entrée » coché)");
+                });
                 let reading = match now {
                     Some(seconds) => RichText::new(Timecode::from_seconds(seconds, rate).to_string())
                         .monospace()
@@ -150,7 +156,7 @@ impl ControlPanel {
                 }
                 ui.label(
                     RichText::new(format!(
-                        "Heures en hh:mm:ss:ff à {} images/s ; le timecode vient des entrées MIDI écoutées (menu Contrôle).",
+                        "Heures en hh:mm:ss:ff à {} images/s.",
                         match rate {
                             TimecodeRate::Fps24 => "24",
                             TimecodeRate::Fps25 => "25",

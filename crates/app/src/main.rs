@@ -886,7 +886,15 @@ impl App {
         let clock = self.midi.inputs.clock();
         self.midi.status.clock_bpm = clock.bpm;
         let mut clock_actions = self.panel.follow_clock(clock);
-        clock_actions.extend(self.panel.follow_timecode(clock.timecode));
+        let timecode = match self.panel.document().composition().timeline.source {
+            prism_core::TimecodeSource::Midi => clock.timecode,
+            prism_core::TimecodeSource::Audio => self
+                .running
+                .as_ref()
+                .and_then(|running| running.audio.input.as_ref())
+                .and_then(prism_audio::AudioInput::timecode),
+        };
+        clock_actions.extend(self.panel.follow_timecode(timecode));
         if !clock_actions.is_empty() {
             self.handle(event_loop, clock_actions);
         }

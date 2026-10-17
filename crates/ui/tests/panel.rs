@@ -434,6 +434,7 @@ fn a_cue_starts_its_column_when_the_timecode_passes_it() {
     let at = |text| Timecode::parse(text, TimecodeRate::Fps25).unwrap();
     document.composition_mut().timeline = prism_core::Timeline {
         enabled: true,
+        source: prism_core::TimecodeSource::Midi,
         cues: vec![prism_core::Cue {
             at: at("01:00:05:00").seconds(),
             target: prism_core::CueTarget::Column {

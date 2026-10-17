@@ -13,8 +13,10 @@
 
 #![forbid(unsafe_code)]
 
+mod ltc;
 mod timecode;
 
+pub use ltc::{LTC_BITS, LtcDecoder, ltc_bits};
 pub use timecode::{MtcReader, Timecode, TimecodeRate};
 
 use std::time::{Duration, Instant};
