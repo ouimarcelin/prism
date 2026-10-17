@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Fondu des bords des découpes (largeur par côté, courbe, gamma) pour les recouvrements de projecteurs, et mire de réglage par écran (ADR 0030).
 - Masques des découpes : polygone sur l'écran, inversion, bord adouci en pixels, points glissés dans la fenêtre « Sortie avancée » (ADR 0029).
 - Déformation des découpes par une grille de points (1 à 32 cellules par côté), droite ou lissée par des courbes passant par les points, réglée dans la fenêtre « Sortie avancée » (ADR 0028).
 - `scripts/make-app.sh` : application `Prism.app` (non signée) installée dans `~/Applications`, avec les autorisations caméra et micro ; option `--ndi`.
