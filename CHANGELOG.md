@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Transformations : rotation et miroirs de la zone lue par une découpe, miroirs de tout un écran (projection par l'arrière, projecteur à l'envers).
 - Simulation des projecteurs dans la fenêtre « Sortie avancée » : écrans côte à côte, lumière additionnée dans la zone de recouvrement, pour régler le fondu des bords sans projecteur.
 - Fondu des bords des découpes (largeur par côté, courbe, gamma) pour les recouvrements de projecteurs, et mire de réglage par écran (ADR 0030).
 - Masques des découpes : polygone sur l'écran, inversion, bord adouci en pixels, points glissés dans la fenêtre « Sortie avancée » (ADR 0029).
