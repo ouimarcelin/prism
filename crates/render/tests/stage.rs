@@ -353,3 +353,19 @@ fn turned_slices_and_mirrored_screens_move_the_image() {
     assert!(at(&pixels, 39, 10)[0] < 0.2, "{:?}", at(&pixels, 39, 10));
     assert!(close(at(&pixels, 5, 10), GREEN));
 }
+
+#[test]
+fn the_black_level_lifts_only_outside_the_fades() {
+    let Some(gpu) = gpu() else { return };
+    let mut stage = Stage::default();
+    let id = stage.add_screen("Écran", 40, 20).unwrap();
+    let slice = &mut stage.screen_mut(id).unwrap().slices[0];
+    slice.blend.left = 0.25;
+    slice.blend.black = 0.1;
+    let (pixels, width) = draw(&gpu, &stage, id, false);
+    let at = |x: u32, y: u32| pixels[(y * width + x) as usize];
+    // Green half, outside the fade: blue (0 in the program) lifted to 0.1.
+    assert!((at(30, 10)[2] - 0.1).abs() < 0.01, "{:?}", at(30, 10));
+    // Inside the fade, at its outer edge: no lift.
+    assert!(at(0, 10)[2] < 0.01, "{:?}", at(0, 10));
+}

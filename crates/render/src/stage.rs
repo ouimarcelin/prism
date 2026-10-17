@@ -620,8 +620,8 @@ impl StageRenderer {
 }
 
 /// Bytes of what the shader knows of a slice: its edge fades, then the
-/// fade curve, test pattern and pattern color.
-const SLICE_INFO_BYTES: usize = 32;
+/// fade curve, test pattern and pattern color, then the black level.
+const SLICE_INFO_BYTES: usize = 48;
 
 fn slice_info(slice: &Slice, pattern: bool, index: u32) -> Vec<u8> {
     let blend = slice.blend;
@@ -635,6 +635,10 @@ fn slice_info(slice: &Slice, pattern: bool, index: u32) -> Vec<u8> {
         blend.gamma.max(0.1),
         if pattern { 1.0 } else { 0.0 },
         index as f32,
+        blend.black.clamp(0.0, 0.5),
+        0.0,
+        0.0,
+        0.0,
     ] {
         bytes.extend(value.to_le_bytes());
     }
