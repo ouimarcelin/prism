@@ -603,6 +603,43 @@ impl Stage {
         (placed, size)
     }
 
+    /// Spreads the composition over the screens, left to right, each
+    /// overlapping the previous one by the simulation's overlap: each
+    /// screen keeps one slice, covering it, showing its share of the
+    /// composition, with its edges fading where it overlaps a neighbour.
+    /// The composition's shape is not kept: give screens the size of the
+    /// projectors.
+    pub fn spread(&mut self) {
+        let (placed, (total, _)) = self.simulation_layout();
+        if total == 0 {
+            return;
+        }
+        let total = total as f32;
+        let count = self.screens.len();
+        for (index, ((_, left), screen)) in placed.iter().zip(&mut self.screens).enumerate() {
+            let width = screen.width as f32;
+            let overlap = (self.simulation.overlap as f32).min(width) / width;
+            screen.slices.truncate(1);
+            let Some(slice) = screen.slices.first_mut() else {
+                continue;
+            };
+            slice.input = Area {
+                x: *left as f32 / total,
+                y: 0.0,
+                width: width / total,
+                height: 1.0,
+            };
+            slice.output = Quad::FULL;
+            slice.warp = None;
+            slice.rotation = 0.0;
+            slice.flip = Flip::default();
+            slice.blend.left = if index > 0 { overlap } else { 0.0 };
+            slice.blend.right = if index + 1 < count { overlap } else { 0.0 };
+            slice.blend.top = 0.0;
+            slice.blend.bottom = 0.0;
+        }
+    }
+
     /// The screen shown on the display named `display`.
     pub fn screen_on(&self, display: &str) -> Option<&Screen> {
         self.screens
@@ -748,6 +785,30 @@ mod tests {
         // 0.5 × 2.0 wide = 1.0 high: a square in pixels.
         assert!(near(slice.source(0.0, 0.0, 2.0), Point::new(0.25, 1.0)));
         assert!(near(slice.source(1.0, 0.0, 2.0), Point::new(0.25, 0.0)));
+    }
+
+    #[test]
+    fn spreading_shares_the_composition_with_fades_on_the_overlaps() {
+        let mut stage = Stage::default();
+        let a = stage.add_screen("A", 1000, 500).unwrap();
+        let b = stage.add_screen("B", 1000, 500).unwrap();
+        stage.add_slice(b, "En trop").unwrap();
+        stage.simulation.overlap = 200;
+        stage.spread();
+        let (left, right) = (
+            &stage.screen(a).unwrap().slices[0],
+            &stage.screen(b).unwrap().slices,
+        );
+        assert_eq!(right.len(), 1);
+        let right = &right[0];
+        // 1800 pixels in all: A shows 0 to 1000, B 800 to 1800.
+        assert!((left.input.width - 1000.0 / 1800.0).abs() < 1e-6);
+        assert!((right.input.x - 800.0 / 1800.0).abs() < 1e-6);
+        assert!((left.blend.right - 0.2).abs() < 1e-6 && left.blend.left == 0.0);
+        assert!((right.blend.left - 0.2).abs() < 1e-6 && right.blend.right == 0.0);
+        // The overlap shows the same part of the composition on both.
+        let shared_a = left.input.x + left.input.width * (1.0 - left.blend.right);
+        assert!((shared_a - right.input.x).abs() < 1e-6);
     }
 
     #[test]

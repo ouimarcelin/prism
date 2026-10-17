@@ -967,23 +967,12 @@ fn two_blended_projectors_show_no_seam_in_the_simulation() {
         .set_param("brightness", 0.6);
     let (mut comp, slot) = composition_with(clip);
     comp.trigger_clip(slot).unwrap();
-    // Composition 32 pixels wide; each projector shows 20 of them on 40
-    // pixels, sharing 8 of them (16 screen pixels).
-    for (name, x, side) in [("Gauche", 0.0, 1), ("Droite", 0.375, 0)] {
-        let screen = comp.stage.add_screen(name, 40, 16).unwrap();
-        let slice = &mut comp.stage.screen_mut(screen).unwrap().slices[0];
-        slice.input = prism_core::Area {
-            x,
-            y: 0.0,
-            width: 0.625,
-            height: 1.0,
-        };
-        if side == 1 {
-            slice.blend.right = 0.4;
-        } else {
-            slice.blend.left = 0.4;
-        }
-    }
+    // Composition 32 pixels wide, spread over two projectors of 40 pixels
+    // sharing 16: each shows 20 composition pixels, 8 of them shared.
+    comp.stage.add_screen("Gauche", 40, 16).unwrap();
+    comp.stage.add_screen("Droite", 40, 16).unwrap();
+    comp.stage.simulation.overlap = 16;
+    comp.stage.spread();
     comp.stage.simulation.enabled = true;
     comp.stage.simulation.overlap = 16;
     let mut driver = Driver::new(Arc::clone(&gpu), comp);
