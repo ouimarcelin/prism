@@ -328,6 +328,22 @@ enum Link {
     Band(Band),
 }
 
+/// A menu to make a value follow a band of the sound, or not.
+pub(crate) fn band_menu(ui: &mut egui::Ui, id: &str, band: &mut Option<Band>) {
+    egui::ComboBox::from_id_salt(id)
+        .width(48.0)
+        .selected_text(band.map_or("—", band_short_label))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(band, None, "Aucun lien");
+            ui.separator();
+            for choice in Band::ALL {
+                ui.selectable_value(band, Some(choice), format!("Son : {}", band_label(choice)));
+            }
+        })
+        .response
+        .on_hover_text("Suivre une bande du son (menu Audio), de 0 à 1");
+}
+
 /// Name of a band of the sound.
 pub(crate) fn band_label(band: Band) -> &'static str {
     match band {

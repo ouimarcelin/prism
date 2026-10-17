@@ -476,7 +476,7 @@ impl EngineState {
             let moment = time.moment().launched_at(beat, seconds);
             let layer = self
                 .composition
-                .effective_opacity_at(runtime.id, moment)
+                .effective_opacity_at(runtime.id, moment, time.audio)
                 .unwrap_or(0.0);
             let composition = &self.composition;
             let volume = |stream: &ClipStream| {
@@ -701,7 +701,10 @@ impl EngineState {
                 .as_ref()
                 .map_or((0.0, 0.0), ClipStream::launched);
             let moment = time.moment().launched_at(beat, seconds);
-            let Some(opacity) = self.composition.effective_opacity_at(runtime.id, moment) else {
+            let Some(opacity) = self
+                .composition
+                .effective_opacity_at(runtime.id, moment, time.audio)
+            else {
                 continue;
             };
             let Some(layer) = self.composition.layer(runtime.id) else {

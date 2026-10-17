@@ -4,7 +4,9 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Moment, Slot, Unit};
+use crate::{
+    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Moment, Slot, Unit,
+};
 
 /// Largest width or height accepted for a composition, in pixels.
 pub const MAX_DIMENSION: u32 = 16_384;
@@ -487,12 +489,22 @@ impl Composition {
         self.opacity_with(id, |layer| layer.opacity.get())
     }
 
-    /// Like [`Composition::effective_opacity`], at moment `at`: an animated
-    /// opacity takes its value then.
-    pub fn effective_opacity_at(&self, id: LayerId, at: Moment) -> Option<f32> {
-        self.opacity_with(id, |layer| match &layer.opacity_animation {
-            Some(animation) => Unit::new(animation.value_at(at)).get(),
-            None => layer.opacity.get(),
+    /// Like [`Composition::effective_opacity`], at moment `at` with the
+    /// sound at levels `audio` (in the order of [`crate::Band::ALL`]): an animated
+    /// opacity takes its value then, an opacity following the sound the
+    /// level of its band.
+    pub fn effective_opacity_at(
+        &self,
+        id: LayerId,
+        at: Moment,
+        audio: [f32; BAND_COUNT],
+    ) -> Option<f32> {
+        self.opacity_with(id, |layer| {
+            match (&layer.opacity_animation, layer.opacity_audio) {
+                (Some(animation), _) => Unit::new(animation.value_at(at)).get(),
+                (None, Some(band)) => Unit::new(audio[band.index()]).get(),
+                (None, None) => layer.opacity.get(),
+            }
         })
     }
 
@@ -680,7 +692,7 @@ mod tests {
         let id = comp.layers()[0].id();
         comp.layer_mut(id).unwrap().opacity = Unit::new(0.4);
         assert_eq!(
-            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0), [0.0; BAND_COUNT]),
             Some(0.4)
         );
         let mut animation = crate::Animation::new(0.0, 2.0);
@@ -688,18 +700,29 @@ mod tests {
         animation.period = crate::Period::Beats(4.0);
         comp.layer_mut(id).unwrap().opacity_animation = Some(animation);
         assert_eq!(
-            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0), [0.0; BAND_COUNT]),
             Some(0.5)
         );
         // Out of range values are clamped; the set opacity is kept.
         assert_eq!(
-            comp.effective_opacity_at(id, Moment::new(3.0, 0.0)),
+            comp.effective_opacity_at(id, Moment::new(3.0, 0.0), [0.0; BAND_COUNT]),
             Some(1.0)
         );
         assert_eq!(comp.effective_opacity(id), Some(0.4));
+        // Following the bass, unless animated.
+        comp.layer_mut(id).unwrap().opacity_audio = Some(crate::Band::Bass);
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(3.0, 0.0), [0.0, 0.25, 0.0, 0.0]),
+            Some(1.0)
+        );
+        comp.layer_mut(id).unwrap().opacity_animation = None;
+        assert_eq!(
+            comp.effective_opacity_at(id, Moment::new(3.0, 0.0), [0.0, 0.25, 0.0, 0.0]),
+            Some(0.25)
+        );
         comp.layer_mut(id).unwrap().bypass = true;
         assert_eq!(
-            comp.effective_opacity_at(id, Moment::new(1.0, 0.0)),
+            comp.effective_opacity_at(id, Moment::new(1.0, 0.0), [0.0; BAND_COUNT]),
             Some(0.0)
         );
     }

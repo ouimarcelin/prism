@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::project::write_atomic;
-use crate::{Animation, BlendMode, CrossfaderSide, Effect, Layer, ProjectError, Unit};
+use crate::{Animation, Band, BlendMode, CrossfaderSide, Effect, Layer, ProjectError, Unit};
 
 /// Version of the preset file format written by this build.
 pub const PRESET_FORMAT_VERSION: u32 = 1;
@@ -51,6 +51,9 @@ pub struct LayerPreset {
     /// Animation of the opacity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity_animation: Option<Animation>,
+    /// Band of the sound the opacity follows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_audio: Option<Band>,
 }
 
 impl LayerPreset {
@@ -63,6 +66,7 @@ impl LayerPreset {
             transition_ms: layer.transition_ms,
             effects: layer.effects.clone(),
             opacity_animation: layer.opacity_animation,
+            opacity_audio: layer.opacity_audio,
         }
     }
 
@@ -74,6 +78,7 @@ impl LayerPreset {
         layer.transition_ms = self.transition_ms;
         layer.effects = self.effects.clone();
         layer.opacity_animation = self.opacity_animation;
+        layer.opacity_audio = self.opacity_audio;
     }
 }
 

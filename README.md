@@ -7,7 +7,7 @@ Logiciel open source de VJing et de projection mapping, écrit en Rust, avec ren
 
 ## État
 
-Phase 1 en cours : modèle de données et sauvegarde des projets. Aucune application utilisable pour l'instant.
+Phases 1 et 2 écrites : lecture et mixage des clips, sortie plein écran, effets, générateurs, animation des réglages, tempo, entrée audio et son des clips. La phase 2 attend son test à la main (un effet cadencé sur le tempo reste synchrone après 10 minutes).
 Feuille de route : [`docs/SPEC.md`](docs/SPEC.md), section « Plan de développement ».
 
 | Phase | Contenu | Version |
@@ -55,6 +55,11 @@ Dans la fenêtre de contrôle :
 - le panneau de droite montre l'aperçu, puis les réglages de la couche et du clip sélectionnés (sens, vitesse, boucle, scratch, points de repère) ;
 - le menu Sortie ouvre la sortie plein écran sur l'écran choisi ; `F` l'ouvre sur le premier écran libre, `Échap` la ferme ;
 - `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
+- le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`) ;
+- « Ajouter un effet… » ajoute un effet à la composition, à la couche ou au clip (18 effets, ou un shader ISF) ; « Préréglages… » enregistre et réutilise des chaînes d'effets et des réglages de couche ;
+- une case vide propose « Générateur… » : couleur, dégradé, lignes, cercles, damier, bruit, texte ou shader ISF (exemples dans `examples/isf/`) ;
+- à côté de chaque réglage : `~` l'anime (onde au tempo ou en secondes, ou « une fois » au lancement du clip), le menu `—` le relie à un curseur du tableau de bord du clip ou à une bande du son ;
+- le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau).
 
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
