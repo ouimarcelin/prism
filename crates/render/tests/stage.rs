@@ -187,3 +187,44 @@ fn a_warp_grid_follows_its_quad_and_moves_the_image_with_its_points() {
     );
     assert_eq!(at(&pixels, 32, 8)[..3], [0.0, 0.0, 0.0]);
 }
+
+#[test]
+fn a_mask_shows_the_slice_inside_it_or_outside_when_inverted() {
+    let Some(gpu) = gpu() else { return };
+    let mut stage = Stage::default();
+    let id = stage.add_screen("Écran", 40, 20).unwrap();
+    // The left half of the screen; the program is red there.
+    let mut mask = prism_core::Mask::inside(&Quad::FULL);
+    mask.points = vec![
+        Point::new(0.0, 0.0),
+        Point::new(0.5, 0.0),
+        Point::new(0.5, 1.0),
+        Point::new(0.0, 1.0),
+    ];
+    stage.screen_mut(id).unwrap().slices[0].mask = Some(mask);
+    let (pixels, width) = draw(&gpu, &stage, id, false);
+    let at = |pixels: &[[f32; 4]], x: u32, y: u32| pixels[(y * width + x) as usize];
+    assert!(close(at(&pixels, 5, 10), RED), "{:?}", at(&pixels, 5, 10));
+    // Right half: green in the program, hidden by the mask.
+    assert_eq!(at(&pixels, 30, 10)[..3], [0.0, 0.0, 0.0]);
+
+    let slice = &mut stage.screen_mut(id).unwrap().slices[0];
+    slice.mask.as_mut().unwrap().inverted = true;
+    let (pixels, _) = draw(&gpu, &stage, id, false);
+    assert_eq!(at(&pixels, 5, 10)[..3], [0.0, 0.0, 0.0]);
+    assert!(
+        close(at(&pixels, 30, 10), GREEN),
+        "{:?}",
+        at(&pixels, 30, 10)
+    );
+
+    // A soft edge of 10 pixels: half way at the outline, fading out.
+    let slice = &mut stage.screen_mut(id).unwrap().slices[0];
+    let mask = slice.mask.as_mut().unwrap();
+    mask.inverted = false;
+    mask.feather = 10.0;
+    let (pixels, _) = draw(&gpu, &stage, id, false);
+    let edge = at(&pixels, 19, 10)[0];
+    assert!(edge > 0.4 && edge < 0.75, "{edge}");
+    assert!(at(&pixels, 12, 10)[0] > 0.95);
+}

@@ -41,6 +41,9 @@ pub use preset::{
     LayerPreset, PRESET_EXTENSION, PRESET_FORMAT_VERSION, Preset, PresetContent, preset_file_name,
 };
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
-pub use stage::{Area, MAX_SCREEN_SIZE, Point, Quad, Screen, ScreenId, Slice, SliceId, Stage};
+pub use stage::{
+    Area, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, Point, Quad, Screen, ScreenId, Slice, SliceId,
+    Stage,
+};
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
 pub use warp::{MAX_WARP_CELLS, Warp, WarpCurve};

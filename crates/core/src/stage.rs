@@ -125,6 +125,74 @@ pub struct Slice {
     /// Grid warping the slice; it then replaces [`Slice::output`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warp: Option<Warp>,
+    /// Shape limiting where the slice shows on its screen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mask: Option<Mask>,
+}
+
+/// Most points of a mask.
+pub const MAX_MASK_POINTS: usize = 64;
+
+/// A polygon on the screen: the slice shows inside it only, or outside it
+/// only when inverted, with a soft edge.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Mask {
+    /// Corners of the polygon, in fractions of the screen, in order.
+    pub points: Vec<Point>,
+    /// Whether the slice shows outside the polygon instead of inside.
+    #[serde(default)]
+    pub inverted: bool,
+    /// Width of the soft edge, in pixels of the screen, centered on the
+    /// outline.
+    #[serde(default)]
+    pub feather: f32,
+}
+
+impl Mask {
+    /// A mask following `quad`, its corners pulled a little inwards.
+    pub fn inside(quad: &Quad) -> Self {
+        let center = quad.0.iter().fold(Point::default(), |sum, point| {
+            Point::new(sum.x + point.x / 4.0, sum.y + point.y / 4.0)
+        });
+        Self {
+            points: quad
+                .0
+                .iter()
+                .map(|point| {
+                    Point::new(
+                        center.x + (point.x - center.x) * 0.9,
+                        center.y + (point.y - center.y) * 0.9,
+                    )
+                })
+                .collect(),
+            inverted: false,
+            feather: 0.0,
+        }
+    }
+
+    /// Whether the polygon has between 3 and [`MAX_MASK_POINTS`] points.
+    pub fn is_valid(&self) -> bool {
+        (3..=MAX_MASK_POINTS).contains(&self.points.len())
+    }
+
+    /// Adds a point in the middle of the longest edge; returns its index.
+    pub fn split_longest_edge(&mut self) -> Option<usize> {
+        if self.points.len() >= MAX_MASK_POINTS || self.points.len() < 2 {
+            return None;
+        }
+        let count = self.points.len();
+        let length = |index: usize| {
+            let (a, b) = (self.points[index], self.points[(index + 1) % count]);
+            (b.x - a.x).hypot(b.y - a.y)
+        };
+        let longest = (0..count).max_by(|a, b| length(*a).total_cmp(&length(*b)))?;
+        let (a, b) = (self.points[longest], self.points[(longest + 1) % count]);
+        self.points.insert(
+            longest + 1,
+            Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0),
+        );
+        Some(longest + 1)
+    }
 }
 
 fn enabled() -> bool {
@@ -224,6 +292,15 @@ impl<'de> Deserialize<'de> for Stage {
             {
                 return Err(serde::de::Error::custom("warp grid of the wrong size"));
             }
+            if screen
+                .slices
+                .iter()
+                .any(|slice| slice.mask.as_ref().is_some_and(|mask| !mask.is_valid()))
+            {
+                return Err(serde::de::Error::custom(
+                    "mask with too few or too many points",
+                ));
+            }
             let slice_ids = screen.slices.iter().map(|slice| slice.id.0);
             for id in std::iter::once(screen.id.0).chain(slice_ids) {
                 if !ids.insert(id) {
@@ -309,6 +386,7 @@ impl Stage {
             input: Area::FULL,
             output: Quad::FULL,
             warp: None,
+            mask: None,
         };
         self.screen_mut(screen)?.slices.push(slice);
         Some(id)
@@ -388,6 +466,25 @@ mod tests {
         let mut value = serde_json::to_value(&stage).unwrap();
         value["screens"][0]["slices"][1]["id"] = value["screens"][0]["slices"][0]["id"].clone();
         assert!(serde_json::from_value::<Stage>(value).is_err());
+    }
+
+    #[test]
+    fn masks_start_inside_their_slice_and_grow_on_their_longest_edge() {
+        let mut mask = Mask::inside(&Quad::FULL);
+        assert!(mask.is_valid());
+        assert!((mask.points[0].x - 0.05).abs() < 1e-6);
+        assert!((mask.points[2].y - 0.95).abs() < 1e-6);
+        // A wide polygon: its top edge is the longest.
+        mask.points = vec![
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 0.0),
+            Point::new(1.0, 0.1),
+            Point::new(0.2, 0.1),
+        ];
+        assert_eq!(mask.split_longest_edge(), Some(1));
+        assert_eq!(mask.points[1], Point::new(0.5, 0.0));
+        mask.points.truncate(2);
+        assert!(!mask.is_valid());
     }
 
     #[test]
