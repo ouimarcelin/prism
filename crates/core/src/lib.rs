@@ -40,7 +40,10 @@ pub use layer::{BlendMode, Layer};
 pub use preset::{
     LayerPreset, PRESET_EXTENSION, PRESET_FORMAT_VERSION, Preset, PresetContent, preset_file_name,
 };
-pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
+pub use project::{
+    FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError, STAGE_EXTENSION,
+    load_stage, save_stage,
+};
 pub use stage::{
     Area, EdgeBlend, Flip, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, Point, Quad, Screen, ScreenId,
     Simulation, Slice, SliceId, Stage,
