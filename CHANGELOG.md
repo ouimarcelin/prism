@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- README : état des phases 1 et 2 et mode d'emploi des effets, générateurs, animations et du son.
 - Le crossfader occupe toute sa longueur dans la barre du bas.
 - L'application garde les actions de toutes les passes d'egui dans une image : un raccourci ou un clic ne se perd plus quand egui refait la mise en page.
 - La ligne d'état (cadence, saccades, images sautées, images en retard) a sa propre ligne sous le crossfader.
@@ -25,6 +26,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- L'opacité d'une couche peut suivre une bande du son (menu à côté de « ~ »), aussi enregistrée dans les préréglages de couche.
 - Son des clips : la piste son des vidéos est jouée sur la sortie du système, calée sur la tête de lecture (vitesse, sens, boucles, scratch), au volume du clip multiplié par l'opacité de sa couche ; fondu pendant les transitions ; « Son des clips » et volume général dans le menu Audio, volume par clip dans l'inspecteur (ADR 0020).
 - Préréglages : une chaîne d'effets ou les réglages d'une couche (opacité, fusion, crossfader, transition, effets) enregistrés sous un nom et réutilisés dans tout projet (menus « Préréglages… »), fichiers JSON dans le dossier `Préréglages` à côté des préférences.
 - Entrée audio (menu Audio : appareil, sensibilité) mesurée en quatre bandes (niveau, graves, médiums, aigus), vumètres à côté du tempo ; tout réglage d'effet peut suivre une bande (« Son : graves »…) sur toute sa plage (crate `prism-audio`, ADR 0019). Exemple `audio-meter`.

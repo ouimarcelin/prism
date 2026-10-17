@@ -18,7 +18,9 @@ const OPACITY: ParamInfo = ParamInfo {
     choices: &[],
 };
 
-use crate::effects::{animation_settings, dashboard_section, effect_section, generator_settings};
+use crate::effects::{
+    animation_settings, band_menu, dashboard_section, effect_section, generator_settings,
+};
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
 
@@ -73,7 +75,8 @@ impl ControlPanel {
                 ui.horizontal(|ui| {
                     let mut opacity = layer.opacity.get();
                     let animated = layer.opacity_animation.is_some();
-                    ui.add_enabled(!animated, egui::Slider::new(&mut opacity, 0.0..=1.0));
+                    let driven = animated || layer.opacity_audio.is_some();
+                    ui.add_enabled(!driven, egui::Slider::new(&mut opacity, 0.0..=1.0));
                     layer.opacity = Unit::new(opacity);
                     let hint = if animated {
                         "Arrêter l'animation de l'opacité"
@@ -91,6 +94,7 @@ impl ControlPanel {
                             Some(Animation::new(0.0, 1.0))
                         };
                     }
+                    band_menu(ui, "opacity band", &mut layer.opacity_audio);
                 });
                 ui.end_row();
                 if let Some(animation) = &mut layer.opacity_animation {

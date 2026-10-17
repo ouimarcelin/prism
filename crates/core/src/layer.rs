@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Animation, Clip, ColumnId, CrossfaderSide, Effect, LayerId, Unit};
+use crate::{Animation, Band, Clip, ColumnId, CrossfaderSide, Effect, LayerId, Unit};
 
 /// How a layer is combined with the result of the layers below it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -79,6 +79,10 @@ pub struct Layer {
     /// [`Layer::opacity`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity_animation: Option<Animation>,
+    /// When set, the opacity follows this band of the sound coming in, from
+    /// 0 to 1; an animation goes first.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub opacity_audio: Option<Band>,
     /// One entry per column, in column order.
     pub(crate) clips: Vec<Option<Clip>>,
     /// Column of the clip currently playing. Runtime state, not saved.
@@ -102,6 +106,7 @@ impl Layer {
             transition_ms: 0,
             effects: Vec::new(),
             opacity_animation: None,
+            opacity_audio: None,
             clips: vec![None; column_count],
             active: None,
             trigger_count: 0,
@@ -142,6 +147,7 @@ impl Layer {
             && self.transition_ms == other.transition_ms
             && self.effects == other.effects
             && self.opacity_animation == other.opacity_animation
+            && self.opacity_audio == other.opacity_audio
             && self.clips == other.clips
     }
 }
