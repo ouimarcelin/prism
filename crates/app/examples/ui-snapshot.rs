@@ -147,6 +147,11 @@ fn main() -> ExitCode {
                 prism_core::Point::new(1.0, 1.0),
                 prism_core::Point::new(0.5, 0.9),
             ]);
+            // A smooth warp, one point pulled.
+            let mut warp = prism_core::Warp::from_quad(&slice.output, 3, 3);
+            warp.curve = prism_core::WarpCurve::Smooth;
+            warp.points_mut()[5].x += 0.05;
+            slice.warp = Some(warp);
         }
     }
     let mut panel = ControlPanel::new(document, Vec::new());
