@@ -18,6 +18,8 @@
 mod audio;
 #[cfg(target_os = "macos")]
 mod avf;
+#[cfg(target_os = "macos")]
+mod camera;
 mod decoder;
 pub mod hap;
 pub mod image;
@@ -27,6 +29,8 @@ mod source;
 pub mod test_support;
 
 pub use audio::{AUDIO_RATE, ClipAudio, MAX_AUDIO_SECONDS, decode_audio};
+#[cfg(target_os = "macos")]
+pub use camera::{Camera, CameraDevice, cameras};
 pub use decoder::{DecodeError, HapDecoder, is_hap};
 pub use hap::{BlockFormat, ColorLayout, HapError, HapFrame, Plane};
 pub use image::{IMAGE_EXTENSIONS, ImageSequence, StillImage, decode_image, natural_order};

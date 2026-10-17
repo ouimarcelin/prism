@@ -6,6 +6,7 @@ use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_media::{Frame, MediaInfo};
 use prism_render::{FrameUploader, Gpu, VideoTexture, wgpu};
 
+use crate::live::Live;
 use crate::playhead::{MediaTiming, Playhead};
 use crate::random::Random;
 use crate::sound::ClipSound;
@@ -28,6 +29,8 @@ enum Phase {
     Failed(String),
     /// Drawn by a generator on the render thread, frame after frame.
     Generating,
+    /// Read live from a camera.
+    Live(Live),
 }
 
 pub(crate) struct ClipStream {
@@ -67,6 +70,8 @@ impl ClipStream {
     ) -> Self {
         let (worker, phase) = if source.generator().is_some() {
             (None, Phase::Generating)
+        } else if let MediaSource::Camera { id, .. } = &source {
+            (None, Phase::Live(Live::open(id.clone())))
         } else {
             match Worker::spawn(source.clone()) {
                 Ok(worker) => (Some(worker), Phase::Opening),
@@ -266,7 +271,7 @@ impl ClipStream {
                 playhead.set_held(hold);
             }
             Phase::Opening => self.pending_seek = Some((position, hold)),
-            Phase::Failed(_) | Phase::Generating => {}
+            Phase::Failed(_) | Phase::Generating | Phase::Live(_) => {}
         }
     }
 
@@ -279,12 +284,19 @@ impl ClipStream {
                     *hold = false;
                 }
             }
-            Phase::Failed(_) | Phase::Generating => {}
+            Phase::Failed(_) | Phase::Generating | Phase::Live(_) => {}
         }
     }
 
     /// Takes the events sent by the worker.
     pub(crate) fn receive(&mut self) {
+        if let Phase::Live(live) = &mut self.phase {
+            live.poll();
+            if let Some(message) = live.error() {
+                self.phase = Phase::Failed(message.to_owned());
+            }
+            return;
+        }
         let Some(worker) = &self.worker else {
             return;
         };
@@ -380,6 +392,32 @@ impl ClipStream {
         uploader: &mut FrameUploader,
         encoder: &mut wgpu::CommandEncoder,
     ) {
+        if let Phase::Live(live) = &self.phase {
+            let Some(frame) = live.take_frame() else {
+                return;
+            };
+            let (width, height) = frame_size(&frame);
+            if width == 0 || height == 0 {
+                live.recycle(frame);
+                return;
+            }
+            if self
+                .texture
+                .as_ref()
+                .is_none_or(|texture| (texture.width(), texture.height()) != (width, height))
+            {
+                self.texture = Some(VideoTexture::new(&gpu.device, width, height));
+            }
+            if let Some(texture) = &mut self.texture
+                && uploader
+                    .upload(&gpu.device, &gpu.queue, encoder, texture, &frame)
+                    .is_ok()
+            {
+                self.shown = Some(self.shown.map_or(0, |count| count.wrapping_add(1)));
+            }
+            live.recycle(frame);
+            return;
+        }
         let (Some(wanted), Phase::Ready { track, .. }) = (self.wanted, &self.phase) else {
             return;
         };
@@ -415,6 +453,8 @@ impl ClipStream {
             Phase::Ready { .. } => ClipState::Playing,
             Phase::Generating if self.has_frame() => ClipState::Playing,
             Phase::Generating => ClipState::Loading,
+            Phase::Live(_) if self.shown.is_some() => ClipState::Playing,
+            Phase::Live(_) => ClipState::Loading,
         }
     }
 
@@ -444,5 +484,14 @@ impl ClipStream {
 
     pub(crate) fn is_held(&self) -> bool {
         matches!(&self.phase, Phase::Ready { playhead, .. } if playhead.is_held())
+    }
+}
+
+/// Size of a live frame in pixels (cameras deliver pixels, not HAP).
+fn frame_size(frame: &Frame) -> (u32, u32) {
+    match frame {
+        Frame::Hap(_) => (0, 0),
+        Frame::Rgba(image) => (image.width, image.height),
+        Frame::Yuv(image) => (image.width, image.height),
     }
 }

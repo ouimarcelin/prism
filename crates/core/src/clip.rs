@@ -42,6 +42,13 @@ pub enum MediaSource {
         /// What to draw and how.
         generator: Effect,
     },
+    /// A camera of the computer (or a capture device seen as one), live.
+    Camera {
+        /// Identifier of the device, stable across restarts.
+        id: String,
+        /// Name of the device when it was chosen.
+        name: String,
+    },
 }
 
 impl MediaSource {
@@ -49,7 +56,7 @@ impl MediaSource {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } => None,
+            Self::Generator { .. } | Self::Camera { .. } => None,
         }
     }
 
@@ -57,8 +64,14 @@ impl MediaSource {
     pub fn path_mut(&mut self) -> Option<&mut PathBuf> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } => None,
+            Self::Generator { .. } | Self::Camera { .. } => None,
         }
+    }
+
+    /// Whether the frames come live from a device, without position or
+    /// duration.
+    pub fn is_live(&self) -> bool {
+        matches!(self, Self::Camera { .. })
     }
 
     /// The generator, for a clip drawn by the GPU.
@@ -191,6 +204,21 @@ impl Clip {
         Self {
             name,
             source: MediaSource::File { path },
+            playback: Playback::default(),
+            effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
+        }
+    }
+
+    /// Creates a clip showing the camera `id`, named `name`.
+    pub fn from_camera(id: impl Into<String>, name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            name: name.clone(),
+            source: MediaSource::Camera {
+                id: id.into(),
+                name,
+            },
             playback: Playback::default(),
             effects: Vec::new(),
             dashboard: [Unit::ZERO; DASHBOARD_SIZE],

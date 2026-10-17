@@ -204,7 +204,52 @@ impl ControlPanel {
                     })
                     .response
                     .on_hover_text("Une image dessinée par le GPU, sans fichier");
+                egui::ComboBox::from_id_salt("new camera")
+                    .selected_text("Caméra…")
+                    .show_ui(ui, |ui| {
+                        let cameras = prism_engine::cameras();
+                        if cameras.is_empty() {
+                            ui.label(RichText::new("Aucune caméra").weak());
+                        }
+                        for (id, name) in cameras {
+                            if ui.selectable_label(false, &name).clicked() {
+                                let clip = Clip::from_camera(id, name);
+                                let _ = self.document.composition_mut().set_clip(slot, Some(clip));
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("L'image en direct d'une caméra ou d'une carte de capture");
             });
+            return;
+        }
+        if let Some(clip) = self.document.composition_mut().clip_mut(slot)
+            && let prism_core::MediaSource::Camera { name: device, .. } = &clip.source
+        {
+            let device = device.clone();
+            egui::Grid::new("camera clip")
+                .num_columns(2)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("Nom");
+                    ui.text_edit_singleline(&mut clip.name);
+                    ui.end_row();
+                    ui.label("Caméra");
+                    ui.label(device);
+                    ui.end_row();
+                });
+            dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
+            effect_section(
+                ui,
+                "Effets du clip",
+                EffectOwner::Clip { slot },
+                &mut clip.effects,
+                true,
+                Tools {
+                    presets: &mut self.presets,
+                    learn: &mut self.learn,
+                },
+            );
             return;
         }
         if let Some(clip) = self.document.composition_mut().clip_mut(slot)
