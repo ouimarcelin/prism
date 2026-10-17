@@ -26,3 +26,7 @@
 
 - La capture d'écran de la fenêtre donne une image blanche (pas d'autorisation d'enregistrement de l'écran) : mise en page vérifiée par un rendu PNG temporaire, non conservé.
 - Le critère de la phase 3 se joue alors au pad virtuel, à la souris dans sa fenêtre : c'est le contrôleur qui est simulé, Prism reste sans souris.
+
+## Archive
+
+- Transcription : `2026-10-17-103951-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `5604bae0e229326c88276abe62a24135830b18594e876ac04c21392682e6b0a8` (même session que les tickets 33 à 36 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
