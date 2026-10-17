@@ -6,7 +6,9 @@
 //! shape moves it, dragging a corner reshapes it.
 
 use egui::{Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
-use prism_core::{Area, Point, Quad, Resolution, ScreenId, SliceId};
+use prism_core::{
+    Area, MAX_WARP_CELLS, Point, Quad, Resolution, ScreenId, Slice, SliceId, Warp, WarpCurve,
+};
 
 use crate::panel::{Action, ControlPanel, Screen as Display};
 
@@ -110,6 +112,42 @@ pub(crate) fn quad_contains(quad: &Quad, point: Point) -> bool {
         }
     }
     inside
+}
+
+/// The outline of `slice` on its screen: the corners of its warp grid, or
+/// its four corners.
+pub(crate) fn outline(slice: &Slice) -> Quad {
+    match &slice.warp {
+        Some(warp) if warp.is_valid() => Quad([
+            warp.evaluate(0.0, 0.0),
+            warp.evaluate(1.0, 0.0),
+            warp.evaluate(1.0, 1.0),
+            warp.evaluate(0.0, 1.0),
+        ]),
+        _ => slice.output,
+    }
+}
+
+/// Lines of the warp grid of `slice`, as drawn on the screen, in fractions.
+fn warp_lines(warp: &Warp) -> Vec<Vec<Point>> {
+    const SAMPLES: usize = 24;
+    let (columns, rows) = warp.cells();
+    let samples = |fixed: f32, across: bool| -> Vec<Point> {
+        (0..=SAMPLES)
+            .map(|index| {
+                let t = index as f32 / SAMPLES as f32;
+                if across {
+                    warp.evaluate(t, fixed)
+                } else {
+                    warp.evaluate(fixed, t)
+                }
+            })
+            .collect()
+    };
+    (0..=rows)
+        .map(|row| samples(f32::from(row) / f32::from(rows), true))
+        .chain((0..=columns).map(|column| samples(f32::from(column) / f32::from(columns), false)))
+        .collect()
 }
 
 /// Draws a corner handle and returns its drag response.
@@ -441,6 +479,76 @@ impl ControlPanel {
                 slice.output = Quad::from_area(slice.input);
             }
         });
+        if slice.warp.is_some() {
+            ui.label(
+                RichText::new("La grille de déformation remplace ces coins.")
+                    .weak()
+                    .italics(),
+            );
+        }
+        ui.separator();
+        ui.label(RichText::new("Déformation").strong());
+        let mode = match &slice.warp {
+            None => 0,
+            Some(warp) if warp.curve == WarpCurve::Linear => 1,
+            Some(_) => 2,
+        };
+        let names = ["Aucune", "Grille droite", "Grille lissée"];
+        let mut chosen = mode;
+        egui::ComboBox::from_id_salt("slice warp")
+            .selected_text(names[mode])
+            .show_ui(ui, |ui| {
+                for (index, name) in names.iter().enumerate() {
+                    ui.selectable_value(&mut chosen, index, *name);
+                }
+            })
+            .response
+            .on_hover_text("Une grille de points posée sur la découpe : déplacer un point déforme l'image autour de lui ; « lissée » fait passer des courbes par les points");
+        if chosen != mode {
+            slice.warp = match chosen {
+                0 => None,
+                _ => {
+                    let mut warp = slice
+                        .warp
+                        .take()
+                        .unwrap_or_else(|| Warp::from_quad(&slice.output, 4, 4));
+                    warp.curve = if chosen == 1 {
+                        WarpCurve::Linear
+                    } else {
+                        WarpCurve::Smooth
+                    };
+                    Some(warp)
+                }
+            };
+        }
+        if let Some(warp) = &mut slice.warp {
+            let (mut columns, mut rows) = warp.cells();
+            let mut resized = false;
+            ui.horizontal(|ui| {
+                ui.label("Cellules");
+                resized |= ui
+                    .add(egui::DragValue::new(&mut columns).range(1..=MAX_WARP_CELLS))
+                    .changed();
+                ui.label("×");
+                resized |= ui
+                    .add(egui::DragValue::new(&mut rows).range(1..=MAX_WARP_CELLS))
+                    .changed();
+            });
+            if resized {
+                *warp = warp.resized(columns, rows);
+            }
+            if ui
+                .button("Réinitialiser la grille")
+                .on_hover_text(
+                    "Les points reprennent leur place sur les quatre coins de la découpe",
+                )
+                .clicked()
+            {
+                let curve = warp.curve;
+                *warp = Warp::from_quad(&slice.output, columns, rows);
+                warp.curve = curve;
+            }
+        }
     }
 
     fn stage_views(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) {
@@ -510,11 +618,22 @@ impl ControlPanel {
                 corners.to_vec(),
                 Stroke::new(1.5, color),
             ));
-            let quad = slice.output.0.map(|point| to_screen(output, point));
-            ui.painter().add(egui::Shape::closed_line(
-                quad.to_vec(),
-                Stroke::new(1.5, color),
-            ));
+            match &slice.warp {
+                Some(warp) if warp.is_valid() => {
+                    for line in warp_lines(warp) {
+                        let line = line.into_iter().map(|point| to_screen(output, point));
+                        ui.painter()
+                            .add(egui::Shape::line(line.collect(), Stroke::new(1.0, color)));
+                    }
+                }
+                _ => {
+                    let quad = slice.output.0.map(|point| to_screen(output, point));
+                    ui.painter().add(egui::Shape::closed_line(
+                        quad.to_vec(),
+                        Stroke::new(1.5, color),
+                    ));
+                }
+            }
         }
 
         // Clicks pick the slice under the pointer, topmost first.
@@ -528,7 +647,7 @@ impl ControlPanel {
                     (area.x..=area.x + area.width).contains(&point.x)
                         && (area.y..=area.y + area.height).contains(&point.y)
                 }) || (output.contains(position)
-                    && quad_contains(&slice.output, to_fraction(output, position)))
+                    && quad_contains(&outline(slice), to_fraction(output, position)))
             });
             if let Some(slice) = picked
                 && self.stage.slice != Some(slice.id())
@@ -565,20 +684,36 @@ impl ControlPanel {
                 Point::new(delta.x / input.width(), delta.y / input.height()),
             );
         }
-        let bounds = Rect::from_points(&slice.output.0.map(|point| to_screen(output, point)));
+        let shape = outline(slice);
+        let bounds = Rect::from_points(&shape.0.map(|point| to_screen(output, point)));
         let moving = ui.interact(bounds, base.with("output move"), Sense::drag());
         if moving.dragged()
             && moving.interact_pointer_pos().is_some_and(|position| {
-                quad_contains(
-                    &slice.output,
-                    to_fraction(output, position - moving.drag_delta()),
-                )
+                quad_contains(&shape, to_fraction(output, position - moving.drag_delta()))
             })
         {
             let delta = moving.drag_delta();
-            for point in &mut slice.output.0 {
+            let warp_points = slice
+                .warp
+                .as_mut()
+                .map(|warp| warp.points_mut())
+                .unwrap_or_default();
+            for point in slice.output.0.iter_mut().chain(warp_points) {
                 point.x += delta.x / output.width();
                 point.y += delta.y / output.height();
+            }
+        }
+
+        // Points of the warp grid: drag to bend the image.
+        if let Some(warp) = &mut slice.warp {
+            for (index, point) in warp.points_mut().iter_mut().enumerate() {
+                let center = to_screen(output, *point);
+                let response = handle(ui, base.with(("warp", index)), center, SELECTED);
+                if response.dragged()
+                    && let Some(position) = response.interact_pointer_pos()
+                {
+                    *point = to_fraction(output, position);
+                }
             }
         }
 
@@ -590,6 +725,9 @@ impl ControlPanel {
                 && let Some(position) = response.interact_pointer_pos()
             {
                 slice.input = drag_corner(slice.input, corner, to_fraction(input, position));
+            }
+            if slice.warp.is_some() {
+                continue;
             }
             let center = to_screen(output, slice.output.0[corner]);
             let response = handle(ui, base.with(("output", corner)), center, SELECTED);

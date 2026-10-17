@@ -50,8 +50,55 @@ pub fn perspective_weights(corners: &[Point; 4]) -> [f32; 4] {
     ]
 }
 
-/// The two triangles drawing `slice`.
-pub fn slice_vertices(slice: &Slice) -> [SliceVertex; 6] {
+/// Steps across or down a warped slice per cell of its grid, so curves
+/// look smooth.
+const STEPS_PER_CELL: usize = 4;
+/// Fewest and most steps across or down a warped slice.
+const STEPS: (usize, usize) = (32, 256);
+
+/// The triangles drawing `slice`: two for a quad in perspective, a fine
+/// mesh following its warp grid when it has one.
+pub fn slice_vertices(slice: &Slice) -> Vec<SliceVertex> {
+    match &slice.warp {
+        Some(warp) if warp.is_valid() => warp_vertices(slice, warp),
+        _ => quad_vertices(slice).to_vec(),
+    }
+}
+
+fn warp_vertices(slice: &Slice, warp: &prism_core::Warp) -> Vec<SliceVertex> {
+    let (columns, rows) = warp.cells();
+    let steps = |cells: u8| (usize::from(cells) * STEPS_PER_CELL).clamp(STEPS.0, STEPS.1);
+    let (across, down) = (steps(columns), steps(rows));
+    let input = slice.input;
+    let grid: Vec<SliceVertex> = (0..=down)
+        .flat_map(|row| {
+            (0..=across).map(move |column| {
+                let (u, v) = (column as f32 / across as f32, row as f32 / down as f32);
+                let position = warp.evaluate(u, v);
+                SliceVertex {
+                    position: [position.x, position.y],
+                    source: [input.x + u * input.width, input.y + v * input.height, 1.0],
+                }
+            })
+        })
+        .collect();
+    let at = |column: usize, row: usize| grid[row * (across + 1) + column];
+    let mut vertices = Vec::with_capacity(across * down * 6);
+    for row in 0..down {
+        for column in 0..across {
+            let corners = [
+                at(column, row),
+                at(column + 1, row),
+                at(column + 1, row + 1),
+                at(column, row + 1),
+            ];
+            vertices.extend([0, 1, 2, 0, 2, 3].map(|index| corners[index]));
+        }
+    }
+    vertices
+}
+
+fn quad_vertices(slice: &Slice) -> [SliceVertex; 6] {
     let corners = slice.output.0;
     let sources = slice.input.corners();
     let weights = perspective_weights(&corners);

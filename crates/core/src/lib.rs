@@ -22,6 +22,7 @@ mod preset;
 mod project;
 mod stage;
 mod value;
+mod warp;
 
 pub use clip::{
     CUE_POINT_COUNT, Clip, DASHBOARD_SIZE, DEFAULT_SEQUENCE_RATE, Direction, LoopMode, MAX_SPEED,
@@ -42,3 +43,4 @@ pub use preset::{
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
 pub use stage::{Area, MAX_SCREEN_SIZE, Point, Quad, Screen, ScreenId, Slice, SliceId, Stage};
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
+pub use warp::{MAX_WARP_CELLS, Warp, WarpCurve};
