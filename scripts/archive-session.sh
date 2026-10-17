@@ -11,6 +11,11 @@ archive_dir="${PRISM_ARCHIVE_DIR:-$HOME/Documents/prism-archives/sessions}"
 
 if [ $# -ge 1 ]; then
   transcript="$project_dir/$1.jsonl"
+  # A session started while the project lived elsewhere is kept under the
+  # old path's folder.
+  if [ ! -f "$transcript" ]; then
+    transcript=$(ls -t "$HOME"/.claude/projects/*/"$1.jsonl" 2>/dev/null | head -n 1 || true)
+  fi
 else
   transcript=$(ls -t "$project_dir"/*.jsonl 2>/dev/null | head -n 1 || true)
 fi
