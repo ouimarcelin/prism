@@ -2325,6 +2325,7 @@ dependencies = [
  "egui",
  "egui-wgpu",
  "egui-winit",
+ "midir",
  "png",
  "pollster 1.0.1",
  "prism-audio",
