@@ -17,3 +17,7 @@
 ## Problèmes et points ouverts
 
 - Pas de test automatique propre à ce ticket : le serveur Syphon et l'image d'écran sont déjà testés séparément ; à essayer avec TouchDesigner (serveur « Prism – Écran 1 »).
+
+## Archive
+
+- Transcription : `2026-10-17-214434-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `229fa6647c8018fc040fb05b0c12a991315b8847e90d728a77732b6afec26162` (même session, archivée après le ticket 53 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
