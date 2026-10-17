@@ -4,7 +4,7 @@ use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use prism_clock::MidiClock;
+use prism_clock::{MidiClock, MtcReader, Timecode};
 
 use midir::{MidiInput, MidiInputConnection};
 
@@ -38,6 +38,9 @@ pub struct MidiInputs {
 struct ClockState {
     clock: MidiClock,
     last_pulse: Option<Instant>,
+    mtc: MtcReader,
+    /// Last timecode read, and when.
+    timecode: Option<(Timecode, Instant)>,
 }
 
 /// What the MIDI clock of the inputs says.
@@ -47,7 +50,13 @@ pub struct ClockReading {
     pub bpm: Option<f64>,
     /// Times a sender started (MIDI Start), counted.
     pub starts: u64,
+    /// MIDI timecode now, moved on since its last message, while it runs.
+    pub timecode: Option<Timecode>,
 }
+
+/// Longest silence of a timecode still taken as running: MTC sends a
+/// message every quarter frame.
+const TIMECODE_SILENCE: Duration = Duration::from_millis(250);
 
 /// MIDI clock pulse, start, continue and stop (system real time).
 const CLOCK_PULSE: u8 = 0xF8;
@@ -80,9 +89,16 @@ impl MidiInputs {
         let running = state
             .last_pulse
             .is_some_and(|last| last.elapsed() <= CLOCK_SILENCE);
+        let timecode = state.timecode.and_then(|(timecode, read)| {
+            let elapsed = read.elapsed();
+            (elapsed <= TIMECODE_SILENCE).then(|| {
+                Timecode::from_seconds(timecode.seconds() + elapsed.as_secs_f64(), timecode.rate)
+            })
+        });
         ClockReading {
             bpm: state.clock.bpm().filter(|_| running),
             starts: state.clock.starts(),
+            timecode,
         }
     }
 
@@ -138,6 +154,16 @@ impl MidiInputs {
                 port,
                 "prism-in",
                 move |micros, bytes, ()| {
+                    if let Some(&status) = bytes.first()
+                        && matches!(status, 0xF1 | 0xF0)
+                    {
+                        if let Ok(mut state) = clock.lock()
+                            && let Some(timecode) = state.mtc.read(bytes)
+                        {
+                            state.timecode = Some((timecode, Instant::now()));
+                        }
+                        return;
+                    }
                     if let Some(&status) = bytes.first()
                         && matches!(status, CLOCK_PULSE | CLOCK_START | CLOCK_STOP)
                     {

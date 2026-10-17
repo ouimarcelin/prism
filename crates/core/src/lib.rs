@@ -15,6 +15,7 @@ mod clip;
 mod composition;
 mod control;
 mod crossfader;
+mod cues;
 mod effect;
 mod ids;
 mod layer;
@@ -35,6 +36,7 @@ pub use composition::{
 };
 pub use control::{ControlSource, ControlTarget, EffectOwner, Mapping};
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
+pub use cues::{Cue, CueTarget, MAX_TIMECODE_STEP, Timeline};
 pub use effect::{Animation, BAND_COUNT, Band, Effect, MIN_PERIOD, Moment, Period, Shape};
 pub use ids::{ColumnId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};

@@ -12,7 +12,7 @@
 //! Layout, on MIDI channel 1: 32 pads (notes 36 to 67, four rows of eight),
 //! 8 buttons (notes 68 to 75), 8 faders (CC 1 to 8) and a crossfader
 //! (CC 9). It also sends a MIDI clock at the tempo set, with Start and
-//! Stop. Keys `1` to `8` press the pads of the first row while held, so
+//! Stop, and MIDI timecode from 01:00:00:00. Keys `1` to `8` press the pads of the first row while held, so
 //! a learned clip can be launched without the mouse.
 
 use std::process::ExitCode;
@@ -129,6 +129,62 @@ mod pad {
         _input: MidiInputConnection<()>,
         surface: Arc<Mutex<Surface>>,
         clock: Clock,
+        timecode: Timecode,
+    }
+
+    /// MIDI timecode at 25 frames per second, from 01:00:00:00, sent as
+    /// quarter frames by a thread of its own.
+    struct Timecode {
+        running: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Timecode {
+        fn start(&mut self, output: &Arc<Mutex<MidiOutputConnection>>) {
+            self.stop();
+            self.running.store(true, Ordering::Release);
+            let (output, running) = (Arc::clone(output), Arc::clone(&self.running));
+            self.thread = std::thread::Builder::new()
+                .name("midi-pad-timecode".into())
+                .spawn(move || {
+                    let start = Instant::now();
+                    // One quarter frame every 10 ms (25 frames per second).
+                    let mut quarter: u64 = 0;
+                    while running.load(Ordering::Acquire) {
+                        let piece = (quarter % 8) as u8;
+                        // The eight pieces describe the frame where piece 0
+                        // was sent.
+                        let frame = 3600 * 25 + (quarter - u64::from(piece)) / 4;
+                        let (frames, seconds) = ((frame % 25) as u8, ((frame / 25) % 60) as u8);
+                        let (minutes, hours) =
+                            (((frame / 1500) % 60) as u8, ((frame / 90_000) % 24) as u8);
+                        let value = match piece {
+                            0 => frames & 0x0F,
+                            1 => frames >> 4,
+                            2 => seconds & 0x0F,
+                            3 => seconds >> 4,
+                            4 => minutes & 0x0F,
+                            5 => minutes >> 4,
+                            6 => hours & 0x0F,
+                            _ => (hours >> 4) | (1 << 1),
+                        };
+                        if let Ok(mut output) = output.lock() {
+                            let _ = output.send(&[0xF1, (piece << 4) | value]);
+                        }
+                        quarter += 1;
+                        let next = start + Duration::from_millis(10) * quarter as u32;
+                        std::thread::sleep(next.saturating_duration_since(Instant::now()));
+                    }
+                })
+                .ok();
+        }
+
+        fn stop(&mut self) {
+            self.running.store(false, Ordering::Release);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+            }
+        }
     }
 
     /// A MIDI clock sent by a thread of its own: 24 pulses per beat.
@@ -213,6 +269,10 @@ mod pad {
                 _input: input,
                 surface,
                 clock: Clock::new(),
+                timecode: Timecode {
+                    running: Arc::new(AtomicBool::new(false)),
+                    thread: None,
+                },
             })
         }
 
@@ -248,6 +308,21 @@ mod pad {
                     }
                     if ui.button("Stop").clicked() {
                         self.clock.stop(&self.output);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Timecode MIDI");
+                    if ui
+                        .button("Lancer à 01:00:00:00")
+                        .on_hover_text(
+                            "25 images/s, en quarts d'image ; dans Prism : Composition > Timecode…",
+                        )
+                        .clicked()
+                    {
+                        self.timecode.start(&self.output);
+                    }
+                    if ui.button("Arrêter").clicked() {
+                        self.timecode.stop();
                     }
                 });
                 ui.add_space(8.0);
@@ -378,7 +453,7 @@ mod pad {
                 event_loop.create_window(
                     Window::default_attributes()
                         .with_title("Prism – pad MIDI virtuel")
-                        .with_inner_size(LogicalSize::new(600.0, 680.0)),
+                        .with_inner_size(LogicalSize::new(600.0, 710.0)),
                 )?,
             );
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {

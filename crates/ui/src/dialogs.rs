@@ -24,6 +24,7 @@ impl ControlPanel {
         self.unsaved_changes(ctx);
         self.message(ctx);
         self.mappings_window(ctx);
+        self.timecode_window(ctx);
     }
 
     /// Every mapping of the composition, to read and remove; controls

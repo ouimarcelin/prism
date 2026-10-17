@@ -885,7 +885,8 @@ impl App {
         // The MIDI clock drives the tempo when followed.
         let clock = self.midi.inputs.clock();
         self.midi.status.clock_bpm = clock.bpm;
-        let clock_actions = self.panel.follow_clock(clock);
+        let mut clock_actions = self.panel.follow_clock(clock);
+        clock_actions.extend(self.panel.follow_timecode(clock.timecode));
         if !clock_actions.is_empty() {
             self.handle(event_loop, clock_actions);
         }

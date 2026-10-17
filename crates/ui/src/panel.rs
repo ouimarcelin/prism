@@ -120,6 +120,7 @@ pub(crate) struct Dialogs {
     pub(crate) message: Option<String>,
     pub(crate) unsaved: Option<Pending>,
     pub(crate) mappings: bool,
+    pub(crate) timecode: bool,
 }
 
 /// State of the control window around the document being edited.
@@ -141,6 +142,10 @@ pub struct ControlPanel {
     pub(crate) stage: crate::stage::StageEditor,
     /// Starts of the MIDI clock already seen.
     clock_starts: u64,
+    /// Timecode received at the last look, in seconds, while it runs.
+    pub(crate) timecode_seconds: Option<f64>,
+    /// Last timecode received, for its rate.
+    pub(crate) timecode_seen: Option<prism_clock::Timecode>,
 }
 
 impl ControlPanel {
@@ -167,6 +172,8 @@ impl ControlPanel {
             controls: Controls::default(),
             stage: crate::stage::StageEditor::default(),
             clock_starts: 0,
+            timecode_seconds: None,
+            timecode_seen: None,
         }
     }
 
@@ -638,6 +645,14 @@ impl ControlPanel {
             ui.menu_button("Composition", |ui| {
                 if ui.button("Réglages…").clicked() {
                     self.dialogs.composition = true;
+                }
+                if ui
+                    .button("Timecode…")
+                    .on_hover_text("Repères qui lancent colonnes et clips au timecode MIDI reçu")
+                    .clicked()
+                {
+                    self.dialogs.timecode = true;
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Ajouter une couche").clicked() {

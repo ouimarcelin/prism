@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Lighting, Mapping, Moment,
-    Slot, Stage, Unit,
+    Slot, Stage, Timeline, Unit,
 };
 
 /// Largest width or height accepted for a composition, in pixels.
@@ -138,6 +138,9 @@ pub struct Composition {
     /// Fixtures fed from the image, over DMX.
     #[serde(skip_serializing_if = "Lighting::is_unused")]
     pub lighting: Lighting,
+    /// Cues launched by the timecode.
+    #[serde(skip_serializing_if = "Timeline::is_unused")]
+    pub timeline: Timeline,
     next_id: u32,
 }
 
@@ -161,6 +164,8 @@ struct CompositionRepr {
     stage: Stage,
     #[serde(default)]
     lighting: Lighting,
+    #[serde(default)]
+    timeline: Timeline,
     #[serde(default)]
     next_id: u32,
 }
@@ -220,6 +225,7 @@ impl TryFrom<CompositionRepr> for Composition {
             mappings: repr.mappings,
             stage: repr.stage,
             lighting: repr.lighting,
+            timeline: repr.timeline,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -259,6 +265,7 @@ impl Composition {
             mappings: Vec::new(),
             stage: Stage::default(),
             lighting: Lighting::default(),
+            timeline: Timeline::default(),
             next_id: 0,
         }
     }
