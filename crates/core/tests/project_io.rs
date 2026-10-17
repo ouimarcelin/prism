@@ -202,3 +202,15 @@ fn effect_files_inside_project_folder_are_stored_relative() {
     assert!(json.contains(r#""file": "/Shaders/glow.fs""#), "{json}");
     assert_eq!(Project::load(&file).unwrap(), project);
 }
+#[test]
+fn stages_are_saved_alone_and_read_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("salle.prism-scene");
+    let mut stage = prism_core::Stage::default();
+    let screen = stage.add_screen("Projecteur 1", 1920, 1080).unwrap();
+    stage.screen_mut(screen).unwrap().slices[0].blend.right = 0.1;
+    prism_core::save_stage(&stage, &path).unwrap();
+    assert_eq!(prism_core::load_stage(&path).unwrap(), stage);
+    std::fs::write(&path, r#"{"format_version": 999, "stage": {}}"#).unwrap();
+    assert!(prism_core::load_stage(&path).is_err());
+}

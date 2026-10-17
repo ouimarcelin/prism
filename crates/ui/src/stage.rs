@@ -309,6 +309,23 @@ impl ControlPanel {
                     self.stage.slice = None;
                 }
             }
+            if ui
+                .button("Importer…")
+                .on_hover_text("Remplace les écrans et découpes par ceux d'un fichier de scène (Cmd+Z pour revenir)")
+                .clicked()
+            {
+                self.import_stage();
+            }
+            if ui
+                .add_enabled(
+                    !self.document.composition().stage.is_empty(),
+                    egui::Button::new("Exporter…"),
+                )
+                .on_hover_text("Les écrans et découpes dans un fichier, pour les reprendre dans un autre projet (même salle)")
+                .clicked()
+            {
+                self.export_stage();
+            }
             let Some(id) = self.stage.screen else {
                 return;
             };
@@ -391,6 +408,55 @@ impl ControlPanel {
                 ui.add(egui::DragValue::new(&mut simulation.gamma).range(1.0..=3.0).speed(0.01));
             }
         });
+    }
+
+    fn export_stage(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Scène Prism", &[prism_core::STAGE_EXTENSION])
+            .set_file_name(format!("Scène.{}", prism_core::STAGE_EXTENSION))
+            .save_file()
+        else {
+            return;
+        };
+        let path = if path
+            .extension()
+            .is_some_and(|ext| ext == prism_core::STAGE_EXTENSION)
+        {
+            path
+        } else {
+            path.with_extension(prism_core::STAGE_EXTENSION)
+        };
+        if let Err(error) = prism_core::save_stage(&self.document.composition().stage, &path) {
+            self.dialogs.message = Some(format!(
+                "Impossible d'enregistrer {} : {}",
+                path.display(),
+                crate::describe(&error)
+            ));
+        }
+    }
+
+    fn import_stage(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter("Scène Prism", &[prism_core::STAGE_EXTENSION])
+            .pick_file()
+        else {
+            return;
+        };
+        match prism_core::load_stage(&path) {
+            Ok(stage) => {
+                self.document.composition_mut().stage = stage;
+                self.stage.screen = None;
+                self.stage.slice = None;
+                self.stage.point = None;
+            }
+            Err(error) => {
+                self.dialogs.message = Some(format!(
+                    "Impossible d'ouvrir {} : {}",
+                    path.display(),
+                    crate::describe(&error)
+                ));
+            }
+        }
     }
 
     fn stage_slices(&mut self, ui: &mut egui::Ui) {

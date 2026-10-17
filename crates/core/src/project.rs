@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Clip, Composition, Slot};
+use crate::{Clip, Composition, Slot, Stage};
 
 /// Version of the project file format written by this build.
 ///
@@ -15,6 +15,10 @@ pub const FORMAT_VERSION: u32 = 1;
 
 /// File extension of project files.
 pub const FILE_EXTENSION: &str = "prism";
+
+/// File extension of stage files: screens and slices alone, to use the
+/// setup of a venue in any project.
+pub const STAGE_EXTENSION: &str = "prism-scene";
 
 const GENERATOR: &str = concat!("Prism ", env!("CARGO_PKG_VERSION"));
 
@@ -163,6 +167,56 @@ impl Project {
             })
             .collect()
     }
+}
+
+#[derive(Serialize)]
+struct StageOut<'a> {
+    format_version: u32,
+    generator: &'a str,
+    stage: &'a Stage,
+}
+
+#[derive(Deserialize)]
+struct StageIn {
+    stage: Stage,
+}
+
+/// Reads the format version of a file, refusing newer ones.
+fn check_version(value: &serde_json::Value) -> Result<(), ProjectError> {
+    let version = value
+        .get("format_version")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or(ProjectError::MissingVersion)?;
+    if version > u64::from(FORMAT_VERSION) {
+        return Err(ProjectError::UnsupportedVersion {
+            found: version,
+            supported: FORMAT_VERSION,
+        });
+    }
+    Ok(())
+}
+
+/// Writes `stage` alone to a stage file, atomically.
+pub fn save_stage(stage: &Stage, path: impl AsRef<Path>) -> Result<(), ProjectError> {
+    let path = absolute(path.as_ref())?;
+    let json = serde_json::to_string_pretty(&StageOut {
+        format_version: FORMAT_VERSION,
+        generator: GENERATOR,
+        stage,
+    })?;
+    write_atomic(&path, json.as_bytes()).map_err(|source| ProjectError::Io { path, source })
+}
+
+/// Reads a stage file.
+pub fn load_stage(path: impl AsRef<Path>) -> Result<Stage, ProjectError> {
+    let path = absolute(path.as_ref())?;
+    let json = fs::read_to_string(&path).map_err(|source| ProjectError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    let value: serde_json::Value = serde_json::from_str(&json)?;
+    check_version(&value)?;
+    Ok(serde_json::from_value::<StageIn>(value)?.stage)
 }
 
 fn map_media_path(clip: &mut Clip, f: impl Fn(&Path) -> PathBuf) {

@@ -20,3 +20,4 @@ La phase 4 demande une sortie avancée : écrans virtuels, découpes (slices) de
 - Chaque écran coûte une passe de rendu par image, même s'il n'est affiché nulle part ; un écran inutile se supprime.
 - Un écran de la scène n'a pas de lien avec la taille réelle de l'écran système : l'image est ajustée avec bandes noires si elles diffèrent.
 - **Ajout du 2026-10-17 (ticket 45) : transformations.** Une découpe peut tourner la zone qu'elle lit autour de son centre (angle calculé en pixels de la composition) et la retourner ; un écran peut être retourné horizontalement et verticalement, masques compris. Les sommets portent la position dans la découpe, que le fondu des bords et la mire suivent.
+- **Ajout du 2026-10-17 (ticket 49) : fichiers de scène.** La scène s'enregistre seule dans un fichier `.prism-scene` (même enveloppe versionnée que les projets, ADR 0002), pour reprendre le réglage d'une salle dans un autre projet.
