@@ -2,6 +2,7 @@
 //! import and relinking.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use prism_core::{
     Clip, Composition, DEFAULT_SEQUENCE_RATE, FILE_EXTENSION, MediaSource, MissingMedia, Project,
@@ -27,6 +28,34 @@ pub struct Document {
     /// Increases on every change, playback included, to tell when the
     /// engine needs the new composition.
     revision: u64,
+    history: History,
+}
+
+/// Most steps kept to undo.
+const UNDO_LIMIT: usize = 200;
+/// Edits closer than this in time form one step: a drag, a slider.
+const MERGE_WITHIN: Duration = Duration::from_millis(400);
+
+/// Edits that can be undone and redone. Playback (which clip plays) is
+/// never part of them, and neither are the moves of controllers.
+#[derive(Clone, Debug)]
+struct History {
+    undo: Vec<Composition>,
+    redo: Vec<Composition>,
+    /// Content after the last change seen, without playback.
+    current: Composition,
+    last_edit: Option<Instant>,
+}
+
+impl History {
+    fn new(composition: &Composition) -> Self {
+        Self {
+            undo: Vec::new(),
+            redo: Vec::new(),
+            current: composition.without_playback(),
+            last_edit: None,
+        }
+    }
 }
 
 impl Default for Document {
@@ -40,6 +69,7 @@ impl Document {
     pub fn new(composition: Composition) -> Self {
         Self {
             saved: composition.clone(),
+            history: History::new(&composition),
             composition,
             path: None,
             revision: 0,
@@ -92,11 +122,83 @@ impl Document {
         &mut self.composition
     }
 
-    /// Records the edits made since `before`, a copy taken earlier.
+    /// Records the edits made since `before`, a copy taken earlier; they
+    /// can be undone.
     pub fn commit(&mut self, before: &Composition) {
         if &self.composition != before {
             self.revision += 1;
+            self.record(true);
         }
+    }
+
+    /// Records changes made since `before` by controllers while playing:
+    /// they are not undone.
+    pub fn commit_live(&mut self, before: &Composition) {
+        if &self.composition != before {
+            self.revision += 1;
+            self.record(false);
+        }
+    }
+
+    fn record(&mut self, undoable: bool) {
+        let content = self.composition.without_playback();
+        let history = &mut self.history;
+        if content == history.current {
+            return;
+        }
+        if undoable {
+            let merged = history
+                .last_edit
+                .is_some_and(|last| last.elapsed() < MERGE_WITHIN);
+            if !merged {
+                history.undo.push(history.current.clone());
+                if history.undo.len() > UNDO_LIMIT {
+                    history.undo.remove(0);
+                }
+            }
+            history.redo.clear();
+            history.last_edit = Some(Instant::now());
+        }
+        history.current = content;
+    }
+
+    /// Whether an edit can be undone.
+    pub fn can_undo(&self) -> bool {
+        !self.history.undo.is_empty()
+    }
+
+    /// Whether an undone edit can be redone.
+    pub fn can_redo(&self) -> bool {
+        !self.history.redo.is_empty()
+    }
+
+    /// Goes back to before the last edit; what plays keeps playing.
+    pub fn undo(&mut self) -> bool {
+        let Some(previous) = self.history.undo.pop() else {
+            return false;
+        };
+        let current = std::mem::replace(&mut self.history.current, previous.clone());
+        self.history.redo.push(current);
+        self.restore(previous);
+        true
+    }
+
+    /// Makes again the last edit undone.
+    pub fn redo(&mut self) -> bool {
+        let Some(next) = self.history.redo.pop() else {
+            return false;
+        };
+        let current = std::mem::replace(&mut self.history.current, next.clone());
+        self.history.undo.push(current);
+        self.restore(next);
+        true
+    }
+
+    fn restore(&mut self, mut content: Composition) {
+        content.take_playback_from(&self.composition);
+        self.composition = content;
+        self.history.last_edit = None;
+        self.revision += 1;
     }
 
     /// Increases on every change, playback included.
@@ -251,6 +353,7 @@ fn collect_files(folder: &Path, depth: usize, found: &mut Vec<PathBuf>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prism_core::Unit;
 
     fn first_slot(document: &Document) -> Slot {
         let composition = document.composition();
@@ -378,6 +481,58 @@ mod tests {
                 path: moved,
                 frame_rate: 12.0
             }
+        );
+    }
+
+    #[test]
+    fn edits_are_undone_without_touching_what_plays() {
+        let mut document = Document::default();
+        let slot = Slot::new(
+            document.composition().layers()[0].id(),
+            document.composition().columns()[0].id(),
+        );
+        assert!(!document.can_undo());
+        let before = document.composition().clone();
+        document
+            .composition_mut()
+            .set_clip(slot, Some(Clip::from_file("/a.mov")))
+            .unwrap();
+        document.commit(&before);
+        // Playing is not an edit.
+        let before = document.composition().clone();
+        document.composition_mut().trigger_clip(slot).unwrap();
+        document.commit(&before);
+        // A controller move is not undone either.
+        let before = document.composition().clone();
+        document.composition_mut().crossfader.position = Unit::new(0.8);
+        document.commit_live(&before);
+        assert!(document.can_undo());
+
+        assert!(document.undo());
+        assert!(document.composition().clip(slot).is_none());
+        assert!(!document.can_undo());
+        assert_eq!(document.composition().crossfader.position, Unit::new(0.8));
+        assert!(document.redo());
+        assert!(document.composition().clip(slot).is_some());
+        // Still playing.
+        assert!(document.composition().active_clip(slot.layer).is_some());
+    }
+
+    #[test]
+    fn close_edits_form_one_step() {
+        let mut document = Document::default();
+        for opacity in [0.1, 0.2, 0.3] {
+            let before = document.composition().clone();
+            let layer = document.composition().layers()[0].id();
+            document.composition_mut().layer_mut(layer).unwrap().opacity = Unit::new(opacity);
+            document.commit(&before);
+        }
+        assert!(document.undo());
+        assert!(!document.can_undo());
+        let layer = document.composition().layers()[0].id();
+        assert_eq!(
+            document.composition().layer(layer).unwrap().opacity,
+            Composition::default().layer(layer).unwrap().opacity
         );
     }
 

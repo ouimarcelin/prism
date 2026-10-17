@@ -39,7 +39,7 @@ impl Shortcut {
 /// Shortcuts listed in the help window: key, then action. Any key without
 /// modifier can also be learned (Contrôle > Apprentissage MIDI), and then
 /// does what it was learned for instead.
-pub const SHORTCUT_HELP: [(&str, &str); 12] = [
+pub const SHORTCUT_HELP: [(&str, &str); 14] = [
     ("1 à 9", "Déclencher la colonne"),
     ("Espace", "Arrêter toutes les couches"),
     ("T", "Tap tempo : frapper en rythme"),
@@ -51,6 +51,11 @@ pub const SHORTCUT_HELP: [(&str, &str); 12] = [
     ("Cmd + S", "Enregistrer"),
     ("Cmd + Maj + S", "Enregistrer sous"),
     ("Cmd + Q", "Quitter"),
+    (
+        "Cmd + Z",
+        "Annuler la dernière modification (pas la lecture)",
+    ),
+    ("Cmd + Maj + Z", "Rétablir"),
     (
         "Toute touche",
         "Apprise : Contrôle > Apprentissage MIDI, cliquer une commande, appuyer",

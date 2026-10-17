@@ -489,6 +489,32 @@ impl Composition {
         }
     }
 
+    /// A copy without what plays (clips playing, crossfader position): the
+    /// content the user edits.
+    pub fn without_playback(&self) -> Self {
+        let mut copy = self.clone();
+        copy.crossfader.position = Crossfader::default().position;
+        for layer in &mut copy.layers {
+            layer.active = None;
+            layer.trigger_count = 0;
+        }
+        copy
+    }
+
+    /// Takes what plays from `other`: the crossfader position, the clip
+    /// playing and the trigger count of each layer present in both, if its
+    /// column still exists.
+    pub fn take_playback_from(&mut self, other: &Composition) {
+        self.crossfader.position = other.crossfader.position;
+        let columns: Vec<ColumnId> = self.columns.iter().map(|column| column.id).collect();
+        for layer in &mut self.layers {
+            if let Some(playing) = other.layer(layer.id()) {
+                layer.trigger_count = playing.trigger_count;
+                layer.active = playing.active.filter(|column| columns.contains(column));
+            }
+        }
+    }
+
     /// Clip playing on a layer, with its column.
     pub fn active_clip(&self, id: LayerId) -> Option<(ColumnId, &Clip)> {
         let layer = self.layer(id)?;
