@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- « Répartir » (fenêtre Sortie avancée) : la composition étalée sur plusieurs projecteurs côte à côte avec leur recouvrement et le fondu des bords réglé.
 - Fondu des bords : niveau de noir, pour égaler le noir hors du recouvrement à celui, plus clair, de deux projecteurs.
 - Fichiers de scène (`.prism-scene`) : les écrans et découpes d'une salle exportés puis importés dans un autre projet.
 - Annuler et rétablir (Cmd+Z, Cmd+Maj+Z, menu Édition) : toute modification de l'interface, gestes rapprochés regroupés ; ce qui joue continue de jouer (ADR 0031).
