@@ -31,6 +31,10 @@ pub struct Preferences {
     pub audio_device: Option<String>,
     /// Gain applied to the sound before measuring, in decibels.
     pub audio_gain_db: f32,
+    /// Whether the sound of the clips is played.
+    pub clip_sound: bool,
+    /// Volume of the sound of the clips, from 0 to 1.
+    pub clip_sound_volume: f32,
 }
 
 impl Default for Preferences {
@@ -44,6 +48,8 @@ impl Default for Preferences {
             audio_input: false,
             audio_device: None,
             audio_gain_db: 0.0,
+            clip_sound: true,
+            clip_sound_volume: 1.0,
         }
     }
 }

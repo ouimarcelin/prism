@@ -288,6 +288,13 @@ impl ControlPanel {
                 );
                 ui.end_row();
 
+                ui.label("Volume");
+                let mut volume = playback.volume.get();
+                ui.add(egui::Slider::new(&mut volume, 0.0..=1.0))
+                    .on_hover_text("Volume du son du clip ; l'opacité de la couche le règle aussi");
+                playback.volume = Unit::new(volume);
+                ui.end_row();
+
                 ui.label("Fin");
                 ui.horizontal(|ui| {
                     for mode in [LoopMode::Loop, LoopMode::PingPong, LoopMode::Once] {

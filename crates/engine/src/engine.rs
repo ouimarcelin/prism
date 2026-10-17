@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use prism_audio::AudioLevels;
+use prism_audio::{AudioLevels, VoiceCommand};
 use prism_clock::BeatClock;
 use prism_core::{Composition, Effect, LayerId, Resolution, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
@@ -83,6 +83,8 @@ pub enum Command {
         /// Instant of the first beat of the bar.
         at: Instant,
     },
+    /// Plays the sound of the clips through this mixer, or stops it.
+    SetSound(Option<Sender<VoiceCommand>>),
 }
 
 impl std::fmt::Debug for Command {
@@ -100,6 +102,7 @@ impl std::fmt::Debug for Command {
             Self::RemoveOutput { id } => write!(f, "RemoveOutput({id})"),
             Self::Tap { bpm, .. } => write!(f, "Tap({bpm} BPM)"),
             Self::Resync { .. } => f.write_str("Resync"),
+            Self::SetSound(sound) => write!(f, "SetSound({})", sound.is_some()),
         }
     }
 }
@@ -309,6 +312,9 @@ pub struct EngineState {
     gpu_progress: Arc<GpuProgress>,
     stats: Stats,
     audio: Arc<AudioLevels>,
+    /// Mixer of the sound of the clips, if sound is on.
+    sound: Option<Sender<VoiceCommand>>,
+    next_voice: u64,
 }
 
 impl EngineState {
@@ -344,6 +350,8 @@ impl EngineState {
             submitted: 0,
             gpu_progress: Arc::default(),
             audio: Arc::default(),
+            sound: None,
+            next_voice: 0,
             stats: Stats {
                 frames: 0,
                 late_ticks: 0,
@@ -397,6 +405,7 @@ impl EngineState {
         }
         self.composition = composition;
         self.sync_layers();
+        self.enable_sounds();
     }
 
     /// Applies a command.
@@ -436,6 +445,66 @@ impl EngineState {
                 self.clock.align_beat(at);
             }
             Command::Resync { at } => self.clock.restart_bar(at),
+            Command::SetSound(sound) => {
+                self.sound = sound;
+                if self.sound.is_none() {
+                    // Dropping their sound stops the voices.
+                    for runtime in &mut self.layers {
+                        for stream in runtime.streams_mut() {
+                            stream.disable_sound();
+                        }
+                    }
+                }
+                self.enable_sounds();
+            }
+        }
+    }
+
+    /// Tells the mixer where each clip with sound is. A clip sounds at its
+    /// volume times the opacity of its layer (crossfader, solo and bypass
+    /// included); during a transition, the two clips fade into each other.
+    fn update_sounds(&mut self, elapsed: f64, time: FrameTime) {
+        if self.sound.is_none() {
+            return;
+        }
+        for runtime in &mut self.layers {
+            let progress = runtime.transition_progress();
+            let (beat, seconds) = runtime
+                .current
+                .as_ref()
+                .map_or((0.0, 0.0), ClipStream::launched);
+            let moment = time.moment().launched_at(beat, seconds);
+            let layer = self
+                .composition
+                .effective_opacity_at(runtime.id, moment)
+                .unwrap_or(0.0);
+            let composition = &self.composition;
+            let volume = |stream: &ClipStream| {
+                composition
+                    .clip(stream.slot())
+                    .map_or(0.0, |clip| clip.playback.volume.get())
+            };
+            if let Some(stream) = &mut runtime.current {
+                let gain = volume(stream) * layer * progress.unwrap_or(1.0);
+                stream.update_sound(elapsed, gain);
+            }
+            if let Some(stream) = &mut runtime.previous {
+                let gain = volume(stream) * layer * (1.0 - progress.unwrap_or(1.0));
+                stream.update_sound(elapsed, gain);
+            }
+        }
+    }
+
+    /// Gives every clip playing its sound, when there is a mixer.
+    fn enable_sounds(&mut self) {
+        let Some(mixer) = &self.sound else {
+            return;
+        };
+        for runtime in &mut self.layers {
+            for stream in runtime.streams_mut() {
+                self.next_voice += 1;
+                stream.enable_sound(self.next_voice, mixer);
+            }
         }
     }
 
@@ -688,6 +757,7 @@ impl EngineState {
             );
         }
         self.mix = mix;
+        self.update_sounds(elapsed, time);
         gpu.queue.submit([encoder.finish()]);
         self.watch_gpu(&gpu);
         let submitted = Instant::now();

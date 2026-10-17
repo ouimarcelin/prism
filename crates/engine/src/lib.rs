@@ -14,6 +14,7 @@ mod engine;
 mod playhead;
 mod priority;
 mod random;
+mod sound;
 mod status;
 mod stream;
 mod worker;

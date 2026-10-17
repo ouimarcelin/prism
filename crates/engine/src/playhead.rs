@@ -80,7 +80,6 @@ impl Playhead {
     }
 
     /// Current direction of travel: `1.0` forward, `-1.0` backward.
-    #[cfg(test)]
     pub fn travel(&self) -> f64 {
         self.travel
     }

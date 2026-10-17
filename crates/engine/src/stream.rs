@@ -8,6 +8,7 @@ use prism_render::{FrameUploader, Gpu, VideoTexture, wgpu};
 
 use crate::playhead::{MediaTiming, Playhead};
 use crate::random::Random;
+use crate::sound::ClipSound;
 use crate::status::ClipState;
 use crate::worker::{Event, Worker, error_chain};
 
@@ -50,6 +51,9 @@ pub(crate) struct ClipStream {
     pending_seek: Option<(f64, bool)>,
     /// Beat position and seconds of the engine when the clip was launched.
     launched: (f64, f64),
+    sound: Option<ClipSound>,
+    /// Position at the last sound update, to follow scratching.
+    sound_position: Option<f64>,
 }
 
 impl ClipStream {
@@ -85,7 +89,62 @@ impl ClipStream {
             frame_errors: 0,
             pending_seek: None,
             launched,
+            sound: None,
+            sound_position: None,
         }
+    }
+
+    /// Plays the sound of the clip's file through `mixer`, as voice `id`.
+    /// Generated clips and clips already sounding are left as they are.
+    pub(crate) fn enable_sound(
+        &mut self,
+        id: u64,
+        mixer: &std::sync::mpsc::Sender<prism_audio::VoiceCommand>,
+    ) {
+        if self.sound.is_some() || self.is_generator() {
+            return;
+        }
+        if let Some(path) = self.source.path() {
+            self.sound = Some(ClipSound::start(path.to_path_buf(), id, mixer.clone()));
+        }
+    }
+
+    /// Stops the sound of the clip.
+    pub(crate) fn disable_sound(&mut self) {
+        self.sound = None;
+        self.sound_position = None;
+    }
+
+    /// Tells the mixer where the clip is after `elapsed` seconds, at volume
+    /// `gain`. Paused, finished and random clips are silent; a held clip
+    /// (scratching) sounds at the speed it is moved.
+    pub(crate) fn update_sound(&mut self, elapsed: f64, gain: f32) {
+        let Some(sound) = &mut self.sound else {
+            return;
+        };
+        let Phase::Ready { playhead, .. } = &self.phase else {
+            return;
+        };
+        let position = playhead.position();
+        let previous = self.sound_position.replace(position);
+        let rate = if playhead.is_held() {
+            match previous {
+                Some(previous) if elapsed > 0.0 => {
+                    ((position - previous) / elapsed).clamp(-4.0, 4.0)
+                }
+                _ => 0.0,
+            }
+        } else if playhead.is_finished() {
+            0.0
+        } else {
+            match self.playback.direction {
+                prism_core::Direction::Forward | prism_core::Direction::Backward => {
+                    playhead.travel() * f64::from(self.playback.effective_speed())
+                }
+                prism_core::Direction::Paused | prism_core::Direction::Random => 0.0,
+            }
+        };
+        sound.update(position, rate, gain);
     }
 
     /// Beat position and seconds of the engine at the last launch.
