@@ -326,7 +326,7 @@ impl ControlPanel {
         for message in messages {
             self.apply_control(message);
         }
-        self.document.commit(&before);
+        self.document.commit_live(&before);
         std::mem::take(&mut self.actions)
     }
 
@@ -370,7 +370,7 @@ impl ControlPanel {
     pub fn press_key(&mut self, key: &str) -> Option<Vec<Action>> {
         let before = self.document.composition().clone();
         let acted = self.key(key, true);
-        self.document.commit(&before);
+        self.document.commit_live(&before);
         acted.then(|| std::mem::take(&mut self.actions))
     }
 
@@ -426,6 +426,24 @@ impl ControlPanel {
         self.missing_cache.1.contains(&slot)
     }
 
+    /// Cmd+Z undoes the last edit, Cmd+Shift+Z redoes it; text fields keep
+    /// these keys for their own text.
+    pub(crate) fn undo_keys(&mut self, ctx: &egui::Context) {
+        let (undo, redo) = ctx.input_mut(|input| {
+            let redo = input.consume_shortcut(&KeyboardShortcut::new(
+                Modifiers::COMMAND | Modifiers::SHIFT,
+                Key::Z,
+            ));
+            let undo = input.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::Z));
+            (undo, redo)
+        });
+        if redo {
+            self.document.redo();
+        } else if undo {
+            self.document.undo();
+        }
+    }
+
     fn keyboard(&mut self, ctx: &egui::Context) {
         let command = |key| KeyboardShortcut::new(Modifiers::COMMAND, key);
         let command_shift = |key| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, key);
@@ -456,6 +474,7 @@ impl ControlPanel {
         if ctx.egui_wants_keyboard_input() {
             return;
         }
+        self.undo_keys(ctx);
         let keys: Vec<(Key, bool)> = ctx.input(|input| {
             input
                 .events
@@ -560,6 +579,28 @@ impl ControlPanel {
                     .clicked()
                 {
                     self.shortcut(Shortcut::Quit);
+                }
+            });
+            ui.menu_button("Édition", |ui| {
+                if ui
+                    .add_enabled(
+                        self.document.can_undo(),
+                        egui::Button::new("Annuler").shortcut_text("Cmd+Z"),
+                    )
+                    .clicked()
+                {
+                    self.document.undo();
+                    ui.close();
+                }
+                if ui
+                    .add_enabled(
+                        self.document.can_redo(),
+                        egui::Button::new("Rétablir").shortcut_text("Cmd+Maj+Z"),
+                    )
+                    .clicked()
+                {
+                    self.document.redo();
+                    ui.close();
                 }
             });
             ui.menu_button("Composition", |ui| {

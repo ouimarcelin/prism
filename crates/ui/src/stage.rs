@@ -231,6 +231,9 @@ impl ControlPanel {
     /// Draws the stage editor; returns what the application must do.
     pub fn stage_ui(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) -> Vec<Action> {
         let before = self.document.composition().clone();
+        if !ui.ctx().egui_wants_keyboard_input() {
+            self.undo_keys(ui.ctx());
+        }
         let stage = &self.document.composition().stage;
         // A screen or slice removed elsewhere is no longer selected.
         if self

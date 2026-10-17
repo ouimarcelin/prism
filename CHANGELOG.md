@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Annuler et rétablir (Cmd+Z, Cmd+Maj+Z, menu Édition) : toute modification de l'interface, gestes rapprochés regroupés ; ce qui joue continue de jouer (ADR 0031).
 - Sortie avancée : le dernier point touché se déplace au pixel près avec les flèches (Maj : 10 pixels).
 - Transformations : rotation et miroirs de la zone lue par une découpe, miroirs de tout un écran (projection par l'arrière, projecteur à l'envers).
 - Simulation des projecteurs dans la fenêtre « Sortie avancée » : écrans côte à côte, lumière additionnée dans la zone de recouvrement, pour régler le fondu des bords sans projecteur.
