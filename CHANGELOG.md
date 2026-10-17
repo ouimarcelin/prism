@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Pad MIDI virtuel (exemple `midi-pad`, macOS) : 32 pads, 8 boutons, 8 faders et un crossfader sur des ports MIDI virtuels « Pad virtuel », allumés et déplacés par le retour de Prism, pour jouer sans contrôleur ; test de bout en bout de l'entrée et du retour MIDI par des ports virtuels.
 - Sortie plein écran sur plusieurs écrans à la fois : une case à cocher par écran dans le menu Sortie, `F` rouvre les écrans de la dernière fois, `Échap` ferme toutes les sorties (ADR 0025).
 - Entrée Syphon (macOS) : l'image qu'une autre application publie devient un clip (« Syphon… » sur une case vide), reconnecté si l'application redémarre (ADR 0024).
 - Sortie Syphon (macOS) : l'image programme publiée sous le nom « Prism » pour les autres applications du Mac (menu Sortie > Publier sur Syphon) ; code de Syphon repris dans `third_party/syphon` (BSD), crate `prism-io-video` (ADR 0024).
