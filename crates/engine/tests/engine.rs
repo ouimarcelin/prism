@@ -937,3 +937,78 @@ fn screens_of_the_stage_are_drawn_for_the_outputs() {
     assert_eq!(driver.state.screen_count(), 0);
     assert_eq!(*seen.lock().unwrap(), [Some(24), Some(40), None]);
 }
+
+#[test]
+fn the_simulation_is_drawn_while_the_stage_asks_for_it() {
+    let Some(gpu) = gpu() else { return };
+    let (mut comp, _) = composition_with(Clip::from_file("/unused.mov"));
+    comp.stage.add_screen("A", 40, 20).unwrap();
+    comp.stage.add_screen("B", 40, 20).unwrap();
+    comp.stage.simulation.overlap = 10;
+    let mut driver = Driver::new(gpu, comp.clone());
+    driver.tick();
+    assert!(driver.state.simulation_image().is_none());
+    comp.stage.simulation.enabled = true;
+    driver.state.set_composition(comp);
+    driver.tick();
+    let image = driver.state.simulation_image().unwrap();
+    assert_eq!(image.resolution().width, 70);
+}
+
+/// The criterion of phase 4, rehearsed: two projectors overlapping on a
+/// strip, each fading its edge there, give an even image.
+#[test]
+fn two_blended_projectors_show_no_seam_in_the_simulation() {
+    let Some(gpu) = gpu() else { return };
+    let mut clip = Clip::from_generator("Gris", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .set_param("brightness", 0.6);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    // Composition 32 pixels wide; each projector shows 20 of them on 40
+    // pixels, sharing 8 of them (16 screen pixels).
+    for (name, x, side) in [("Gauche", 0.0, 1), ("Droite", 0.375, 0)] {
+        let screen = comp.stage.add_screen(name, 40, 16).unwrap();
+        let slice = &mut comp.stage.screen_mut(screen).unwrap().slices[0];
+        slice.input = prism_core::Area {
+            x,
+            y: 0.0,
+            width: 0.625,
+            height: 1.0,
+        };
+        if side == 1 {
+            slice.blend.right = 0.4;
+        } else {
+            slice.blend.left = 0.4;
+        }
+    }
+    comp.stage.simulation.enabled = true;
+    comp.stage.simulation.overlap = 16;
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    driver.settle(|status| status.state == ClipState::Playing);
+    driver.tick();
+    let image = driver.state.simulation_image().unwrap();
+    assert_eq!(image.resolution().width, 64);
+    let pixels = read_texture(&gpu.device, &gpu.queue, image.texture()).unwrap();
+    for x in 0..64 {
+        let value = pixels[8 * 64 + x][0];
+        assert!((value - 0.6).abs() < 0.02, "pixel {x}: {value}");
+    }
+    // Without the fades, the strip is plainly brighter.
+    let mut comp = driver.state.composition().clone();
+    for screen in comp
+        .stage
+        .screens()
+        .iter()
+        .map(prism_core::Screen::id)
+        .collect::<Vec<_>>()
+    {
+        comp.stage.screen_mut(screen).unwrap().slices[0].blend = Default::default();
+    }
+    driver.state.set_composition(comp);
+    driver.tick();
+    let pixels = read_texture(&gpu.device, &gpu.queue, image.texture()).unwrap();
+    assert!(pixels[8 * 64 + 32][0] > 0.75, "{}", pixels[8 * 64 + 32][0]);
+}

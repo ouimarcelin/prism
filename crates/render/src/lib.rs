@@ -14,6 +14,7 @@ mod compositor;
 mod gpu;
 mod plan;
 pub mod reference;
+mod simulation;
 mod stage;
 mod video;
 
@@ -22,6 +23,7 @@ pub use gpu::{
     Gpu, GpuError, ReadbackError, WORKING_FORMAT, pixels_texture, read_texture, solid_color_texture,
 };
 pub use plan::{LayerPlan, plan_layers};
+pub use simulation::{SimulatedScreen, SimulationRenderer};
 pub use stage::{ScreenTarget, SliceVertex, StageRenderer, perspective_weights, slice_vertices};
 pub use video::{FrameUploader, UploadError, VideoTexture};
 pub use wgpu;

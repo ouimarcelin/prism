@@ -28,6 +28,8 @@ pub struct StageFrame<'a> {
     pub composition: Option<(egui::TextureId, Resolution)>,
     /// Image of each screen of the stage, registered with the renderer.
     pub screens: &'a [(ScreenId, egui::TextureId)],
+    /// Simulation of overlapping projectors, while drawn, and its size.
+    pub simulation: Option<(egui::TextureId, Resolution)>,
     /// Displays of the computer.
     pub displays: &'a [Display],
 }
@@ -330,6 +332,20 @@ impl ControlPanel {
                 stage.remove_screen(id);
                 self.stage.screen = None;
             }
+            ui.separator();
+            let simulation = &mut stage.simulation;
+            ui.checkbox(&mut simulation.enabled, "Simulation")
+                .on_hover_text("Les écrans côte à côte, leur lumière additionnée là où ils se recouvrent, comme des projecteurs sur un mur : pour régler le fondu des bords sans projecteur");
+            if simulation.enabled {
+                ui.label("recouvrement");
+                ui.add(
+                    egui::DragValue::new(&mut simulation.overlap)
+                        .range(0..=prism_core::MAX_SCREEN_SIZE)
+                        .suffix(" px"),
+                );
+                ui.label("gamma");
+                ui.add(egui::DragValue::new(&mut simulation.gamma).range(1.0..=3.0).speed(0.01));
+            }
         });
     }
 
@@ -624,7 +640,25 @@ impl ControlPanel {
             });
             return;
         };
-        let space = ui.available_rect_before_wrap();
+        let mut space = ui.available_rect_before_wrap();
+        // The simulation, below the two views.
+        if let Some((texture, size)) = frame.simulation {
+            let height = space.height() * 0.4;
+            let area = Rect::from_min_max(
+                Pos2::new(space.min.x, space.max.y - height + 20.0),
+                space.max,
+            );
+            ui.painter().text(
+                Pos2::new(space.min.x, space.max.y - height),
+                egui::Align2::LEFT_TOP,
+                "Simulation : les écrans côte à côte, lumière additionnée",
+                egui::FontId::proportional(13.0),
+                ui.visuals().text_color(),
+            );
+            let rect = fit(area, size.width as f32 / size.height.max(1) as f32);
+            image(ui, rect, Some(texture));
+            space.max.y -= height + 8.0;
+        }
         let gap = 16.0;
         let half = (space.width() - gap) / 2.0;
         let title = 20.0;

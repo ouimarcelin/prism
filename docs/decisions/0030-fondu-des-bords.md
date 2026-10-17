@@ -18,3 +18,4 @@ Le critère de la phase 4 : deux projecteurs dont la zone de recouvrement est in
 
 - Pas de réglage du niveau de noir (le noir d'un projecteur n'est jamais nul : la zone de recouvrement reste plus claire dans les noirs) : à ajouter si le test réel le demande.
 - Le fondu suit la découpe déformée : il épouse la grille.
+- **Ajout du 2026-10-17 (ticket 43) : simulation.** Sans projecteur, la scène peut montrer ses écrans côte à côte, chacun recouvrant le précédent d'un nombre de pixels réglable ; leurs images sont additionnées en lumière (portées au gamma, sommées, ramenées), comme sur un mur. Un test automatique répète ainsi le critère de la phase 4.

@@ -837,8 +837,10 @@ impl App {
             return;
         };
         let screens = running.engine.screen_images();
+        let simulation = running.engine.simulation_image();
         let images: Vec<_> = std::iter::once(running.engine.program())
             .chain(screens.iter().map(|(_, image)| Arc::clone(image)))
+            .chain(simulation.clone())
             .collect();
         let displays = running.screens.clone();
         let panel = &mut self.panel;
@@ -851,6 +853,9 @@ impl App {
                 .collect();
             let frame = StageFrame {
                 composition: textures.first().copied(),
+                simulation: simulation
+                    .as_ref()
+                    .and_then(|_| textures.get(1 + screens.len()).copied()),
                 screens: &screen_textures,
                 displays: &displays,
             };

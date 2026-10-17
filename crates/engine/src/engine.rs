@@ -12,8 +12,8 @@ use prism_clock::BeatClock;
 use prism_core::{Composition, Effect, LayerId, Resolution, ScreenId, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_render::{
-    Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, StageRenderer, Transition,
-    WORKING_FORMAT, solid_color_texture, wgpu,
+    Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, SimulatedScreen, SimulationRenderer,
+    StageRenderer, Transition, WORKING_FORMAT, solid_color_texture, wgpu,
 };
 
 use crate::random::Random;
@@ -329,6 +329,9 @@ pub struct EngineState {
     /// Images of the screens of the stage, drawn after the program.
     screens: Vec<(ScreenId, Arc<ProgramOutput>)>,
     stage_renderer: StageRenderer,
+    /// Rehearsal of overlapping projectors, while the stage asks for it.
+    simulation: Option<Arc<ProgramOutput>>,
+    simulation_renderer: SimulationRenderer,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
     fx: EffectRenderer,
@@ -359,6 +362,7 @@ impl EngineState {
         let program = Arc::new(ProgramOutput::new(&gpu.device, resolution));
         let fx = EffectRenderer::new(&gpu.device);
         let stage_renderer = StageRenderer::new(&gpu.device);
+        let simulation_renderer = SimulationRenderer::new(&gpu.device);
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(1, |time| time.as_nanos() as u64);
@@ -370,6 +374,8 @@ impl EngineState {
             uploader,
             transparent,
             stage_renderer,
+            simulation: None,
+            simulation_renderer,
             program,
             screens: Vec::new(),
             outputs: Vec::new(),
@@ -841,6 +847,7 @@ impl EngineState {
             }
         }
         if self.screens.is_empty() {
+            self.simulation = None;
             return;
         }
         let targets: Vec<ScreenTarget<'_>> = self
@@ -860,6 +867,59 @@ impl EngineState {
             &self.program.view,
             &targets,
         );
+        self.draw_simulation(gpu, encoder);
+    }
+
+    /// Records the simulation of the screens side by side, when the stage
+    /// asks for it.
+    fn draw_simulation(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        let stage = &self.composition.stage;
+        if !stage.simulation.enabled {
+            self.simulation = None;
+            return;
+        }
+        let (placed, (width, height)) = stage.simulation_layout();
+        if width == 0 || height == 0 {
+            self.simulation = None;
+            return;
+        }
+        let resolution = Resolution { width, height };
+        if self
+            .simulation
+            .as_ref()
+            .is_none_or(|image| image.resolution() != resolution)
+        {
+            self.simulation = Some(Arc::new(ProgramOutput::new(&gpu.device, resolution)));
+        }
+        let Some(image) = &self.simulation else {
+            return;
+        };
+        let screens: Vec<SimulatedScreen<'_>> = placed
+            .iter()
+            .filter_map(|(id, left)| {
+                let (_, view) = self.screens.iter().find(|(screen, _)| screen == id)?;
+                let size = view.resolution();
+                Some(SimulatedScreen {
+                    view: view.view(),
+                    left: *left,
+                    size: (size.width, size.height),
+                })
+            })
+            .collect();
+        self.simulation_renderer.encode(
+            &gpu.device,
+            &gpu.queue,
+            encoder,
+            &screens,
+            stage.simulation.gamma,
+            image.view(),
+            (width, height),
+        );
+    }
+
+    /// The simulation of overlapping projectors, while drawn.
+    pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
+        self.simulation.clone()
     }
 
     /// Number of screen images drawn after each frame.
@@ -994,6 +1054,7 @@ struct Shared {
     status: Mutex<EngineStatus>,
     program: Mutex<Arc<ProgramOutput>>,
     screens: Mutex<Vec<(ScreenId, Arc<ProgramOutput>)>>,
+    simulation: Mutex<Option<Arc<ProgramOutput>>>,
 }
 
 /// Handle on the render thread.
@@ -1017,6 +1078,7 @@ impl Engine {
             status: Mutex::new(state.status()),
             program: Mutex::new(state.program()),
             screens: Mutex::new(Vec::new()),
+            simulation: Mutex::new(None),
         });
         let (commands, receiver) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
@@ -1062,6 +1124,16 @@ impl Engine {
     pub fn screen_images(&self) -> Vec<(ScreenId, Arc<ProgramOutput>)> {
         self.shared
             .screens
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The simulation of overlapping projectors, while the stage asks for
+    /// it.
+    pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
+        self.shared
+            .simulation
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -1142,6 +1214,11 @@ fn run(mut state: EngineState, commands: Receiver<Command>, shared: Arc<Shared>)
             && !same_images(&screens, &state.screens)
         {
             *screens = state.screen_images();
+        }
+        if let Ok(mut simulation) = shared.simulation.try_lock()
+            && simulation.as_ref().map(Arc::as_ptr) != state.simulation.as_ref().map(Arc::as_ptr)
+        {
+            *simulation = state.simulation_image();
         }
     }
 }
