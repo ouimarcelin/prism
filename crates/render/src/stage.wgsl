@@ -3,21 +3,14 @@
 // the program multiplied by a perspective weight q, with q last: dividing
 // by the interpolated q gives a perspective-correct image in any quad.
 //
-// The instance index names the slice: its mask (a polygon in pixels of the
-// screen, inside which the slice shows, outside when inverted, with a soft
-// edge), its edge fades for overlapping projectors, and whether it shows a
-// test pattern instead of the program.
+// The instance index names the slice: its edge fades for overlapping
+// projectors, and whether it shows a test pattern instead of the program.
+// Its mask comes as an image of its coverage over the screen.
 
 @group(0) @binding(0) var program: texture_2d<f32>;
 @group(0) @binding(1) var program_sampler: sampler;
 
 struct Slice {
-    first: u32,
-    count: u32,
-    inverted: u32,
-    feather: f32,
-    // Area of the composition: x, y, width, height.
-    input: vec4<f32>,
     // Fade widths: left, right, top, bottom, as fractions of the slice.
     edges: vec4<f32>,
     // Fade power, gamma, test pattern (1 or 0), slice index.
@@ -25,7 +18,8 @@ struct Slice {
 }
 
 @group(0) @binding(2) var<storage, read> slices: array<Slice>;
-@group(0) @binding(3) var<storage, read> mask_points: array<vec2<f32>>;
+// Coverage of the slice's mask over the screen; 1 × 1 for no mask.
+@group(1) @binding(0) var mask: texture_2d<f32>;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
@@ -52,32 +46,12 @@ fn vs_main(in: VertexInput, @builtin(instance_index) slice: u32) -> VertexOutput
 }
 
 // How much of the pixel at `pixel` the mask lets through, from 0 to 1.
-fn coverage(slice: Slice, pixel: vec2<f32>) -> f32 {
-    if slice.count < 3u {
+fn coverage(pixel: vec2<f32>) -> f32 {
+    let size = textureDimensions(mask);
+    if size.x <= 1u {
         return 1.0;
     }
-    var inside = false;
-    var distance = 1e9;
-    for (var i = 0u; i < slice.count; i += 1u) {
-        let a = mask_points[slice.first + i];
-        let b = mask_points[slice.first + (i + 1u) % slice.count];
-        if (a.y > pixel.y) != (b.y > pixel.y) {
-            let x = a.x + (pixel.y - a.y) / (b.y - a.y) * (b.x - a.x);
-            if pixel.x < x {
-                inside = !inside;
-            }
-        }
-        let edge = b - a;
-        let t = clamp(dot(pixel - a, edge) / max(dot(edge, edge), 1e-6), 0.0, 1.0);
-        distance = min(distance, length(pixel - (a + edge * t)));
-    }
-    var signed = select(-distance, distance, inside);
-    if slice.inverted != 0u {
-        signed = -signed;
-    }
-    // At least a pixel of soft edge, so the outline is not jagged.
-    let feather = max(slice.feather, 1.0);
-    return clamp(signed / feather + 0.5, 0.0, 1.0);
+    return textureLoad(mask, vec2<i32>(pixel), 0).r;
 }
 
 // Light kept across a fade, `t` from 0 at the outer edge to 1 at the inner
@@ -144,5 +118,5 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let image = textureSample(program, program_sampler, uv);
     let test = pattern(local, slice.curve.w);
     let color = select(image, test, slice.curve.z > 0.5);
-    return color * edge_fade(slice, local) * coverage(slice, in.position.xy);
+    return color * edge_fade(slice, local) * coverage(in.position.xy);
 }
