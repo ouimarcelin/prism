@@ -39,6 +39,43 @@ pub struct StageFrame<'a> {
 pub(crate) struct StageEditor {
     screen: Option<ScreenId>,
     slice: Option<SliceId>,
+    /// Point of the selected slice last touched, moved by the arrow keys.
+    point: Option<Picked>,
+}
+
+/// A point of a slice on its screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Picked {
+    Corner(usize),
+    Warp(usize),
+    Mask(usize),
+}
+
+/// Movement asked by the arrow keys, in pixels: 1, or 10 with Shift.
+fn arrow_nudge(ui: &egui::Ui) -> Option<Vec2> {
+    ui.input(|input| {
+        let mut delta = Vec2::ZERO;
+        for event in &input.events {
+            let egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } = event
+            else {
+                continue;
+            };
+            let direction = match key {
+                egui::Key::ArrowLeft => Vec2::new(-1.0, 0.0),
+                egui::Key::ArrowRight => Vec2::new(1.0, 0.0),
+                egui::Key::ArrowUp => Vec2::new(0.0, -1.0),
+                egui::Key::ArrowDown => Vec2::new(0.0, 1.0),
+                _ => continue,
+            };
+            delta += direction * if modifiers.shift { 10.0 } else { 1.0 };
+        }
+        (delta != Vec2::ZERO).then_some(delta)
+    })
 }
 
 /// The largest rectangle of `aspect` (width over height) centered in
@@ -383,6 +420,7 @@ impl ControlPanel {
                 let selected = self.stage.slice == Some(slice.id());
                 if ui.selectable_label(selected, &slice.name).clicked() {
                     self.stage.slice = Some(slice.id());
+                    self.stage.point = None;
                 }
                 if ui
                     .add_enabled(index + 1 < count, egui::Button::new("⬆").small())
@@ -472,7 +510,8 @@ impl ControlPanel {
             ui.checkbox(&mut slice.flip.horizontal, "Miroir horizontal");
             ui.checkbox(&mut slice.flip.vertical, "vertical");
         });
-        ui.label(RichText::new("Sortie (pixels de l'écran)").weak());
+        ui.label(RichText::new("Sortie (pixels de l'écran)").weak())
+            .on_hover_text("Flèches : déplacer d'un pixel le dernier point touché sur l'écran (Maj : 10 pixels)");
         let (width, height) = (screen_size.0 as f32, screen_size.1 as f32);
         egui::Grid::new("slice output")
             .num_columns(3)
@@ -771,6 +810,7 @@ impl ControlPanel {
                 && self.stage.slice != Some(slice.id())
             {
                 self.stage.slice = Some(slice.id());
+                self.stage.point = None;
                 return;
             }
         }
@@ -838,6 +878,9 @@ impl ControlPanel {
             for (index, point) in mask.points.iter_mut().enumerate() {
                 let center = to_screen(output, *point);
                 let response = handle(ui, base.with(("mask", index)), center, MASK);
+                if response.drag_started() || response.clicked() {
+                    self.stage.point = Some(Picked::Mask(index));
+                }
                 if response.dragged()
                     && let Some(position) = response.interact_pointer_pos()
                 {
@@ -857,6 +900,9 @@ impl ControlPanel {
             for (index, point) in warp.points_mut().iter_mut().enumerate() {
                 let center = to_screen(output, *point);
                 let response = handle(ui, base.with(("warp", index)), center, SELECTED);
+                if response.drag_started() || response.clicked() {
+                    self.stage.point = Some(Picked::Warp(index));
+                }
                 if response.dragged()
                     && let Some(position) = response.interact_pointer_pos()
                 {
@@ -879,11 +925,40 @@ impl ControlPanel {
             }
             let center = to_screen(output, slice.output.0[corner]);
             let response = handle(ui, base.with(("output", corner)), center, SELECTED);
+            if response.drag_started() || response.clicked() {
+                self.stage.point = Some(Picked::Corner(corner));
+            }
             if response.dragged()
                 && let Some(position) = response.interact_pointer_pos()
             {
                 slice.output.0[corner] = to_fraction(output, position);
             }
+        }
+
+        // The point last touched: ringed, and moved by the arrow keys by
+        // pixels of the screen.
+        let point = match self.stage.point {
+            Some(Picked::Corner(index)) if slice.warp.is_none() => slice.output.0.get_mut(index),
+            Some(Picked::Warp(index)) => slice
+                .warp
+                .as_mut()
+                .and_then(|warp| warp.points_mut().get_mut(index)),
+            Some(Picked::Mask(index)) => slice
+                .mask
+                .as_mut()
+                .and_then(|mask| mask.points.get_mut(index)),
+            _ => None,
+        };
+        if let Some(point) = point {
+            if let Some(delta) = arrow_nudge(ui) {
+                point.x += delta.x / width as f32;
+                point.y += delta.y / height as f32;
+            }
+            ui.painter().circle_stroke(
+                to_screen(output, *point),
+                HANDLE * 2.0,
+                Stroke::new(2.0, Color32::WHITE),
+            );
         }
     }
 }
@@ -939,6 +1014,38 @@ mod tests {
         assert!(quad_contains(&trapezoid, Point::new(0.5, 0.5)));
         assert!(!quad_contains(&trapezoid, Point::new(0.1, 0.1)));
         assert!(quad_contains(&Quad::FULL, Point::new(0.99, 0.01)));
+    }
+
+    #[test]
+    fn arrows_nudge_by_one_pixel_or_ten_with_shift() {
+        let ctx = egui::Context::default();
+        let press = |key, shift| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers {
+                shift,
+                ..Default::default()
+            },
+        };
+        let mut nudges = Vec::new();
+        for events in [
+            vec![press(egui::Key::ArrowLeft, false)],
+            vec![press(egui::Key::ArrowDown, true)],
+            vec![],
+        ] {
+            let input = egui::RawInput {
+                events,
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| nudges.push(arrow_nudge(ui)));
+            output.textures_delta.clear();
+        }
+        assert_eq!(
+            nudges,
+            [Some(Vec2::new(-1.0, 0.0)), Some(Vec2::new(0.0, 10.0)), None]
+        );
     }
 
     #[test]

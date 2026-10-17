@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Sortie avancée : le dernier point touché se déplace au pixel près avec les flèches (Maj : 10 pixels).
 - Transformations : rotation et miroirs de la zone lue par une découpe, miroirs de tout un écran (projection par l'arrière, projecteur à l'envers).
 - Simulation des projecteurs dans la fenêtre « Sortie avancée » : écrans côte à côte, lumière additionnée dans la zone de recouvrement, pour régler le fondu des bords sans projecteur.
 - Fondu des bords des découpes (largeur par côté, courbe, gamma) pour les recouvrements de projecteurs, et mire de réglage par écran (ADR 0030).
