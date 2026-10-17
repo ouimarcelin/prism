@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Mapping, Moment, Slot,
-    Stage, Unit,
+    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Lighting, Mapping, Moment,
+    Slot, Stage, Unit,
 };
 
 /// Largest width or height accepted for a composition, in pixels.
@@ -135,6 +135,9 @@ pub struct Composition {
     /// Screens and slices of the output.
     #[serde(skip_serializing_if = "Stage::is_empty")]
     pub stage: Stage,
+    /// Fixtures fed from the image, over DMX.
+    #[serde(skip_serializing_if = "Lighting::is_unused")]
+    pub lighting: Lighting,
     next_id: u32,
 }
 
@@ -156,6 +159,8 @@ struct CompositionRepr {
     mappings: Vec<Mapping>,
     #[serde(default)]
     stage: Stage,
+    #[serde(default)]
+    lighting: Lighting,
     #[serde(default)]
     next_id: u32,
 }
@@ -214,6 +219,7 @@ impl TryFrom<CompositionRepr> for Composition {
             effects: repr.effects,
             mappings: repr.mappings,
             stage: repr.stage,
+            lighting: repr.lighting,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -252,6 +258,7 @@ impl Composition {
             effects: Vec::new(),
             mappings: Vec::new(),
             stage: Stage::default(),
+            lighting: Lighting::default(),
             next_id: 0,
         }
     }

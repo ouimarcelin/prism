@@ -1001,3 +1001,60 @@ fn two_blended_projectors_show_no_seam_in_the_simulation() {
     let pixels = read_texture(&gpu.device, &gpu.queue, image.texture()).unwrap();
     assert!(pixels[8 * 64 + 32][0] > 0.75, "{}", pixels[8 * 64 + 32][0]);
 }
+
+/// The criterion of phase 5, first half: an Art-Net LED strip follows the
+/// image.
+#[test]
+fn an_art_net_strip_follows_the_image() {
+    let Some(gpu) = gpu() else { return };
+    let receiver = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+    receiver
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .unwrap();
+    let port = receiver.local_addr().unwrap().port();
+
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .set_param("saturation", 1.0);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    comp.lighting.enabled = true;
+    comp.lighting.target = format!("127.0.0.1:{port}");
+    comp.lighting.rate = 60.0;
+    let strip = comp.lighting.add_strip("Bande", 10);
+    comp.lighting.fixture_mut(strip).unwrap().universe = 3;
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    driver.settle(|status| status.state == ClipState::Playing);
+
+    // Ticks until a universe arrives whose first pixel is `color`.
+    let wait_for = |driver: &mut Driver, color: [u8; 3]| {
+        let limit = Instant::now() + Duration::from_secs(5);
+        let mut buffer = [0u8; 1024];
+        loop {
+            driver.tick();
+            if let Ok(length) = receiver.recv(&mut buffer)
+                && let Some((universe, channels)) = prism_dmx::artnet::parse_dmx(&buffer[..length])
+                && channels[..3] == color
+            {
+                assert_eq!(universe, 3);
+                assert_eq!(channels[27..30], color, "tenth pixel");
+                assert_eq!(channels[30..33], [0, 0, 0], "past the strip");
+                return;
+            }
+            assert!(Instant::now() < limit, "no universe with {color:?}");
+        }
+    };
+    wait_for(&mut driver, [255, 0, 0]);
+    comp.clip_mut(slot)
+        .unwrap()
+        .source
+        .generator_mut()
+        .unwrap()
+        .set_param("hue", 120.0);
+    driver.state.set_composition(comp);
+    wait_for(&mut driver, [0, 255, 0]);
+    assert!(driver.state.status().dmx_sent > 0);
+    assert_eq!(driver.state.status().dmx_error, None);
+}

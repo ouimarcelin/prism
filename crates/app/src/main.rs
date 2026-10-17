@@ -915,6 +915,7 @@ impl App {
         };
         let screens = running.engine.screen_images();
         let simulation = running.engine.simulation_image();
+        let status = running.engine.status();
         let images: Vec<_> = std::iter::once(running.engine.program())
             .chain(screens.iter().map(|(_, image)| Arc::clone(image)))
             .chain(simulation.clone())
@@ -930,6 +931,7 @@ impl App {
                 .collect();
             let frame = StageFrame {
                 composition: textures.first().copied(),
+                dmx: (status.dmx_error.clone(), status.dmx_sent),
                 simulation: simulation
                     .as_ref()
                     .and_then(|_| textures.get(1 + screens.len()).copied()),

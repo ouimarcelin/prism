@@ -2378,6 +2378,9 @@ dependencies = [
 [[package]]
 name = "prism-dmx"
 version = "0.0.0"
+dependencies = [
+ "prism-core",
+]
 
 [[package]]
 name = "prism-engine"
@@ -2388,6 +2391,7 @@ dependencies = [
  "prism-audio",
  "prism-clock",
  "prism-core",
+ "prism-dmx",
  "prism-fx",
  "prism-io-video",
  "prism-media",

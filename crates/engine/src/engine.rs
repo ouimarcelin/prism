@@ -16,6 +16,7 @@ use prism_render::{
     StageRenderer, Transition, WORKING_FORMAT, solid_color_texture, wgpu,
 };
 
+use crate::lighting::LightingOutput;
 use crate::random::Random;
 use crate::status::{EngineStatus, FrameSteps, Hitch, LayerStatus};
 use crate::stream::ClipStream;
@@ -332,6 +333,8 @@ pub struct EngineState {
     /// Rehearsal of overlapping projectors, while the stage asks for it.
     simulation: Option<Arc<ProgramOutput>>,
     simulation_renderer: SimulationRenderer,
+    /// Colours of the fixtures, sent over DMX.
+    lighting: LightingOutput,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
     fx: EffectRenderer,
@@ -363,6 +366,7 @@ impl EngineState {
         let fx = EffectRenderer::new(&gpu.device);
         let stage_renderer = StageRenderer::new(&gpu.device);
         let simulation_renderer = SimulationRenderer::new(&gpu.device);
+        let lighting = LightingOutput::new(&gpu.device);
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(1, |time| time.as_nanos() as u64);
@@ -376,6 +380,7 @@ impl EngineState {
             stage_renderer,
             simulation: None,
             simulation_renderer,
+            lighting,
             program,
             screens: Vec::new(),
             outputs: Vec::new(),
@@ -801,8 +806,15 @@ impl EngineState {
         }
         self.mix = mix;
         self.draw_screens(&gpu, &mut encoder);
+        self.lighting.sample(
+            &gpu,
+            &mut encoder,
+            &self.program.view,
+            &self.composition.lighting,
+        );
         self.update_sounds(elapsed, time);
         gpu.queue.submit([encoder.finish()]);
+        self.lighting.send(&gpu, &self.composition.lighting);
         self.watch_gpu(&gpu);
         let submitted = Instant::now();
 
@@ -1036,6 +1048,8 @@ impl EngineState {
             last_hitch: self.stats.last_hitch,
             real_time: self.stats.real_time,
             gpu_skips: self.stats.gpu_skips,
+            dmx_error: self.lighting.error.clone(),
+            dmx_sent: self.lighting.sent,
             bpm: self.clock.bpm(),
             beat: self.beat,
             worst_gpu_latency_ms: self.gpu_progress.worst_latency_us.load(Ordering::Relaxed) as f64

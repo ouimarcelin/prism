@@ -12,6 +12,7 @@
 
 mod compositor;
 mod gpu;
+mod pixels;
 mod plan;
 pub mod reference;
 mod simulation;
@@ -22,6 +23,7 @@ pub use compositor::{Compositor, LayerInput, Transition};
 pub use gpu::{
     Gpu, GpuError, ReadbackError, WORKING_FORMAT, pixels_texture, read_texture, solid_color_texture,
 };
+pub use pixels::PixelSampler;
 pub use plan::{LayerPlan, plan_layers};
 pub use simulation::{SimulatedScreen, SimulationRenderer};
 pub use stage::{ScreenTarget, SliceVertex, StageRenderer, perspective_weights, slice_vertices};

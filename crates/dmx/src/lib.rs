@@ -1,6 +1,7 @@
 //! DMX over the network: [Art-Net](artnet) and [sACN](sacn) (ANSI E1.31)
 //! packets of one universe of 512 channels, and a [`DmxSender`] that sends
-//! universes over UDP.
+//! universes over UDP; [`universes`] lays the colours of the fixtures of
+//! a [`prism_core::Lighting`] out in universes.
 //!
 //! Both protocols are public; the packet layouts here follow their
 //! specifications.
@@ -8,9 +9,11 @@
 #![forbid(unsafe_code)]
 
 pub mod artnet;
+mod mapping;
 pub mod sacn;
 mod sender;
 
+pub use mapping::{pixel_count, universes};
 pub use sender::{DmxSender, Protocol};
 
 /// Channels of a DMX universe.

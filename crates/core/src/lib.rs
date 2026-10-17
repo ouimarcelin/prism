@@ -18,6 +18,7 @@ mod crossfader;
 mod effect;
 mod ids;
 mod layer;
+mod lighting;
 mod preset;
 mod project;
 mod stage;
@@ -37,6 +38,7 @@ pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
 pub use effect::{Animation, BAND_COUNT, Band, Effect, MIN_PERIOD, Moment, Period, Shape};
 pub use ids::{ColumnId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
+pub use lighting::{ColorOrder, DmxProtocol, Fixture, FixtureId, Lighting, MAX_FIXTURE_PIXELS};
 pub use preset::{
     LayerPreset, PRESET_EXTENSION, PRESET_FORMAT_VERSION, Preset, PresetContent, preset_file_name,
 };

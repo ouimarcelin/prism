@@ -17,6 +17,7 @@ ndi = ["prism-io-video/ndi"]
 prism-audio = { path = "../audio" }
 prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
+prism-dmx = { path = "../dmx" }
 prism-fx = { path = "../fx" }
 prism-media = { path = "../media" }
 prism-render = { path = "../render" }
