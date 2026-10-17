@@ -23,6 +23,67 @@ impl ControlPanel {
         self.missing_media(ctx);
         self.unsaved_changes(ctx);
         self.message(ctx);
+        self.mappings_window(ctx);
+    }
+
+    /// Every mapping of the composition, to read and remove; controls
+    /// without a widget to click are learned from here.
+    fn mappings_window(&mut self, ctx: &egui::Context) {
+        let mut open = self.dialogs.mappings;
+        let mut remove = None;
+        egui::Window::new("Correspondances MIDI")
+            .open(&mut open)
+            .default_width(460.0)
+            .show(ctx, |ui| {
+                let composition = self.document.composition();
+                if composition.mappings.is_empty() {
+                    ui.label(
+                        RichText::new(
+                            "Aucune correspondance. Activez Contrôle > Apprentissage MIDI, cliquez une commande puis bougez le contrôleur.",
+                        )
+                        .weak(),
+                    );
+                }
+                egui::Grid::new("mappings").striped(true).show(ui, |ui| {
+                    for (index, mapping) in composition.mappings.iter().enumerate() {
+                        ui.label(prism_control::describe_source(&mapping.source));
+                        ui.label(crate::labels::target(composition, &mapping.target));
+                        if ui.small_button("×").on_hover_text("Retirer").clicked() {
+                            remove = Some(index);
+                        }
+                        ui.end_row();
+                    }
+                });
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Apprendre :");
+                    for target in [
+                        prism_core::ControlTarget::StopAll,
+                        prism_core::ControlTarget::Tap,
+                        prism_core::ControlTarget::Resync,
+                    ] {
+                        let label = crate::labels::target(composition, &target);
+                        if ui.button(label).clicked() {
+                            self.learn.active = true;
+                            self.learn.selected = Some(target);
+                        }
+                    }
+                });
+                if self.learn.active {
+                    let text = match &self.learn.selected {
+                        Some(target) => format!(
+                            "En attente d'une commande MIDI pour : {}",
+                            crate::labels::target(self.document.composition(), target)
+                        ),
+                        None => "Apprentissage actif : cliquez une commande de la fenêtre.".to_owned(),
+                    };
+                    ui.label(RichText::new(text).strong());
+                }
+            });
+        if let Some(index) = remove {
+            self.document.composition_mut().mappings.remove(index);
+        }
+        self.dialogs.mappings = open;
     }
 
     fn about(&mut self, ctx: &egui::Context) {

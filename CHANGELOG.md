@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Contrôle MIDI : apprentissage (menu Contrôle > Apprentissage MIDI, cliquer une commande puis bouger le contrôleur), fenêtre des correspondances, entrées MIDI à écouter ; clips, colonnes, couches (opacité, bypass, solo, arrêt), crossfader, tap, resync, tout arrêter, curseurs du tableau de bord, réglages et activation des effets ; correspondances enregistrées dans le projet (crate `prism-control`, ADR 0021).
 - Outil `fx-bench` : temps GPU de chaque effet et générateur en 1080p ; rapport `docs/benchmarks/2026-10-17-phase-2-effets.md`.
 - L'opacité d'une couche peut suivre une bande du son (menu à côté de « ~ »), aussi enregistrée dans les préréglages de couche.
 - Son des clips : la piste son des vidéos est jouée sur la sortie du système, calée sur la tête de lecture (vitesse, sens, boucles, scratch), au volume du clip multiplié par l'opacité de sa couche ; fondu pendant les transitions ; « Son des clips » et volume général dans le menu Audio, volume par clip dans l'inspecteur (ADR 0020).

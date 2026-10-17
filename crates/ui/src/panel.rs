@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use egui::{Key, KeyboardShortcut, Modifiers};
 use prism_clock::{BEATS_PER_BAR, TapTempo, beat_in_bar};
+use prism_control::{ControlMessage, Controls, Outcome};
 use prism_core::{
     BAND_COUNT, Band, Bpm, ColumnId, MAX_BPM, MIN_BPM, MissingMedia, Resolution, Slot,
 };
@@ -13,6 +14,7 @@ use prism_engine::{Command, EngineStatus};
 
 use crate::crossfade::AutoFade;
 use crate::document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS};
+use crate::learn::Learn;
 use crate::preferences::Preferences;
 use crate::presets::PresetStore;
 use crate::shortcuts::Shortcut;
@@ -57,6 +59,19 @@ pub struct FrameInfo<'a> {
     pub output_screen: Option<usize>,
     /// Audio input in use.
     pub audio: AudioStatus,
+    /// MIDI inputs.
+    pub midi: MidiStatus,
+}
+
+/// MIDI inputs, for the interface.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MidiStatus {
+    /// Inputs present on the computer.
+    pub ports: Vec<String>,
+    /// Inputs listened to.
+    pub connected: Vec<String>,
+    /// Inputs that could not be opened, with why.
+    pub errors: Vec<String>,
 }
 
 /// State of the audio input, for the interface.
@@ -91,6 +106,7 @@ pub(crate) struct Dialogs {
     pub(crate) missing: Vec<MissingMedia>,
     pub(crate) message: Option<String>,
     pub(crate) unsaved: Option<Pending>,
+    pub(crate) mappings: bool,
 }
 
 /// State of the control window around the document being edited.
@@ -107,6 +123,8 @@ pub struct ControlPanel {
     /// Input devices, read when the audio menu opens.
     audio_devices: Option<Vec<String>>,
     pub(crate) presets: PresetStore,
+    pub(crate) learn: Learn,
+    controls: Controls,
 }
 
 impl ControlPanel {
@@ -129,6 +147,8 @@ impl ControlPanel {
             tap: TapTempo::default(),
             audio_devices: None,
             presets: PresetStore::default(),
+            learn: Learn::default(),
+            controls: Controls::default(),
         }
     }
 
@@ -149,6 +169,12 @@ impl ControlPanel {
     /// inspector.
     pub fn select(&mut self, slot: Option<Slot>) {
         self.selected = slot;
+    }
+
+    /// Turns the MIDI learn mode on or off.
+    pub fn set_midi_learn(&mut self, on: bool) {
+        self.learn.active = on;
+        self.learn.selected = None;
     }
 
     /// Preferences in use.
@@ -284,9 +310,42 @@ impl ControlPanel {
         std::mem::take(&mut self.actions)
     }
 
+    /// Applies messages of controllers: through the mappings, or, in learn
+    /// mode with a control picked, to map the first control moved.
+    pub fn control(&mut self, messages: impl IntoIterator<Item = ControlMessage>) -> Vec<Action> {
+        let before = self.document.composition().clone();
+        for message in messages {
+            let moved = message.pressed
+                || matches!(
+                    message.source,
+                    prism_core::ControlSource::MidiControl { .. }
+                );
+            if self.learn.active
+                && moved
+                && let Some(target) = self.learn.selected.take()
+            {
+                prism_control::learn(self.document.composition_mut(), message.source, target);
+                continue;
+            }
+            let outcomes = self
+                .controls
+                .apply(self.document.composition_mut(), &message);
+            for outcome in outcomes {
+                match outcome {
+                    Outcome::Changed => {}
+                    Outcome::Tap => self.tap_tempo(),
+                    Outcome::Resync => self.resync(),
+                }
+            }
+        }
+        self.document.commit(&before);
+        std::mem::take(&mut self.actions)
+    }
+
     /// Draws one frame of the interface in `ui`, the whole window.
     pub fn ui(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) -> Vec<Action> {
         let before = self.document.composition().clone();
+        self.learn.refresh(&self.document.composition().mappings);
         self.keyboard(ui.ctx());
         self.refresh_missing();
 
@@ -501,6 +560,7 @@ impl ControlPanel {
                     self.actions.push(Action::CloseOutput);
                 }
             });
+            ui.menu_button("Contrôle", |ui| self.control_menu(ui, &frame.midi));
             let audio = ui.menu_button("Audio", |ui| self.audio_menu(ui, &frame.audio));
             if audio.inner.is_none() {
                 // Read the devices again next time the menu opens.
@@ -515,6 +575,44 @@ impl ControlPanel {
                 }
             });
         });
+    }
+
+    /// MIDI learn, mappings, MIDI inputs.
+    fn control_menu(&mut self, ui: &mut egui::Ui, midi: &MidiStatus) {
+        if ui
+            .checkbox(&mut self.learn.active, "Apprentissage MIDI")
+            .on_hover_text("Cliquer une commande, puis bouger un bouton ou un fader du contrôleur")
+            .changed()
+        {
+            self.learn.selected = None;
+        }
+        if ui.button("Correspondances…").clicked() {
+            self.dialogs.mappings = true;
+            ui.close();
+        }
+        ui.separator();
+        ui.label(egui::RichText::new("Entrées MIDI").strong());
+        if midi.ports.is_empty() {
+            ui.label(egui::RichText::new("Aucune entrée MIDI").weak());
+        }
+        let mut preferences = self.preferences.clone();
+        for port in &midi.ports {
+            let mut on = !preferences.midi_disabled.contains(port);
+            if ui.checkbox(&mut on, port).changed() {
+                if on {
+                    preferences.midi_disabled.retain(|name| name != port);
+                } else {
+                    preferences.midi_disabled.push(port.clone());
+                }
+            }
+        }
+        for error in &midi.errors {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        if preferences != self.preferences {
+            self.preferences = preferences;
+            self.save_preferences();
+        }
     }
 
     /// Audio input: on or off, device, sensitivity.
@@ -605,16 +703,22 @@ impl ControlPanel {
         let tap = ui
             .button("Tap")
             .on_hover_text("Tap tempo : frapper en rythme (touche T)");
-        if tap.contains_pointer() && ui.input(|input| input.pointer.primary_pressed()) {
+        if !self.learn.active
+            && tap.contains_pointer()
+            && ui.input(|input| input.pointer.primary_pressed())
+        {
             self.tap_tempo();
         }
-        if ui
+        self.learn
+            .cover(ui, tap.rect, prism_core::ControlTarget::Tap);
+        let resync = ui
             .button("Resync")
-            .on_hover_text("La mesure commence maintenant (touche R)")
-            .clicked()
-        {
+            .on_hover_text("La mesure commence maintenant (touche R)");
+        if resync.clicked() {
             self.resync();
         }
+        self.learn
+            .cover(ui, resync.rect, prism_core::ControlTarget::Resync);
         beat_lights(ui, status.beat);
     }
 
@@ -711,6 +815,8 @@ impl ControlPanel {
                 }
             }
             crossfader.position = prism_core::Unit::new(position);
+            self.learn
+                .cover(ui, response.rect, prism_core::ControlTarget::Crossfader);
             ui.label(egui::RichText::new("B").strong());
             if ui
                 .button("B ▶")
@@ -1037,7 +1143,65 @@ fn beat_lights(ui: &mut egui::Ui, beat: f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use prism_core::{ControlSource, ControlTarget};
     use prism_engine::LayerStatus;
+
+    #[test]
+    fn learned_controls_drive_the_composition() {
+        let mut panel = ControlPanel::new(
+            Document::new(prism_core::Composition::default()),
+            Vec::new(),
+        );
+        let layer = panel.document.composition().layers()[0].id();
+        let fader = |value: f32| ControlMessage {
+            source: ControlSource::MidiControl {
+                channel: 0,
+                number: 7,
+            },
+            value,
+            pressed: value >= 0.5,
+        };
+        let pad = |pressed| ControlMessage {
+            source: ControlSource::MidiNote {
+                channel: 9,
+                note: 36,
+            },
+            value: 1.0,
+            pressed,
+        };
+        // Learn: the first control moved is mapped to the control picked.
+        panel.learn.active = true;
+        panel.learn.selected = Some(ControlTarget::LayerOpacity { layer });
+        panel.control([fader(0.3)]);
+        assert_eq!(panel.learn.selected, None);
+        assert_eq!(panel.document.composition().mappings.len(), 1);
+        panel.learn.selected = Some(ControlTarget::Tap);
+        // A note off does not learn.
+        panel.control([pad(false)]);
+        assert_eq!(panel.document.composition().mappings.len(), 1);
+        panel.control([pad(true)]);
+        panel.learn.active = false;
+
+        // Played: the fader moves the opacity, the pad taps the tempo.
+        let revision = panel.document.revision();
+        panel.control([fader(0.25)]);
+        assert_eq!(
+            panel
+                .document
+                .composition()
+                .layer(layer)
+                .unwrap()
+                .opacity
+                .get(),
+            0.25
+        );
+        assert!(panel.document.revision() > revision);
+        let actions = panel.control([pad(true)]);
+        assert!(matches!(
+            actions.as_slice(),
+            [Action::Engine(Command::Tap { .. })]
+        ));
+    }
 
     #[test]
     fn status_line_counts_every_kind_of_problem() {

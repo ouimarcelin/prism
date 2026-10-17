@@ -54,6 +54,7 @@ fn frame(
         screens: &screens,
         output_screen: Some(1),
         audio: Default::default(),
+        midi: Default::default(),
     };
     let mut actions = Vec::new();
     let mut output = ctx.run_ui(input(events), |ui| actions.extend(panel.ui(ui, &info)));
@@ -325,6 +326,7 @@ fn click_button(
         screens: &screens,
         output_screen: None,
         audio: Default::default(),
+        midi: Default::default(),
     };
     let mut output = ctx.run_ui(input(Vec::new()), |ui| {
         panel.ui(ui, &info);

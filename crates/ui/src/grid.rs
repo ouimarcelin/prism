@@ -1,7 +1,7 @@
 //! The clip grid: one row per layer, top layer first, one cell per column.
 
 use egui::{Color32, RichText, Sense, Stroke, Vec2};
-use prism_core::{ColumnId, CrossfaderSide, LayerId, Slot, Unit};
+use prism_core::{ColumnId, ControlTarget, CrossfaderSide, LayerId, Slot, Unit};
 use prism_engine::{ClipState, EngineStatus};
 
 use crate::labels;
@@ -64,6 +64,8 @@ impl ControlPanel {
                 if response.clicked() {
                     self.trigger_column(column);
                 }
+                self.learn
+                    .cover(ui, response.rect, ControlTarget::Column { column });
                 response.context_menu(|ui| self.column_menu(ui, column));
             }
             if ui
@@ -129,6 +131,7 @@ impl ControlPanel {
         let Some(entry) = self.document.composition_mut().layer_mut(layer) else {
             return;
         };
+        let mut covers = Vec::new();
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 let name = RichText::new(entry.name.clone()).strong();
@@ -137,7 +140,9 @@ impl ControlPanel {
                 } else {
                     name
                 };
-                ui.add(egui::Label::new(name).truncate().sense(Sense::click()))
+                let label = ui.add(egui::Label::new(name).truncate().sense(Sense::click()));
+                covers.push((label.rect, ControlTarget::LayerStop { layer }));
+                label
                     .on_hover_text("Clic droit : renommer, arrêter, supprimer")
                     .context_menu(|ui| {
                         ui.label("Nom");
@@ -161,10 +166,14 @@ impl ControlPanel {
                 }
             });
             ui.horizontal(|ui| {
-                ui.toggle_value(&mut entry.bypass, "B")
+                let bypass = ui
+                    .toggle_value(&mut entry.bypass, "B")
                     .on_hover_text("Bypass : couche masquée");
-                ui.toggle_value(&mut entry.solo, "S")
+                covers.push((bypass.rect, ControlTarget::LayerBypass { layer }));
+                let solo = ui
+                    .toggle_value(&mut entry.solo, "S")
                     .on_hover_text("Solo : seules les couches en solo sont visibles");
+                covers.push((solo.rect, ControlTarget::LayerSolo { layer }));
                 egui::ComboBox::from_id_salt(("side", layer))
                     .width(34.0)
                     .selected_text(labels::side(entry.crossfader_side))
@@ -191,9 +200,14 @@ impl ControlPanel {
                     .on_hover_text("Mode de fusion");
             });
             let mut opacity = entry.opacity.get();
-            ui.add(egui::Slider::new(&mut opacity, 0.0..=1.0).show_value(false))
+            let slider = ui
+                .add(egui::Slider::new(&mut opacity, 0.0..=1.0).show_value(false))
                 .on_hover_text(format!("Opacité {:.0} %", opacity * 100.0));
+            covers.push((slider.rect, ControlTarget::LayerOpacity { layer }));
             entry.opacity = Unit::new(opacity);
+            for (rect, target) in covers.drain(..) {
+                self.learn.cover(ui, rect, target);
+            }
         });
         if stop {
             let _ = self.document.composition_mut().stop_layer(layer);
@@ -240,6 +254,10 @@ impl ControlPanel {
             ui.painter().rect_filled(bar, 1.0, Color32::WHITE);
         }
 
+        if clip_name.is_some() {
+            self.learn
+                .cover(ui, response.rect, ControlTarget::Clip { slot });
+        }
         if response.clicked() {
             self.selected = Some(slot);
             if clip_name.is_some() {

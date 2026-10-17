@@ -1,0 +1,17 @@
+[package]
+name = "prism-control"
+description = "Control of Prism from outside: MIDI controllers, and the mappings from their messages to the composition."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+midir = "0.11.1"
+prism-core = { path = "../core" }
+prism-fx = { path = "../fx" }
+
+[lints]
+workspace = true

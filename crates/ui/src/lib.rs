@@ -15,13 +15,14 @@ mod effects;
 mod grid;
 mod inspector;
 mod labels;
+mod learn;
 mod panel;
 mod preferences;
 mod presets;
 mod shortcuts;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
-pub use panel::{Action, AudioStatus, ControlPanel, FrameInfo, Screen};
+pub use panel::{Action, AudioStatus, ControlPanel, FrameInfo, MidiStatus, Screen};
 pub use preferences::{MAX_RECENT, Preferences};
 pub use shortcuts::{SHORTCUT_HELP, Shortcut};
 

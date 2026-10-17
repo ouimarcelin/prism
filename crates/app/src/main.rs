@@ -15,10 +15,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use prism_audio::{AudioInput, AudioOutput, Mixer, Volume};
+use prism_control::{ControlMessage, MidiInputs};
 use prism_engine::{Command, Engine};
 use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
-use prism_ui::{Action, AudioStatus, ControlPanel, FrameInfo, Preferences, Screen, Shortcut};
+use prism_ui::{
+    Action, AudioStatus, ControlPanel, FrameInfo, MidiStatus, Preferences, Screen, Shortcut,
+};
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::{ElementState, StartCause, WindowEvent};
@@ -60,7 +63,7 @@ fn main() -> ExitCode {
         }
     };
 
-    let mut builder = EventLoop::builder();
+    let mut builder = EventLoop::<UserEvent>::with_user_event();
     // Without the default menu, Cmd+Q reaches the interface, which asks
     // about unsaved changes instead of quitting at once.
     #[cfg(target_os = "macos")]
@@ -81,7 +84,19 @@ fn main() -> ExitCode {
         .as_deref()
         .map(Preferences::load)
         .unwrap_or_default();
+    let (control_sender, control_messages) = std::sync::mpsc::channel();
+    let proxy = event_loop.create_proxy();
+    let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+        let _ = proxy.send_event(UserEvent::Control);
+    });
     let mut app = App {
+        midi: Midi {
+            inputs: MidiInputs::new(control_sender, wake),
+            messages: control_messages,
+            status: MidiStatus::default(),
+            checked: None,
+        },
+        midi_disabled_seen: Vec::new(),
         output_screen: options.output_screen,
         panel: ControlPanel::new(document, missing).with_preferences(preferences, preferences_path),
         running: None,
@@ -114,7 +129,54 @@ fn describe(error: &dyn Error) -> String {
     message
 }
 
+/// Events sent to the event loop from other threads.
+#[derive(Debug)]
+enum UserEvent {
+    /// A controller sent messages.
+    Control,
+}
+
+/// MIDI inputs and the messages they sent.
+struct Midi {
+    inputs: MidiInputs,
+    messages: std::sync::mpsc::Receiver<ControlMessage>,
+    status: MidiStatus,
+    /// Last time the inputs present were looked at.
+    checked: Option<Instant>,
+}
+
+/// How often the MIDI inputs present are looked at, to connect new ones.
+const MIDI_REFRESH: Duration = Duration::from_secs(2);
+
+impl Midi {
+    /// Connects the inputs the preferences accept, every few seconds.
+    fn refresh(&mut self, preferences: &Preferences, force: bool) {
+        if !force
+            && self
+                .checked
+                .is_some_and(|checked| checked.elapsed() < MIDI_REFRESH)
+        {
+            return;
+        }
+        self.checked = Some(Instant::now());
+        let disabled = &preferences.midi_disabled;
+        self.status.errors = self
+            .inputs
+            .sync(|name| !disabled.iter().any(|off| off == name));
+        self.status.ports = prism_control::midi_ports();
+        self.status.connected = self
+            .inputs
+            .connected()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+    }
+}
+
 struct App {
+    midi: Midi,
+    /// MIDI inputs turned off when they were last connected.
+    midi_disabled_seen: Vec<String>,
     /// Screen, numbered from 1, for the output at start.
     output_screen: Option<usize>,
     panel: ControlPanel,
@@ -456,6 +518,11 @@ impl App {
         let output_screen = running.output.as_ref().map(|output| output.screen);
         let screens = running.screens.clone();
         let audio = running.audio_status();
+        let preferences_changed = self.panel.preferences().midi_disabled != self.midi_disabled_seen;
+        self.midi
+            .refresh(self.panel.preferences(), preferences_changed);
+        self.midi_disabled_seen = self.panel.preferences().midi_disabled.clone();
+        let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
         running.control.draw(&running.gpu, program, |ui, preview| {
@@ -465,6 +532,7 @@ impl App {
                 screens: &screens,
                 output_screen,
                 audio: audio.clone(),
+                midi: midi.clone(),
             };
             // egui may run the interface twice in one frame; only the first
             // pass sees the input, so keep the actions of every pass.
@@ -501,7 +569,23 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<UserEvent> for App {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: UserEvent) {
+        match event {
+            UserEvent::Control => {
+                let messages: Vec<ControlMessage> = self.midi.messages.try_iter().collect();
+                if messages.is_empty() {
+                    return;
+                }
+                let actions = self.panel.control(messages);
+                self.handle(event_loop, actions);
+                if let Some(running) = &self.running {
+                    running.control.window.request_redraw();
+                }
+            }
+        }
+    }
+
     fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
         // Time for the next frame of an idle interface.
         if matches!(cause, StartCause::ResumeTimeReached { .. })
