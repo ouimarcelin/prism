@@ -16,16 +16,27 @@ impl ControlPanel {
         if let Some(timecode) = timecode {
             self.timecode_seen = Some(timecode);
         }
+        // The engine follows it too, for the clips set on the timecode.
+        let followed = self
+            .timecode_seconds
+            .filter(|_| self.document.composition().timeline.enabled);
+        if followed.is_some() || self.timecode_sent {
+            self.actions
+                .push(Action::Engine(prism_engine::Command::Timecode(
+                    followed.map(|seconds| (seconds, std::time::Instant::now())),
+                )));
+        }
+        self.timecode_sent = followed.is_some();
         let (Some(from), Some(to)) = (previous, self.timecode_seconds) else {
-            return Vec::new();
+            return std::mem::take(&mut self.actions);
         };
         let timeline = &self.document.composition().timeline;
         if !timeline.enabled {
-            return Vec::new();
+            return std::mem::take(&mut self.actions);
         }
         let passed = timeline.passed(from, to);
         if passed.is_empty() {
-            return Vec::new();
+            return std::mem::take(&mut self.actions);
         }
         let before = self.document.composition().clone();
         let composition = self.document.composition_mut();
@@ -45,7 +56,7 @@ impl ControlPanel {
     }
 
     /// Rate of the timecode received last, or 25 frames per second.
-    fn timecode_rate(&self) -> TimecodeRate {
+    pub(crate) fn timecode_rate(&self) -> TimecodeRate {
         self.timecode_seen
             .map_or(TimecodeRate::Fps25, |timecode| timecode.rate)
     }

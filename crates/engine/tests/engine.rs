@@ -1058,3 +1058,37 @@ fn an_art_net_strip_follows_the_image() {
     assert!(driver.state.status().dmx_sent > 0);
     assert_eq!(driver.state.status().dmx_error, None);
 }
+
+#[test]
+fn a_clip_set_on_the_timecode_plays_where_it_says() {
+    let Some(gpu) = gpu() else { return };
+    let dir = tempfile::tempdir().unwrap();
+    let mut clip = Clip::from_file(numbered_clip(dir.path()));
+    // The media starts at 100 s of timecode.
+    clip.playback.timecode_start = Some(100.0);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(gpu, comp);
+    driver.wait_for_frame();
+
+    // Timecode at 100.25 s now: frame 15 of the 60 frames per second
+    // clip; read one frame period later, frame 16.
+    driver
+        .state
+        .apply(Command::Timecode(Some((100.25, driver.now))));
+    driver.tick();
+    let status = driver.wait_for_frame();
+    assert_eq!(status.frame, Some(16));
+    // The timecode runs on with time: a quarter second later, frame 30.
+    for _ in 0..14 {
+        driver.tick();
+    }
+    let status = driver.wait_for_frame();
+    assert_eq!(status.frame, Some(30));
+    // Stopped: the clip holds still.
+    driver.state.apply(Command::Timecode(None));
+    for _ in 0..10 {
+        driver.tick();
+    }
+    assert_eq!(driver.wait_for_frame().frame, Some(30));
+}
