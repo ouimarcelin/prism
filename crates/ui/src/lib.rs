@@ -16,6 +16,7 @@ mod grid;
 mod inspector;
 mod labels;
 mod learn;
+mod lighting;
 mod panel;
 mod preferences;
 mod presets;

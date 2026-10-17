@@ -2,7 +2,7 @@
 //! layout of the interface.
 //!
 //! ```text
-//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator|learn|stage]]
+//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator|learn|stage|lighting]]
 //! ```
 //!
 //! The window shows a sample project: clips in the grid, the first one
@@ -103,7 +103,7 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator|learn|stage]]");
+        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator|learn|stage|lighting]]");
         return ExitCode::FAILURE;
     };
     let size = |index: usize, default: u32| {
@@ -121,7 +121,18 @@ fn main() -> ExitCode {
     };
 
     let (mut document, slot, generated, status) = sample();
-    let show_stage = args.get(3).is_some_and(|arg| arg == "stage");
+    let show_lighting = args.get(3).is_some_and(|arg| arg == "lighting");
+    let show_stage = show_lighting || args.get(3).is_some_and(|arg| arg == "stage");
+    if show_lighting {
+        let lighting = &mut document.composition_mut().lighting;
+        lighting.enabled = true;
+        let top = lighting.add_strip("Bande haute", 120);
+        if let Some(strip) = lighting.fixture_mut(top) {
+            strip.from = prism_core::Point::new(0.05, 0.15);
+            strip.to = prism_core::Point::new(0.95, 0.15);
+        }
+        lighting.add_strip("Bande milieu", 60);
+    }
     if show_stage {
         // Two slices: the left and right halves, the right one tilted.
         let stage = &mut document.composition_mut().stage;
@@ -167,6 +178,7 @@ fn main() -> ExitCode {
     let mut panel = ControlPanel::new(document, Vec::new());
     let show_generator = args.get(3).is_some_and(|arg| arg == "generator");
     panel.set_midi_learn(args.get(3).is_some_and(|arg| arg == "learn"));
+    panel.show_lighting(show_lighting);
     panel.select(Some(if show_generator { generated } else { slot }));
     let screens = [Screen {
         name: "Intégré".into(),
@@ -207,6 +219,7 @@ fn main() -> ExitCode {
             if show_stage {
                 let frame = prism_ui::StageFrame {
                     composition: None,
+                    dmx: (None, 0),
                     simulation: None,
                     screens: &[],
                     displays: &screens,

@@ -30,6 +30,8 @@ pub struct StageFrame<'a> {
     pub screens: &'a [(ScreenId, egui::TextureId)],
     /// Simulation of overlapping projectors, while drawn, and its size.
     pub simulation: Option<(egui::TextureId, Resolution)>,
+    /// Why the DMX of the fixtures is not sent, and the universes sent.
+    pub dmx: (Option<String>, u64),
     /// Displays of the computer.
     pub displays: &'a [Display],
 }
@@ -41,6 +43,10 @@ pub(crate) struct StageEditor {
     slice: Option<SliceId>,
     /// Point of the selected slice last touched, moved by the arrow keys.
     point: Option<Picked>,
+    /// Tab shown: screens, or lighting.
+    pub(crate) lighting: bool,
+    /// Fixture selected in the lighting tab.
+    pub(crate) fixture: Option<prism_core::FixtureId>,
 }
 
 /// A point of a slice on its screen.
@@ -253,6 +259,18 @@ impl ControlPanel {
                 screen.and_then(|screen| screen.slices.last().map(|slice| slice.id()));
         }
 
+        egui::Panel::top("stage tabs").show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.stage.lighting, false, RichText::new("Écrans").strong());
+                ui.selectable_value(&mut self.stage.lighting, true, RichText::new("Lumière (DMX)").strong())
+                    .on_hover_text("Bandes de LED et luminaires posés sur la composition, leurs couleurs envoyées en Art-Net ou sACN");
+            });
+        });
+        if self.stage.lighting {
+            self.lighting_ui(ui, frame);
+            self.document.commit(&before);
+            return std::mem::take(&mut self.actions);
+        }
         egui::Panel::top("stage screens").show(ui, |ui| self.stage_screens(ui, frame));
         if self.stage.screen.is_some() {
             egui::Panel::left("stage slices")

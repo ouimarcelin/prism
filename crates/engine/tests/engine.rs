@@ -1029,7 +1029,7 @@ fn an_art_net_strip_follows_the_image() {
     driver.settle(|status| status.state == ClipState::Playing);
 
     // Ticks until a universe arrives whose first pixel is `color`.
-    let mut wait_for = |driver: &mut Driver, color: [u8; 3]| {
+    let wait_for = |driver: &mut Driver, color: [u8; 3]| {
         let limit = Instant::now() + Duration::from_secs(5);
         let mut buffer = [0u8; 1024];
         loop {
