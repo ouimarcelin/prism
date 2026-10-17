@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Réception DMX d'une console lumière (Art-Net ou sACN, menu Contrôle) : chaque canal s'apprend comme un fader MIDI pour déclencher clips et réglages.
 - Pixel mapping DMX : bandes de LED et luminaires posés sur la composition (onglet « Lumière (DMX) » de la fenêtre Sortie avancée), couleurs prises sur l'image et envoyées en Art-Net ou sACN (ADR 0033).
 - Crate `prism-dmx` : paquets Art-Net et sACN (E1.31), envoi d'univers DMX sur le réseau (ADR 0033).
 - Pad MIDI virtuel : horloge MIDI au tempo réglé, avec Start et Stop.

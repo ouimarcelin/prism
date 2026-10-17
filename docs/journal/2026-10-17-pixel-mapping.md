@@ -21,7 +21,7 @@
 
 - Critère de la phase 5 (première moitié) en test automatique : une bande Art-Net de 10 pixels reçoit le rouge, puis le vert quand l'image change.
 - Tests : ordres de couleurs, pixels le long d'une ligne, canaux suivants, débordement d'univers, lecture GPU de 300 points, adresses.
-- 298 tests passent ; mise en page vérifiée par `ui-snapshot … lighting`.
+- 297 tests passent ; mise en page vérifiée par `ui-snapshot … lighting`.
 
 ## Problèmes et points ouverts
 
