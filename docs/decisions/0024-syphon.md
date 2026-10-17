@@ -25,3 +25,5 @@ La phase 3 demande Syphon (macOS), pour partager l'image avec d'autres applicati
 - La compilation sur macOS demande les Command Line Tools (déjà nécessaires).
 - Couleurs prémultipliées dans l'image publiée ; l'image programme est opaque dans l'usage courant.
 - Entrée Syphon (client) : ticket suivant, avec un test aller-retour dans le même processus.
+- **Ajout du 2026-10-17 (ticket 34) : entrée Syphon.** Clip de source `Syphon` (application et nom du serveur, les identifiants changeant à chaque lancement). Le client Metal de Syphon donne la texture du serveur ; la glue la copie dans une texture BGRA de wgpu sur la file Metal de wgpu, avant le travail de l'image. Le moteur essaie de se connecter chaque seconde tant que le serveur n'est pas publié (la couche affiche « en attente »), et se reconnecte s'il disparaît. L'annuaire des serveurs reçoit leurs annonces sur la boucle du fil principal : l'application le démarre au lancement. `prism-io-video` ne dépend plus du moteur ; la sortie Syphon est un adaptateur de l'application.
+
