@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Fondu des bords : niveau de noir, pour égaler le noir hors du recouvrement à celui, plus clair, de deux projecteurs.
 - Fichiers de scène (`.prism-scene`) : les écrans et découpes d'une salle exportés puis importés dans un autre projet.
 - Annuler et rétablir (Cmd+Z, Cmd+Maj+Z, menu Édition) : toute modification de l'interface, gestes rapprochés regroupés ; ce qui joue continue de jouer (ADR 0031).
 - Sortie avancée : le dernier point touché se déplace au pixel près avec les flèches (Maj : 10 pixels).

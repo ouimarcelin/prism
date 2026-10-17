@@ -16,6 +16,7 @@ Le critère de la phase 4 : deux projecteurs dont la zone de recouvrement est in
 
 ## Conséquences
 
-- Pas de réglage du niveau de noir (le noir d'un projecteur n'est jamais nul : la zone de recouvrement reste plus claire dans les noirs) : à ajouter si le test réel le demande.
+- Niveau de noir : ajouté au ticket 50 (voir plus bas).
 - Le fondu suit la découpe déformée : il épouse la grille.
 - **Ajout du 2026-10-17 (ticket 43) : simulation.** Sans projecteur, la scène peut montrer ses écrans côte à côte, chacun recouvrant le précédent d'un nombre de pixels réglable ; leurs images sont additionnées en lumière (portées au gamma, sommées, ramenées), comme sur un mur. Un test automatique répète ainsi le critère de la phase 4.
+- **Ajout du 2026-10-17 (ticket 50) : niveau de noir.** Le noir d'un projecteur n'est jamais nul : dans le recouvrement, deux noirs s'additionnent. Le réglage « Noir » ajoute une valeur aux parties sombres hors des zones de fondu (`c + n (1 − c)`, sans effet sur le blanc), avec une rampe de 2 % de la découpe au bord intérieur du fondu. À régler à l'œil sur une image noire.
