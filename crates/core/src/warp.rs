@@ -197,16 +197,26 @@ impl Warp {
                 )
             }
             WarpCurve::Smooth => {
-                // Along each of four rows, then down through the results.
-                let rows: Vec<Point> = (0..=usize::from(self.rows))
-                    .map(|index| {
-                        let line = self.row(index);
-                        let at = |offset: isize| extended(line, column as isize + offset);
-                        catmull_rom(at(-1), at(0), at(1), at(2), s)
-                    })
-                    .collect();
-                let at = |offset: isize| extended(&rows, row as isize + offset);
-                catmull_rom(at(-1), at(0), at(1), at(2), t)
+                // Along the four rows around the cell (rows past the edges
+                // extended in a straight line), then down through them.
+                let along = |index: usize| {
+                    let line = self.row(index);
+                    let at = |offset: isize| extended(line, column as isize + offset);
+                    catmull_rom(at(-1), at(0), at(1), at(2), s)
+                };
+                let last = usize::from(self.rows);
+                let (p1, p2) = (along(row), along(row + 1));
+                let p0 = if row == 0 {
+                    lerp(p1, p2, -1.0)
+                } else {
+                    along(row - 1)
+                };
+                let p3 = if row + 1 == last {
+                    lerp(p2, p1, -1.0)
+                } else {
+                    along(row + 2)
+                };
+                catmull_rom(p0, p1, p2, p3, t)
             }
         }
     }

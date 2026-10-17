@@ -25,3 +25,4 @@ Option 1 :
 
 - Coût par pixel proportionnel au nombre de points du masque : 64 points restent légers en 1080p.
 - Pas de courbes dans le contour : un arrondi demande plus de points.
+- **Ajout du 2026-10-17 (ticket 47) : image de couverture.** Mesuré à 24 ms par image pour deux écrans 1080p avec un masque de 64 points, le calcul par pixel à chaque image est remplacé par une image de couverture (8 bits) dessinée seulement quand le masque change ; la découpe la lit. Coût : 1,2 ms (`docs/benchmarks/2026-10-17-sortie-avancee.md`).
