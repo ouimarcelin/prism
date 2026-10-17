@@ -25,3 +25,7 @@
 ## Problèmes et points ouverts
 
 - Non testé avec deux écrans réels : un seul écran disponible pendant la session. À vérifier à la main, surtout avec deux écrans de fréquences différentes (ADR 0025).
+
+## Archive
+
+- Transcription : `2026-10-17-103042-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `d8160720cbba976922ba23452ece6282c724fffddb5a7645b903240dac718b33` (même session que les tickets 33 et 34 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
