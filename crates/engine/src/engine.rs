@@ -9,11 +9,11 @@ use std::time::{Duration, Instant};
 
 use prism_audio::{AudioLevels, VoiceCommand};
 use prism_clock::BeatClock;
-use prism_core::{Composition, Effect, LayerId, Resolution, Slot, Unit};
+use prism_core::{Composition, Effect, LayerId, Resolution, ScreenId, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_render::{
-    Compositor, FrameUploader, Gpu, LayerInput, Transition, WORKING_FORMAT, solid_color_texture,
-    wgpu,
+    Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, StageRenderer, Transition,
+    WORKING_FORMAT, solid_color_texture, wgpu,
 };
 
 use crate::random::Random;
@@ -28,6 +28,34 @@ use crate::stream::ClipStream;
 pub trait Output: Send {
     /// Shows `program`.
     fn present(&mut self, gpu: &Gpu, program: &ProgramOutput);
+
+    /// Shows one of `images`: the program, unless the output shows a screen
+    /// of the stage.
+    fn present_images(&mut self, gpu: &Gpu, images: &OutputImages<'_>) {
+        self.present(gpu, images.program());
+    }
+}
+
+/// The images of a frame an output may show: the program and the screens
+/// of the stage.
+pub struct OutputImages<'a> {
+    program: &'a ProgramOutput,
+    screens: &'a [(ScreenId, ProgramOutput)],
+}
+
+impl<'a> OutputImages<'a> {
+    /// The program image.
+    pub fn program(&self) -> &'a ProgramOutput {
+        self.program
+    }
+
+    /// The image of the screen `id`, drawn from the program this frame.
+    pub fn screen(&self, id: ScreenId) -> Option<&'a ProgramOutput> {
+        self.screens
+            .iter()
+            .find(|(screen, _)| *screen == id)
+            .map(|(_, image)| image)
+    }
 }
 
 /// Instruction sent to the render thread.
@@ -298,6 +326,9 @@ pub struct EngineState {
     uploader: FrameUploader,
     transparent: wgpu::TextureView,
     program: Arc<ProgramOutput>,
+    /// Images of the screens of the stage, drawn after the program.
+    screens: Vec<(ScreenId, ProgramOutput)>,
+    stage_renderer: StageRenderer,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
     fx: EffectRenderer,
@@ -327,6 +358,7 @@ impl EngineState {
             .create_view(&wgpu::TextureViewDescriptor::default());
         let program = Arc::new(ProgramOutput::new(&gpu.device, resolution));
         let fx = EffectRenderer::new(&gpu.device);
+        let stage_renderer = StageRenderer::new(&gpu.device);
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(1, |time| time.as_nanos() as u64);
@@ -337,7 +369,9 @@ impl EngineState {
             compositor,
             uploader,
             transparent,
+            stage_renderer,
             program,
+            screens: Vec::new(),
             outputs: Vec::new(),
             random: Random::new(seed),
             fx,
@@ -760,13 +794,18 @@ impl EngineState {
             );
         }
         self.mix = mix;
+        self.draw_screens(&gpu, &mut encoder);
         self.update_sounds(elapsed, time);
         gpu.queue.submit([encoder.finish()]);
         self.watch_gpu(&gpu);
         let submitted = Instant::now();
 
+        let images = OutputImages {
+            program: &self.program,
+            screens: &self.screens,
+        };
         for (_, output) in &mut self.outputs {
-            output.present(&gpu, &self.program);
+            output.present_images(&gpu, &images);
         }
         let steps = FrameSteps {
             playback_ms: milliseconds(played - started),
@@ -775,6 +814,54 @@ impl EngineState {
             present_ms: milliseconds(submitted.elapsed()),
         };
         self.update_stats(now, submitted - started, steps);
+    }
+}
+
+impl EngineState {
+    /// Records the drawing of the screens of the stage from the program,
+    /// after creating, resizing or dropping their images to match it.
+    fn draw_screens(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        let stage = &self.composition.stage;
+        self.screens.retain(|(id, image)| {
+            stage.screen(*id).is_some_and(|screen| {
+                let (width, height) = screen.size();
+                image.resolution() == Resolution { width, height }
+            })
+        });
+        for screen in stage.screens() {
+            if !self.screens.iter().any(|(id, _)| *id == screen.id()) {
+                let (width, height) = screen.size();
+                self.screens.push((
+                    screen.id(),
+                    ProgramOutput::new(&gpu.device, Resolution { width, height }),
+                ));
+            }
+        }
+        if self.screens.is_empty() {
+            return;
+        }
+        let targets: Vec<ScreenTarget<'_>> = self
+            .screens
+            .iter()
+            .filter_map(|(id, image)| {
+                Some(ScreenTarget {
+                    screen: stage.screen(*id)?,
+                    view: image.view(),
+                })
+            })
+            .collect();
+        self.stage_renderer.encode(
+            &gpu.device,
+            &gpu.queue,
+            encoder,
+            &self.program.view,
+            &targets,
+        );
+    }
+
+    /// Number of screen images drawn after each frame.
+    pub fn screen_count(&self) -> usize {
+        self.screens.len()
     }
 }
 
