@@ -11,6 +11,7 @@
 //! in time leaves the previous one on screen.
 
 mod engine;
+mod lighting;
 mod live;
 mod playhead;
 mod priority;

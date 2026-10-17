@@ -19,7 +19,7 @@ pub struct DmxSender {
     socket: UdpSocket,
     protocol: Protocol,
     /// Where packets go; `None`: broadcast (Art-Net) or multicast (sACN).
-    target: Option<IpAddr>,
+    target: Option<SocketAddr>,
     sequences: std::collections::HashMap<u16, u8>,
     cid: [u8; 16],
     name: String,
@@ -29,6 +29,19 @@ impl DmxSender {
     /// A sender of `protocol` packets to `target`, or to everyone on the
     /// network with `None`.
     pub fn new(protocol: Protocol, target: Option<IpAddr>) -> io::Result<Self> {
+        let port = match protocol {
+            Protocol::ArtNet => artnet::PORT,
+            Protocol::Sacn => sacn::PORT,
+        };
+        Self::to(
+            protocol,
+            target.map(|address| SocketAddr::new(address, port)),
+        )
+    }
+
+    /// A sender to an address and port of its own (a receiver listening
+    /// elsewhere than on the protocol's port).
+    pub fn to(protocol: Protocol, target: Option<SocketAddr>) -> io::Result<Self> {
         let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0))?;
         socket.set_broadcast(true)?;
         socket.set_nonblocking(true)?;
@@ -51,9 +64,8 @@ impl DmxSender {
     /// Where packets go now.
     fn destination(&self, universe: u16) -> SocketAddr {
         match (self.protocol, self.target) {
-            (Protocol::ArtNet, Some(address)) => SocketAddr::new(address, artnet::PORT),
+            (_, Some(address)) => address,
             (Protocol::ArtNet, None) => SocketAddr::new(Ipv4Addr::BROADCAST.into(), artnet::PORT),
-            (Protocol::Sacn, Some(address)) => SocketAddr::new(address, sacn::PORT),
             (Protocol::Sacn, None) => {
                 SocketAddr::new(sacn::multicast_group(universe).into(), sacn::PORT)
             }

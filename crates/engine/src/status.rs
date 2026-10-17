@@ -131,4 +131,8 @@ pub struct EngineStatus {
     pub worst_gpu_latency_ms: f64,
     /// Layers, bottom to top.
     pub layers: Vec<LayerStatus>,
+    /// Why the DMX of the fixtures is not sent, if it is not.
+    pub dmx_error: Option<String>,
+    /// DMX universes sent, counted.
+    pub dmx_sent: u64,
 }

@@ -2391,6 +2391,7 @@ dependencies = [
  "prism-audio",
  "prism-clock",
  "prism-core",
+ "prism-dmx",
  "prism-fx",
  "prism-io-video",
  "prism-media",
