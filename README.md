@@ -53,6 +53,7 @@ Dans la fenêtre de contrôle :
 - cliquer une case lance son clip, cliquer l'en-tête d'une colonne lance toute la colonne ;
 - chaque couche a son opacité, son mode de fusion, B (bypass), S (solo) et son côté du crossfader ;
 - le panneau de droite montre l'aperçu, puis les réglages de la couche et du clip sélectionnés (sens, vitesse, boucle, scratch, points de repère) ;
+- Sortie > Sortie avancée… règle les écrans et les découpes : un écran de la scène réglé « sur » un écran du système remplace l'image entière de la sortie ouverte sur cet écran ;
 - le menu Sortie ouvre une sortie plein écran sur chaque écran coché ; `F` rouvre les écrans de la dernière fois (sinon le premier écran libre), `Échap` ferme toutes les sorties ;
 - `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
 - le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`) ;

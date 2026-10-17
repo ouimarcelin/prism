@@ -26,8 +26,8 @@ pub(crate) struct ControlWindow {
     egui: egui::Context,
     state: egui_winit::State,
     renderer: egui_wgpu::Renderer,
-    /// Program image registered with the renderer.
-    preview: Option<(Arc<ProgramOutput>, egui::TextureId)>,
+    /// Engine images registered with the renderer.
+    textures: Vec<(Arc<ProgramOutput>, egui::TextureId)>,
 }
 
 impl ControlWindow {
@@ -82,7 +82,7 @@ impl ControlWindow {
             egui,
             state,
             renderer,
-            preview: None,
+            textures: Vec::new(),
         })
     }
 
@@ -91,13 +91,13 @@ impl ControlWindow {
         self.state.on_window_event(&self.window, event).repaint
     }
 
-    /// Draws one frame of the interface; `run` builds it, with the program
-    /// texture and its size when there is a program.
+    /// Draws one frame of the interface; `run` builds it, with the textures
+    /// of `images` and their sizes, in the same order.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
-        program: Option<Arc<ProgramOutput>>,
-        run: impl FnMut(&mut egui::Ui, Option<(egui::TextureId, Resolution)>),
+        images: &[Arc<ProgramOutput>],
+        run: impl FnMut(&mut egui::Ui, &[(egui::TextureId, Resolution)]),
     ) {
         let mut run = run;
         let size = self.window.inner_size();
@@ -110,30 +110,37 @@ impl ControlWindow {
             self.surface.configure(&gpu.device, &self.config);
         }
 
-        // The engine replaces the program image when the resolution changes.
-        if let Some(program) = program
-            && self
-                .preview
-                .as_ref()
-                .is_none_or(|(registered, _)| !Arc::ptr_eq(registered, &program))
-        {
-            if let Some((_, id)) = self.preview.take() {
-                self.renderer.free_texture(&id);
-            }
-            let id = self.renderer.register_native_texture(
-                &gpu.device,
-                program.view(),
-                wgpu::FilterMode::Linear,
-            );
-            self.preview = Some((program, id));
+        // Images are replaced when their size changes: registered again.
+        let mut kept = Vec::with_capacity(images.len());
+        for image in images {
+            let found = self
+                .textures
+                .iter()
+                .position(|(registered, _)| Arc::ptr_eq(registered, image));
+            let entry = match found {
+                Some(index) => self.textures.swap_remove(index),
+                None => {
+                    let id = self.renderer.register_native_texture(
+                        &gpu.device,
+                        image.view(),
+                        wgpu::FilterMode::Linear,
+                    );
+                    (Arc::clone(image), id)
+                }
+            };
+            kept.push(entry);
         }
-        let preview = self
-            .preview
-            .as_ref()
-            .map(|(program, id)| (*id, program.resolution()));
+        for (_, id) in std::mem::replace(&mut self.textures, kept) {
+            self.renderer.free_texture(&id);
+        }
+        let textures: Vec<(egui::TextureId, Resolution)> = self
+            .textures
+            .iter()
+            .map(|(image, id)| (*id, image.resolution()))
+            .collect();
 
         let input = self.state.take_egui_input(&self.window);
-        let output = self.egui.run_ui(input, |ui| run(ui, preview));
+        let output = self.egui.run_ui(input, |ui| run(ui, &textures));
         self.state
             .handle_platform_output(&self.window, output.platform_output);
         let paint_jobs = self.egui.tessellate(output.shapes, output.pixels_per_point);

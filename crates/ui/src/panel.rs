@@ -42,6 +42,8 @@ pub enum Action {
     ToggleOutput,
     /// Closes every full-screen output.
     CloseOutput,
+    /// Opens the stage editor window, or brings it forward.
+    OpenStage,
     /// Sends a command to the engine.
     Engine(Command),
     /// Quits the application.
@@ -130,6 +132,7 @@ pub struct ControlPanel {
     pub(crate) presets: PresetStore,
     pub(crate) learn: Learn,
     controls: Controls,
+    pub(crate) stage: crate::stage::StageEditor,
 }
 
 impl ControlPanel {
@@ -154,6 +157,7 @@ impl ControlPanel {
             presets: PresetStore::default(),
             learn: Learn::default(),
             controls: Controls::default(),
+            stage: crate::stage::StageEditor::default(),
         }
     }
 
@@ -612,6 +616,15 @@ impl ControlPanel {
                     .clicked()
                 {
                     self.actions.push(Action::CloseOutput);
+                }
+                ui.separator();
+                if ui
+                    .button("Sortie avancée…")
+                    .on_hover_text("Écrans et découpes de la composition, dans une fenêtre à part")
+                    .clicked()
+                {
+                    self.actions.push(Action::OpenStage);
+                    ui.close();
                 }
                 if cfg!(target_os = "macos") {
                     ui.separator();
