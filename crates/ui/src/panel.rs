@@ -657,6 +657,11 @@ impl ControlPanel {
         for error in &midi.errors {
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
+        ui.checkbox(
+            &mut preferences.midi_feedback,
+            "Renvoyer l'état au contrôleur",
+        )
+        .on_hover_text("Allume les pads des clips qui jouent, place les faders motorisés");
         ui.separator();
         ui.label(egui::RichText::new("OSC").strong());
         ui.horizontal(|ui| {
