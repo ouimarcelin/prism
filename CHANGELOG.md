@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- OSC : écoute UDP (port réglable) avec adresses fixes `/prism/…` et apprentissage comme le MIDI ; envoi des valeurs (crossfader, tempo, couches) vers une tablette ; menu Contrôle (ADR 0022).
 - Contrôle MIDI : apprentissage (menu Contrôle > Apprentissage MIDI, cliquer une commande puis bouger le contrôleur), fenêtre des correspondances, entrées MIDI à écouter ; clips, colonnes, couches (opacité, bypass, solo, arrêt), crossfader, tap, resync, tout arrêter, curseurs du tableau de bord, réglages et activation des effets ; correspondances enregistrées dans le projet (crate `prism-control`, ADR 0021).
 - Outil `fx-bench` : temps GPU de chaque effet et générateur en 1080p ; rapport `docs/benchmarks/2026-10-17-phase-2-effets.md`.
 - L'opacité d'une couche peut suivre une bande du son (menu à côté de « ~ »), aussi enregistrée dans les préréglages de couche.

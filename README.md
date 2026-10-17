@@ -59,7 +59,8 @@ Dans la fenêtre de contrôle :
 - « Ajouter un effet… » ajoute un effet à la composition, à la couche ou au clip (18 effets, ou un shader ISF) ; « Préréglages… » enregistre et réutilise des chaînes d'effets et des réglages de couche ;
 - une case vide propose « Générateur… » : couleur, dégradé, lignes, cercles, damier, bruit, texte ou shader ISF (exemples dans `examples/isf/`) ;
 - à côté de chaque réglage : `~` l'anime (onde au tempo ou en secondes, ou « une fois » au lancement du clip), le menu `—` le relie à un curseur du tableau de bord du clip ou à une bande du son ;
-- le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau).
+- le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau) ;
+- le menu Contrôle relie un contrôleur MIDI ou des messages OSC : « Apprentissage MIDI », cliquer une commande, puis bouger le bouton ou le fader. En OSC, sans rien apprendre : `/prism/layer/1/opacity` (0 à 1), `/prism/layer/1/clip/2`, `/prism/column/3`, `/prism/crossfader`, `/prism/tap`, `/prism/stop`…
 
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
