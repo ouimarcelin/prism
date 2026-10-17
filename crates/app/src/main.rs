@@ -715,6 +715,17 @@ impl App {
         if !names.is_empty() {
             self.panel.remember_output_screens(&names);
         }
+        // Each output shows the screen of the stage set on its display, or
+        // the whole program.
+        let stage = &self.panel.document().composition().stage;
+        for output in &running.outputs {
+            let screen = running
+                .screens
+                .get(output.screen)
+                .and_then(|display| stage.screen_on(&display.name))
+                .map(prism_core::Screen::id);
+            output.shared.set_screen(screen);
+        }
         // The engine plays the composition as edited.
         let document = self.panel.document();
         if document.revision() != running.sent_revision {

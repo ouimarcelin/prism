@@ -3,7 +3,9 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use prism_engine::{Output, ProgramOutput};
+use prism_core::ScreenId;
+
+use prism_engine::{Output, OutputImages, ProgramOutput};
 use prism_render::{Gpu, wgpu};
 
 use crate::presenter::{Fit, Presenter};
@@ -25,6 +27,8 @@ pub enum OutputError {
 pub struct OutputShared {
     size: AtomicU64,
     visible: AtomicBool,
+    /// Screen of the stage shown, plus one; 0 for the program.
+    screen: AtomicU64,
 }
 
 impl OutputShared {
@@ -32,7 +36,20 @@ impl OutputShared {
         Self {
             size: AtomicU64::new(pack(width, height)),
             visible: AtomicBool::new(true),
+            screen: AtomicU64::new(0),
         }
+    }
+
+    /// Shows the screen `screen` of the stage, or the program with `None`.
+    pub fn set_screen(&self, screen: Option<ScreenId>) {
+        let value = screen.map_or(0, |id| u64::from(id.0) + 1);
+        self.screen.store(value, Ordering::Relaxed);
+    }
+
+    /// The screen of the stage shown; `None` for the program.
+    pub fn screen(&self) -> Option<ScreenId> {
+        let value = self.screen.load(Ordering::Relaxed);
+        (value > 0).then(|| ScreenId((value - 1) as u32))
     }
 
     /// Records a new window size, in physical pixels.
@@ -123,6 +140,16 @@ impl OutputSurface {
 }
 
 impl Output for OutputSurface {
+    fn present_images(&mut self, gpu: &Gpu, images: &OutputImages<'_>) {
+        // A screen not drawn (yet) shows the program.
+        let image = self
+            .shared
+            .screen()
+            .and_then(|id| images.screen(id))
+            .unwrap_or(images.program());
+        self.present(gpu, image);
+    }
+
     fn present(&mut self, gpu: &Gpu, program: &ProgramOutput) {
         if !self.shared.is_visible() {
             return;
@@ -191,5 +218,10 @@ mod tests {
         assert!(shared.is_visible());
         shared.set_visible(false);
         assert!(!shared.is_visible());
+        assert_eq!(shared.screen(), None);
+        shared.set_screen(Some(ScreenId(0)));
+        assert_eq!(shared.screen(), Some(ScreenId(0)));
+        shared.set_screen(None);
+        assert_eq!(shared.screen(), None);
     }
 }
