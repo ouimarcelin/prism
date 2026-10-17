@@ -61,6 +61,9 @@ pub fn describe_source(source: &ControlSource) -> String {
         }
         ControlSource::Osc { address } => format!("OSC {address}"),
         ControlSource::Key { key } => format!("Touche {key}"),
+        ControlSource::Dmx { universe, channel } => {
+            format!("DMX univers {universe}, canal {channel}")
+        }
     }
 }
 

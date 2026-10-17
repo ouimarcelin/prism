@@ -105,6 +105,8 @@ fn main() -> ExitCode {
             osc_input_error: None,
             osc_output: None,
             osc_output_error: None,
+            dmx_input: None,
+            dmx_wanted: None,
             messages: control_messages,
             status: MidiStatus::default(),
             checked: None,
@@ -210,6 +212,9 @@ struct Midi {
     osc_input_error: Option<String>,
     osc_output: Option<(String, prism_control::OscOutput)>,
     osc_output_error: Option<String>,
+    dmx_input: Option<prism_control::DmxInput>,
+    /// Protocol asked for when the DMX input was last started or failed.
+    dmx_wanted: Option<prism_core::DmxProtocol>,
     messages: std::sync::mpsc::Receiver<ControlMessage>,
     status: MidiStatus,
     /// Last time the inputs present were looked at.
@@ -271,6 +276,27 @@ impl Midi {
                 }
             }
         }
+        let dmx = preferences
+            .dmx_input
+            .then_some(preferences.dmx_input_protocol);
+        if dmx != self.dmx_wanted {
+            self.dmx_wanted = dmx;
+            self.dmx_input = None;
+            self.status.dmx_error = None;
+            if let Some(protocol) = dmx {
+                match prism_control::DmxInput::start(
+                    protocol,
+                    self.sender.clone(),
+                    Arc::clone(&self.wake),
+                ) {
+                    Ok(input) => self.dmx_input = Some(input),
+                    Err(error) => {
+                        self.status.dmx_error = Some(format!("Réception DMX : {error}"));
+                    }
+                }
+            }
+        }
+        self.status.dmx_listening = self.dmx_input.is_some();
         if !preferences.osc_output {
             self.osc_output = None;
             self.osc_output_error = None;

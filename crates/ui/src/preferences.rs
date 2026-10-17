@@ -42,6 +42,10 @@ pub struct Preferences {
     pub midi_feedback: bool,
     /// Whether the tempo follows the MIDI clock received on the inputs.
     pub midi_clock: bool,
+    /// Whether DMX from a lighting console is listened to.
+    pub dmx_input: bool,
+    /// Protocol of the DMX listened to.
+    pub dmx_input_protocol: prism_core::DmxProtocol,
     /// Whether the program image is published over Syphon, for other
     /// applications of the Mac.
     pub syphon_output: bool,
@@ -74,6 +78,8 @@ impl Default for Preferences {
             midi_disabled: Vec::new(),
             midi_feedback: true,
             midi_clock: false,
+            dmx_input: false,
+            dmx_input_protocol: prism_core::DmxProtocol::ArtNet,
             syphon_output: false,
             ndi_output: false,
             osc_input: false,
