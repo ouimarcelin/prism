@@ -13,6 +13,7 @@
 
 mod clip;
 mod composition;
+mod control;
 mod crossfader;
 mod effect;
 mod ids;
@@ -29,6 +30,7 @@ pub use composition::{
     Column, Composition, DEFAULT_COLUMN_COUNT, DEFAULT_LAYER_COUNT, FrameRate, MAX_DIMENSION,
     ModelError, Resolution,
 };
+pub use control::{ControlSource, ControlTarget, EffectOwner, Mapping};
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
 pub use effect::{Animation, BAND_COUNT, Band, Effect, MIN_PERIOD, Moment, Period, Shape};
 pub use ids::{ColumnId, LayerId, Slot};

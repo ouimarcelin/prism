@@ -18,7 +18,7 @@ pub struct LayerId(pub(crate) u32);
 pub struct ColumnId(pub(crate) u32);
 
 /// A cell of the clip grid: one layer, one column.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Slot {
     /// Row of the grid.
     pub layer: LayerId,

@@ -1,0 +1,103 @@
+//! MIDI inputs of the computer, connected by name.
+
+use std::sync::mpsc::Sender;
+
+use midir::{MidiInput, MidiInputConnection};
+
+use crate::{ControlMessage, parse_midi};
+
+const CLIENT: &str = "Prism";
+
+/// Names of the MIDI inputs of the computer.
+pub fn midi_ports() -> Vec<String> {
+    let Ok(input) = MidiInput::new(CLIENT) else {
+        return Vec::new();
+    };
+    input
+        .ports()
+        .iter()
+        .filter_map(|port| input.port_name(port).ok())
+        .collect()
+}
+
+/// Connections to MIDI inputs; each message read goes to a channel, then
+/// `wake` is called so the application looks at it.
+pub struct MidiInputs {
+    connections: Vec<(String, MidiInputConnection<()>)>,
+    sender: Sender<ControlMessage>,
+    wake: std::sync::Arc<dyn Fn() + Send + Sync>,
+}
+
+impl MidiInputs {
+    /// No connection yet; messages will go to `sender`.
+    pub fn new(
+        sender: Sender<ControlMessage>,
+        wake: std::sync::Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        Self {
+            connections: Vec::new(),
+            sender,
+            wake,
+        }
+    }
+
+    /// Names of the inputs connected.
+    pub fn connected(&self) -> Vec<&str> {
+        self.connections
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect()
+    }
+
+    /// Connects every input present whose name `wanted` accepts, and
+    /// disconnects the others. Returns the errors met, by input.
+    pub fn sync(&mut self, wanted: impl Fn(&str) -> bool) -> Vec<String> {
+        let present = midi_ports();
+        self.connections
+            .retain(|(name, _)| present.contains(name) && wanted(name));
+        let mut errors = Vec::new();
+        for name in present {
+            if !wanted(&name)
+                || self
+                    .connections
+                    .iter()
+                    .any(|(connected, _)| *connected == name)
+            {
+                continue;
+            }
+            match self.connect(&name) {
+                Ok(connection) => self.connections.push((name, connection)),
+                Err(error) => errors.push(format!("{name} : {error}")),
+            }
+        }
+        errors
+    }
+
+    fn connect(&self, name: &str) -> Result<MidiInputConnection<()>, String> {
+        let input = MidiInput::new(CLIENT).map_err(|error| error.to_string())?;
+        let ports = input.ports();
+        let port = ports
+            .iter()
+            .find(|port| {
+                input
+                    .port_name(port)
+                    .is_ok_and(|port_name| port_name == name)
+            })
+            .ok_or_else(|| "introuvable".to_owned())?;
+        let sender = self.sender.clone();
+        let wake = std::sync::Arc::clone(&self.wake);
+        input
+            .connect(
+                port,
+                "prism-in",
+                move |_, bytes, ()| {
+                    if let Some(message) = parse_midi(bytes) {
+                        let _ = sender.send(message);
+                        wake();
+                    }
+                },
+                (),
+            )
+            .map_err(|error| error.to_string())
+    }
+}

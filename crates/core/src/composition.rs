@@ -5,7 +5,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Moment, Slot, Unit,
+    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Mapping, Moment, Slot,
+    Unit,
 };
 
 /// Largest width or height accepted for a composition, in pixels.
@@ -128,6 +129,9 @@ pub struct Composition {
     pub tempo: Bpm,
     /// Effects applied to the mixed image, first to last.
     pub effects: Vec<Effect>,
+    /// Controller messages and what they drive.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub mappings: Vec<Mapping>,
     next_id: u32,
 }
 
@@ -145,6 +149,8 @@ struct CompositionRepr {
     tempo: Bpm,
     #[serde(default)]
     effects: Vec<Effect>,
+    #[serde(default)]
+    mappings: Vec<Mapping>,
     #[serde(default)]
     next_id: u32,
 }
@@ -201,6 +207,7 @@ impl TryFrom<CompositionRepr> for Composition {
             crossfader: repr.crossfader,
             tempo: repr.tempo,
             effects: repr.effects,
+            mappings: repr.mappings,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -237,6 +244,7 @@ impl Composition {
             crossfader: Crossfader::default(),
             tempo: Bpm::DEFAULT,
             effects: Vec::new(),
+            mappings: Vec::new(),
             next_id: 0,
         }
     }
@@ -544,6 +552,7 @@ impl Composition {
             && self.crossfader == other.crossfader
             && self.tempo == other.tempo
             && self.effects == other.effects
+            && self.mappings == other.mappings
             && self.layers.len() == other.layers.len()
             && self
                 .layers
