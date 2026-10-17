@@ -52,7 +52,7 @@ fn frame(
         status,
         preview: None,
         screens: &screens,
-        output_screen: Some(1),
+        output_screens: &[1],
         audio: Default::default(),
         midi: Default::default(),
     };
@@ -324,7 +324,7 @@ fn click_button(
         status,
         preview: None,
         screens: &screens,
-        output_screen: None,
+        output_screens: &[],
         audio: Default::default(),
         midi: Default::default(),
     };

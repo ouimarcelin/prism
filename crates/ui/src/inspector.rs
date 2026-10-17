@@ -552,10 +552,10 @@ fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
             "{} × {}{}",
             resolution.width,
             resolution.height,
-            if frame.output_screen.is_some() {
-                " · sortie ouverte"
-            } else {
-                ""
+            match frame.output_screens.len() {
+                0 => String::new(),
+                1 => " · sortie ouverte".to_owned(),
+                count => format!(" · {count} sorties ouvertes"),
             }
         ))
         .weak(),

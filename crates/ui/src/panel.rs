@@ -35,11 +35,12 @@ pub struct Screen {
 /// Something the application must do after a frame of the interface.
 #[derive(Debug)]
 pub enum Action {
-    /// Opens the full-screen output on the screen of this index.
-    OpenOutput(usize),
-    /// Opens the output if closed, closes it otherwise.
+    /// Opens a full-screen output on the screen of this index, or closes it
+    /// if one is open there.
+    ToggleScreen(usize),
+    /// Opens the outputs if none is open, closes them otherwise.
     ToggleOutput,
-    /// Closes the full-screen output.
+    /// Closes every full-screen output.
     CloseOutput,
     /// Sends a command to the engine.
     Engine(Command),
@@ -55,8 +56,8 @@ pub struct FrameInfo<'a> {
     pub preview: Option<(egui::TextureId, Resolution)>,
     /// Screens available for the output.
     pub screens: &'a [Screen],
-    /// Screen showing the output, if it is open.
-    pub output_screen: Option<usize>,
+    /// Screens showing a full-screen output.
+    pub output_screens: &'a [usize],
     /// Audio input in use.
     pub audio: AudioStatus,
     /// MIDI inputs.
@@ -197,10 +198,10 @@ impl ControlPanel {
         }
     }
 
-    /// Remembers the screen showing the output, for next time.
-    pub fn remember_output_screen(&mut self, name: &str) {
-        if self.preferences.output_screen.as_deref() != Some(name) {
-            self.preferences.output_screen = Some(name.to_owned());
+    /// Remembers the screens showing the output, for next time.
+    pub fn remember_output_screens(&mut self, names: &[String]) {
+        if self.preferences.output_screens != names {
+            self.preferences.output_screens = names.to_vec();
             self.save_preferences();
         }
     }
@@ -592,16 +593,21 @@ impl ControlPanel {
                         screen.height,
                         if screen.primary { ", principal" } else { "" }
                     );
-                    let selected = frame.output_screen == Some(index);
-                    if ui.add(egui::Button::selectable(selected, label)).clicked() {
-                        self.actions.push(Action::OpenOutput(index));
+                    let mut open = frame.output_screens.contains(&index);
+                    if ui.checkbox(&mut open, label).clicked() {
+                        self.actions.push(Action::ToggleScreen(index));
                     }
                 }
                 ui.separator();
+                let label = if frame.output_screens.len() > 1 {
+                    "Fermer les sorties"
+                } else {
+                    "Fermer la sortie"
+                };
                 if ui
                     .add_enabled(
-                        frame.output_screen.is_some(),
-                        egui::Button::new("Fermer la sortie").shortcut_text("Échap"),
+                        !frame.output_screens.is_empty(),
+                        egui::Button::new(label).shortcut_text("Échap"),
                     )
                     .clicked()
                 {
