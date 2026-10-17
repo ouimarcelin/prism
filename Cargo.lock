@@ -2376,6 +2376,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "prism-dmx"
+version = "0.0.0"
+
+[[package]]
 name = "prism-engine"
 version = "0.0.0"
 dependencies = [

@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Crate `prism-dmx` : paquets Art-Net et sACN (E1.31), envoi d'univers DMX sur le réseau (ADR 0033).
 - Pad MIDI virtuel : horloge MIDI au tempo réglé, avec Start et Stop.
 - Tempo suivi de l'horloge MIDI (menu Contrôle > Suivre l'horloge MIDI) : le tempo d'un logiciel de musique ou de DJ, son Start commence une mesure (ADR 0032).
 - Écrans de la scène publiés sur Syphon (case « Syphon » de la fenêtre Sortie avancée), sous « Prism – » et le nom de l'écran.
