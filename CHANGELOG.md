@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- `scripts/make-app.sh` : application `Prism.app` (non signée) installée dans `~/Applications`, avec les autorisations caméra et micro ; option `--ndi`.
 - Fenêtre « Sortie avancée » (menu Sortie) : écrans de la scène (nom, taille, écran du système), découpes glissées à la souris dans la composition et sur l'écran, coins déplacés pour la perspective, aperçus en direct, valeurs en pixels.
 - Scène de sortie (début de la phase 4) : écrans et découpes enregistrés dans le projet, chaque découpe prend un rectangle de la composition et le pose en perspective par ses quatre coins ; le moteur dessine chaque écran, la fenêtre de sortie montre l'écran de la scène réglé sur son écran système (ADR 0027). Interface au ticket suivant.
 - NDI® (option de compilation `ndi`, désactivée par défaut) : image programme publiée sur le réseau sous le nom « Prism » (menu Sortie), source du réseau reçue comme clip (« NDI®… » sur une case vide) ; bibliothèque NDI installée par l'utilisateur et chargée au lancement, non livrée (ADR 0026).
