@@ -68,6 +68,10 @@ pub struct AudioStatus {
     pub error: Option<String>,
     /// Levels of the bands, from 0 to 1, in the order of [`Band::ALL`].
     pub levels: [f32; BAND_COUNT],
+    /// Output playing the sound of the clips, if one is.
+    pub output: Option<String>,
+    /// Why the sound of the clips cannot be played.
+    pub output_error: Option<String>,
 }
 
 /// What waits for an answer about unsaved changes.
@@ -520,6 +524,27 @@ impl ControlPanel {
             .get_or_insert_with(prism_audio::input_devices)
             .clone();
         let mut preferences = self.preferences.clone();
+        ui.checkbox(&mut preferences.clip_sound, "Son des clips")
+            .on_hover_text("Jouer le son des vidéos sur la sortie audio du système");
+        ui.add_enabled_ui(preferences.clip_sound, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Volume");
+                ui.add(egui::Slider::new(
+                    &mut preferences.clip_sound_volume,
+                    0.0..=1.0,
+                ));
+            });
+        });
+        match (&status.output, &status.output_error) {
+            (_, Some(error)) => {
+                ui.colored_label(ui.visuals().error_fg_color, error);
+            }
+            (Some(device), None) if preferences.clip_sound => {
+                ui.label(egui::RichText::new(format!("Sortie : {device}")).weak());
+            }
+            _ => {}
+        }
+        ui.separator();
         ui.checkbox(&mut preferences.audio_input, "Écouter une entrée audio")
             .on_hover_text(
                 "Les réglages reliés à une bande (graves, médiums, aigus, niveau) suivent le son",

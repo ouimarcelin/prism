@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use prism_audio::AudioInput;
+use prism_audio::{AudioInput, AudioOutput, Mixer, Volume};
 use prism_engine::{Command, Engine};
 use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
@@ -177,13 +177,18 @@ struct Running {
     audio: AudioState,
 }
 
-/// The audio input as last asked for in the preferences.
+/// The audio input and output as last asked for in the preferences.
 #[derive(Default)]
 struct AudioState {
     /// Whether an input was asked for, and which one.
     wanted: (bool, Option<String>),
     input: Option<AudioInput>,
     error: Option<String>,
+    /// Whether the sound of the clips was asked for.
+    sound_wanted: Option<bool>,
+    output: Option<AudioOutput>,
+    output_error: Option<String>,
+    volume: Arc<Volume>,
 }
 
 impl Running {
@@ -228,8 +233,27 @@ impl Running {
         Ok(running)
     }
 
-    /// Starts, stops or changes the audio input to match the preferences.
+    /// Starts, stops or changes the audio input and output to match the
+    /// preferences.
     fn follow_audio_preferences(&mut self, preferences: &Preferences) {
+        self.audio.volume.set(preferences.clip_sound_volume);
+        if self.audio.sound_wanted != Some(preferences.clip_sound) {
+            self.audio.sound_wanted = Some(preferences.clip_sound);
+            self.audio.output = None;
+            self.audio.output_error = None;
+            let mut sender = None;
+            if preferences.clip_sound {
+                let (mixer, voices) = Mixer::new();
+                match AudioOutput::start(mixer, Arc::clone(&self.audio.volume)) {
+                    Ok(output) => {
+                        self.audio.output = Some(output);
+                        sender = Some(voices);
+                    }
+                    Err(error) => self.audio.output_error = Some(error.to_string()),
+                }
+            }
+            self.engine.send(Command::SetSound(sender));
+        }
         let levels = self.engine.audio_levels();
         levels.set_gain_db(preferences.audio_gain_db);
         let wanted = (preferences.audio_input, preferences.audio_device.clone());
@@ -257,6 +281,12 @@ impl Running {
                 .map(|input| input.name().to_owned()),
             error: self.audio.error.clone(),
             levels: self.engine.audio_levels().get(),
+            output: self
+                .audio
+                .output
+                .as_ref()
+                .map(|output| output.name().to_owned()),
+            output_error: self.audio.output_error.clone(),
         }
     }
 

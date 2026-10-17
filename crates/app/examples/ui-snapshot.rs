@@ -132,6 +132,7 @@ fn main() -> ExitCode {
             device: Some("Micro".into()),
             error: None,
             levels: [0.8, 0.9, 0.5, 0.3],
+            ..Default::default()
         },
     };
     let ctx = egui::Context::default();
