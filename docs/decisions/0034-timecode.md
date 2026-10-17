@@ -18,4 +18,5 @@ La phase 5 demande le timecode SMPTE (LTC et MIDI timecode) et des clips calés 
 
 - Précision : le timecode est regardé à chaque image de l'interface (30 à 60 par seconde) ; un repère part au plus une image de l'interface plus une image du moteur après son heure.
 - « Clips calés sur le timecode » au sens de la position de lecture suivant le timecode (chase) : pas encore.
-- LTC (timecode audio) : ticket suivant.
+- LTC : voir l'ajout du ticket 61.
+- **Ajout du 2026-10-17 (ticket 61) : LTC.** Le timecode audio est lu sur le premier canal de l'entrée audio (menu Audio) : passages par zéro avec un peu d'hystérésis, intervalles classés en demi-bit ou bit entier par rapport à la longueur de bit suivie en continu, mot de synchronisation de fin de trame, heure en BCD ; la cadence vient de la longueur des bits (drop frame par son drapeau). Comme pour le MTC, l'heure lue est celle de la fin de la trame. La fenêtre Timecode choisit la source : MIDI (MTC) ou audio (LTC). La lecture à l'envers n'est pas reconnue.
