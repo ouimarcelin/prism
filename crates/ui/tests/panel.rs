@@ -395,7 +395,11 @@ fn tap_tempo_and_resync_reach_the_engine() {
 #[test]
 fn the_midi_clock_drives_the_tempo_when_followed() {
     let (document, _) = sample_document();
-    let reading = |bpm, starts| prism_control::ClockReading { bpm, starts };
+    let reading = |bpm, starts| prism_control::ClockReading {
+        bpm,
+        starts,
+        timecode: None,
+    };
     let mut panel = ControlPanel::new(document, Vec::new());
     // Not followed: nothing changes.
     assert!(panel.follow_clock(reading(Some(128.04), 1)).is_empty());

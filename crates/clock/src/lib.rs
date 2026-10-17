@@ -5,12 +5,17 @@
 //! instant, never accumulated frame after frame: it does not drift, however
 //! long it runs, and skipped frames do not shift it. [`TapTempo`] turns taps
 //! on a key or a button into a tempo, [`MidiClock`] the pulses of a MIDI
-//! clock.
+//! clock. [`Timecode`] is SMPTE time, read from MIDI timecode by
+//! [`MtcReader`].
 //!
 //! Beats are counted from `0.0` at the start of a bar; a bar has
 //! [`BEATS_PER_BAR`] beats.
 
 #![forbid(unsafe_code)]
+
+mod timecode;
+
+pub use timecode::{MtcReader, Timecode, TimecodeRate};
 
 use std::time::{Duration, Instant};
 

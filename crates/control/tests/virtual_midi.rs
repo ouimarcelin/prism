@@ -93,3 +93,31 @@ fn a_midi_clock_gives_the_tempo() {
     let bpm = inputs.clock().bpm.unwrap();
     assert!((bpm - 125.0).abs() < 3.0, "{bpm}");
 }
+
+#[test]
+fn midi_timecode_is_read_and_runs_on() {
+    let name = format!("Prism timecode {}", std::process::id());
+    let Ok(output) = MidiOutput::new("prism-test") else {
+        eprintln!("no MIDI on this system: skipped");
+        return;
+    };
+    let mut sender = output.create_virtual(&name).unwrap();
+    assert!(wait_for(|| midi_ports().contains(&name)));
+    let (messages, _) = mpsc::channel();
+    let mut inputs = MidiInputs::new(messages, Arc::new(|| {}));
+    assert!(inputs.sync(|port| port == name).is_empty());
+    // Full frame: 01:00:00:00 at 25 frames per second.
+    sender
+        .send(&[0xF0, 0x7F, 0x7F, 0x01, 0x01, 0x20 | 1, 0, 0, 0, 0xF7])
+        .unwrap();
+    assert!(wait_for(|| inputs.clock().timecode.is_some()));
+    let timecode = inputs.clock().timecode.unwrap();
+    assert_eq!(
+        (timecode.hours, timecode.minutes, timecode.seconds),
+        (1, 0, 0)
+    );
+    assert!(timecode.frames < 5, "{timecode}");
+    // Silent for long: no longer running.
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(inputs.clock().timecode, None);
+}
