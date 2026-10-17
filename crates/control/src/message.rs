@@ -60,6 +60,7 @@ pub fn describe_source(source: &ControlSource) -> String {
             format!("CC {number}, canal {}", channel + 1)
         }
         ControlSource::Osc { address } => format!("OSC {address}"),
+        ControlSource::Key { key } => format!("Touche {key}"),
     }
 }
 

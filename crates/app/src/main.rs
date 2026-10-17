@@ -630,6 +630,14 @@ impl App {
 
     fn output_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
         let command = self.output_modifiers.super_key() || self.output_modifiers.control_key();
+        // Learned keys act from the output window too.
+        if !command
+            && let Some(name) = key_name(key)
+            && let Some(actions) = self.panel.press_key(&name)
+        {
+            self.handle(event_loop, actions);
+            return;
+        }
         let shortcut = match key {
             Key::Character(text) if command => (text.as_str() == "q").then_some(Shortcut::Quit),
             Key::Character(text) => Shortcut::from_text(text),
@@ -758,5 +766,20 @@ impl ApplicationHandler<UserEvent> for App {
             drop(output);
             drop(control);
         }
+    }
+}
+
+/// Name of a key as the control window names it (see `egui::Key::name`).
+fn key_name(key: &Key) -> Option<String> {
+    match key {
+        Key::Character(text) => Some(text.to_uppercase()),
+        Key::Named(NamedKey::Space) => Some("Space".into()),
+        Key::Named(NamedKey::ArrowUp) => Some("Up".into()),
+        Key::Named(NamedKey::ArrowDown) => Some("Down".into()),
+        Key::Named(NamedKey::ArrowLeft) => Some("Left".into()),
+        Key::Named(NamedKey::ArrowRight) => Some("Right".into()),
+        Key::Named(NamedKey::Enter) => Some("Enter".into()),
+        Key::Named(NamedKey::Tab) => Some("Tab".into()),
+        _ => None,
     }
 }

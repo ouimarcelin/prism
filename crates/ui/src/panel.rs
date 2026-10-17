@@ -319,31 +319,66 @@ impl ControlPanel {
     pub fn control(&mut self, messages: impl IntoIterator<Item = ControlMessage>) -> Vec<Action> {
         let before = self.document.composition().clone();
         for message in messages {
-            let moved = message.pressed
-                || matches!(
-                    message.source,
-                    prism_core::ControlSource::MidiControl { .. }
-                );
-            if self.learn.active
-                && moved
-                && let Some(target) = self.learn.selected.take()
-            {
-                prism_control::learn(self.document.composition_mut(), message.source, target);
-                continue;
-            }
-            let outcomes = self
-                .controls
-                .apply(self.document.composition_mut(), &message);
-            for outcome in outcomes {
-                match outcome {
-                    Outcome::Changed => {}
-                    Outcome::Tap => self.tap_tempo(),
-                    Outcome::Resync => self.resync(),
-                }
-            }
+            self.apply_control(message);
         }
         self.document.commit(&before);
         std::mem::take(&mut self.actions)
+    }
+
+    /// Applies one message; returns whether it was learned or mapped.
+    fn apply_control(&mut self, message: ControlMessage) -> bool {
+        // A released note or key does not learn; a fader or an OSC message
+        // does, whatever its value.
+        let moved = message.pressed
+            || !matches!(
+                message.source,
+                prism_core::ControlSource::MidiNote { .. } | prism_core::ControlSource::Key { .. }
+            );
+        if self.learn.active
+            && moved
+            && let Some(target) = self.learn.selected.take()
+        {
+            prism_control::learn(self.document.composition_mut(), message.source, target);
+            return true;
+        }
+        let mapped = self
+            .document
+            .composition()
+            .mappings
+            .iter()
+            .any(|mapping| mapping.source == message.source);
+        let outcomes = self
+            .controls
+            .apply(self.document.composition_mut(), &message);
+        for outcome in outcomes {
+            match outcome {
+                Outcome::Changed => {}
+                Outcome::Tap => self.tap_tempo(),
+                Outcome::Resync => self.resync(),
+            }
+        }
+        mapped
+    }
+
+    /// A key pressed over another window (the output): when it is learned
+    /// or mapped, it acts and the actions to do are returned.
+    pub fn press_key(&mut self, key: &str) -> Option<Vec<Action>> {
+        let before = self.document.composition().clone();
+        let acted = self.key(key, true);
+        self.document.commit(&before);
+        acted.then(|| std::mem::take(&mut self.actions))
+    }
+
+    /// A key went down or up: learned or mapped keys act; returns whether
+    /// the key did.
+    fn key(&mut self, key: &str, pressed: bool) -> bool {
+        self.apply_control(ControlMessage {
+            source: prism_core::ControlSource::Key {
+                key: key.to_owned(),
+            },
+            value: f32::from(u8::from(pressed)),
+            pressed,
+        })
     }
 
     /// Draws one frame of the interface in `ui`, the whole window.
@@ -416,31 +451,40 @@ impl ControlPanel {
         if ctx.egui_wants_keyboard_input() {
             return;
         }
-        let shortcuts: Vec<Shortcut> = ctx.input(|input| {
+        let keys: Vec<(Key, bool)> = ctx.input(|input| {
             input
                 .events
                 .iter()
                 .filter_map(|event| match event {
                     egui::Event::Key {
                         key,
-                        pressed: true,
+                        pressed,
                         repeat: false,
                         modifiers,
                         ..
-                    } if !modifiers.command && !modifiers.alt && !modifiers.ctrl => match key {
-                        Key::Space => Some(Shortcut::StopAll),
-                        Key::Escape => Some(Shortcut::CloseOutput),
-                        Key::F => Some(Shortcut::ToggleOutput),
-                        Key::T => Some(Shortcut::TapTempo),
-                        Key::R => Some(Shortcut::Resync),
-                        other => digit(*other).map(Shortcut::TriggerColumn),
-                    },
+                    } if !modifiers.command && !modifiers.alt && !modifiers.ctrl => {
+                        Some((*key, *pressed))
+                    }
                     _ => None,
                 })
                 .collect()
         });
-        for shortcut in shortcuts {
-            self.shortcut(shortcut);
+        for (key, pressed) in keys {
+            // Learned keys go first; the others keep their usual action.
+            if self.key(key.name(), pressed) || !pressed {
+                continue;
+            }
+            let shortcut = match key {
+                Key::Space => Some(Shortcut::StopAll),
+                Key::Escape => Some(Shortcut::CloseOutput),
+                Key::F => Some(Shortcut::ToggleOutput),
+                Key::T => Some(Shortcut::TapTempo),
+                Key::R => Some(Shortcut::Resync),
+                other => digit(other).map(Shortcut::TriggerColumn),
+            };
+            if let Some(shortcut) = shortcut {
+                self.shortcut(shortcut);
+            }
         }
     }
 

@@ -28,6 +28,12 @@ pub enum ControlSource {
         /// The address of the messages.
         address: String,
     },
+    /// A key of the keyboard, without modifier, by its English name (`A`,
+    /// `1`, `Space`, `Up`…).
+    Key {
+        /// Name of the key.
+        key: String,
+    },
 }
 
 /// Whose effect a mapping drives.
