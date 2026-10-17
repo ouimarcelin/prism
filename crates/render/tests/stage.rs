@@ -369,3 +369,30 @@ fn the_black_level_lifts_only_outside_the_fades() {
     // Inside the fade, at its outer edge: no lift.
     assert!(at(0, 10)[2] < 0.01, "{:?}", at(0, 10));
 }
+
+#[test]
+fn pixel_mapping_reads_the_colours_at_the_points() {
+    let Some(gpu) = gpu() else { return };
+    let program = program(&gpu, false);
+    let mut sampler = prism_render::PixelSampler::new(&gpu.device);
+    // 300 points: past one row of the colour image.
+    let points: Vec<Point> = (0..300)
+        .map(|index| Point::new(if index % 2 == 0 { 0.2 } else { 0.8 }, 0.5))
+        .collect();
+    let limit = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let colors = loop {
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
+        sampler.sample(&gpu.device, &gpu.queue, &mut encoder, &program, &points);
+        gpu.queue.submit([encoder.finish()]);
+        sampler.map_submitted();
+        let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
+        if let Some(colors) = sampler.read(&gpu.device) {
+            break colors;
+        }
+        assert!(std::time::Instant::now() < limit, "no colours read");
+    };
+    assert_eq!(colors.len(), 300);
+    assert_eq!(colors[0], [255, 0, 0]);
+    assert_eq!(colors[1], [0, 255, 0]);
+    assert_eq!(colors[299], [0, 255, 0]);
+}
