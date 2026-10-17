@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Scène de sortie (début de la phase 4) : écrans et découpes enregistrés dans le projet, chaque découpe prend un rectangle de la composition et le pose en perspective par ses quatre coins ; le moteur dessine chaque écran, la fenêtre de sortie montre l'écran de la scène réglé sur son écran système (ADR 0027). Interface au ticket suivant.
 - NDI® (option de compilation `ndi`, désactivée par défaut) : image programme publiée sur le réseau sous le nom « Prism » (menu Sortie), source du réseau reçue comme clip (« NDI®… » sur une case vide) ; bibliothèque NDI installée par l'utilisateur et chargée au lancement, non livrée (ADR 0026).
 - Pad MIDI virtuel (exemple `midi-pad`, macOS) : 32 pads, 8 boutons, 8 faders et un crossfader sur des ports MIDI virtuels « Pad virtuel », allumés et déplacés par le retour de Prism, pour jouer sans contrôleur ; test de bout en bout de l'entrée et du retour MIDI par des ports virtuels.
 - Sortie plein écran sur plusieurs écrans à la fois : une case à cocher par écran dans le menu Sortie, `F` rouvre les écrans de la dernière fois, `Échap` ferme toutes les sorties (ADR 0025).
