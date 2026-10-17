@@ -7,8 +7,8 @@
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -894,4 +894,46 @@ fn an_ndi_source_is_waited_for_or_explained() {
         Err(_) => "NDI",
     };
     assert!(message.contains(expected), "{message}");
+}
+
+/// Records the size of the image of one screen at each frame.
+struct ScreenOutput(prism_core::ScreenId, Arc<Mutex<Vec<Option<u32>>>>);
+
+impl Output for ScreenOutput {
+    fn present(&mut self, _gpu: &Gpu, _program: &ProgramOutput) {
+        unreachable!("screens are presented through present_images");
+    }
+
+    fn present_images(&mut self, _gpu: &Gpu, images: &prism_engine::OutputImages<'_>) {
+        let width = images.screen(self.0).map(|image| image.resolution().width);
+        self.1.lock().unwrap().push(width);
+    }
+}
+
+#[test]
+fn screens_of_the_stage_are_drawn_for_the_outputs() {
+    let Some(gpu) = gpu() else { return };
+    let (mut comp, _) = composition_with(Clip::from_file("/unused.mov"));
+    let screen = comp.stage.add_screen("Projecteur", 24, 12).unwrap();
+    let mut driver = Driver::new(gpu, comp.clone());
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    driver.state.apply(Command::AddOutput {
+        id: 1,
+        output: Box::new(ScreenOutput(screen, Arc::clone(&seen))),
+    });
+    driver.tick();
+    assert_eq!(driver.state.screen_count(), 1);
+    // A new size makes a new image; a removed screen is no longer drawn.
+    comp.stage
+        .screen_mut(screen)
+        .unwrap()
+        .set_size(40, 20)
+        .unwrap();
+    driver.state.set_composition(comp.clone());
+    driver.tick();
+    comp.stage.remove_screen(screen);
+    driver.state.set_composition(comp);
+    driver.tick();
+    assert_eq!(driver.state.screen_count(), 0);
+    assert_eq!(*seen.lock().unwrap(), [Some(24), Some(40), None]);
 }
