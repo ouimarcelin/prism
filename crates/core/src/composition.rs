@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Mapping, Moment, Slot,
-    Unit,
+    Stage, Unit,
 };
 
 /// Largest width or height accepted for a composition, in pixels.
@@ -132,6 +132,9 @@ pub struct Composition {
     /// Controller messages and what they drive.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub mappings: Vec<Mapping>,
+    /// Screens and slices of the output.
+    #[serde(skip_serializing_if = "Stage::is_empty")]
+    pub stage: Stage,
     next_id: u32,
 }
 
@@ -151,6 +154,8 @@ struct CompositionRepr {
     effects: Vec<Effect>,
     #[serde(default)]
     mappings: Vec<Mapping>,
+    #[serde(default)]
+    stage: Stage,
     #[serde(default)]
     next_id: u32,
 }
@@ -208,6 +213,7 @@ impl TryFrom<CompositionRepr> for Composition {
             tempo: repr.tempo,
             effects: repr.effects,
             mappings: repr.mappings,
+            stage: repr.stage,
             next_id: repr.next_id.max(next_free),
         })
     }
@@ -245,6 +251,7 @@ impl Composition {
             tempo: Bpm::DEFAULT,
             effects: Vec::new(),
             mappings: Vec::new(),
+            stage: Stage::default(),
             next_id: 0,
         }
     }

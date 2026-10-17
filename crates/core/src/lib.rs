@@ -20,6 +20,7 @@ mod ids;
 mod layer;
 mod preset;
 mod project;
+mod stage;
 mod value;
 
 pub use clip::{
@@ -39,4 +40,5 @@ pub use preset::{
     LayerPreset, PRESET_EXTENSION, PRESET_FORMAT_VERSION, Preset, PresetContent, preset_file_name,
 };
 pub use project::{FILE_EXTENSION, FORMAT_VERSION, MissingMedia, Project, ProjectError};
+pub use stage::{Area, MAX_SCREEN_SIZE, Point, Quad, Screen, ScreenId, Slice, SliceId, Stage};
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
