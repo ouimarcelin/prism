@@ -59,6 +59,7 @@ pub fn describe_source(source: &ControlSource) -> String {
         ControlSource::MidiControl { channel, number } => {
             format!("CC {number}, canal {}", channel + 1)
         }
+        ControlSource::Osc { address } => format!("OSC {address}"),
     }
 }
 

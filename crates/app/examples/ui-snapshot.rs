@@ -145,7 +145,7 @@ fn main() -> ExitCode {
         midi: prism_ui::MidiStatus {
             ports: vec!["Contrôleur".into()],
             connected: vec!["Contrôleur".into()],
-            errors: Vec::new(),
+            ..Default::default()
         },
     };
     let ctx = egui::Context::default();

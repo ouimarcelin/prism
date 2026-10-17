@@ -1,4 +1,4 @@
-//! Control of Prism from outside: MIDI controllers today.
+//! Control of Prism from outside: MIDI controllers and OSC.
 //!
 //! [`MidiInputs`] connects to the MIDI inputs of the computer and turns
 //! their notes and control changes into [`ControlMessage`]s. [`Controls`]
@@ -8,7 +8,9 @@
 mod apply;
 mod message;
 mod midi;
+mod osc;
 
 pub use apply::{Controls, Outcome, learn};
 pub use message::{ControlMessage, describe_source, parse_midi};
 pub use midi::{MidiInputs, midi_ports};
+pub use osc::{DEFAULT_OSC_PORT, OscInput, OscOutput, osc_feedback, osc_target, parse_osc};

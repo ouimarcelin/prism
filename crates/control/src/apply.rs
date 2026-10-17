@@ -37,12 +37,19 @@ impl Controls {
             .insert(message.source.clone(), message.pressed)
             .unwrap_or(false);
         let pressed_now = message.pressed && !was_down;
-        let targets: Vec<ControlTarget> = composition
+        let mut targets: Vec<ControlTarget> = composition
             .mappings
             .iter()
             .filter(|mapping| mapping.source == message.source)
             .map(|mapping| mapping.target.clone())
             .collect();
+        // Fixed OSC addresses, unless learned for something else.
+        if targets.is_empty()
+            && let ControlSource::Osc { address } = &message.source
+            && let Some(target) = crate::osc_target(composition, address)
+        {
+            targets.push(target);
+        }
         let mut outcomes = Vec::new();
         for target in targets {
             if !target.is_continuous() && !pressed_now {

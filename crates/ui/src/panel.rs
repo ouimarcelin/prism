@@ -72,6 +72,10 @@ pub struct MidiStatus {
     pub connected: Vec<String>,
     /// Inputs that could not be opened, with why.
     pub errors: Vec<String>,
+    /// Port listened on for OSC, if listening.
+    pub osc_port: Option<u16>,
+    /// Why OSC cannot be listened to or sent.
+    pub osc_errors: Vec<String>,
 }
 
 /// State of the audio input, for the interface.
@@ -609,6 +613,26 @@ impl ControlPanel {
         for error in &midi.errors {
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
+        ui.separator();
+        ui.label(egui::RichText::new("OSC").strong());
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut preferences.osc_input, "Écouter sur le port");
+            ui.add(egui::DragValue::new(&mut preferences.osc_port).range(1024..=65535));
+        })
+        .response
+        .on_hover_text("Adresses /prism/… (voir l'aide) ou apprises comme une commande MIDI");
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut preferences.osc_output, "Envoyer vers");
+            ui.add(egui::TextEdit::singleline(&mut preferences.osc_target).desired_width(140.0))
+                .on_hover_text("IP:port de la tablette ou du logiciel qui reçoit");
+        });
+        if let Some(port) = midi.osc_port {
+            let addresses = local_addresses();
+            ui.label(egui::RichText::new(format!("À l'écoute : {addresses} port {port}")).weak());
+        }
+        for error in &midi.osc_errors {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
         if preferences != self.preferences {
             self.preferences = preferences;
             self.save_preferences();
@@ -1078,6 +1102,20 @@ fn status_line(status: &EngineStatus) -> String {
         "{:.1} i/s · {:.1} ms par image · saccades : {} · sautées : {} · en retard : {late}",
         status.fps, status.frame_time_ms, status.hitches, status.gpu_skips
     )
+}
+
+/// Addresses of this computer on the local network, to point a tablet at.
+fn local_addresses() -> String {
+    // The address used to reach outside, without sending anything.
+    std::net::UdpSocket::bind(("0.0.0.0", 0))
+        .and_then(|socket| {
+            socket.connect(("192.0.2.1", 9))?;
+            socket.local_addr()
+        })
+        .map_or_else(
+            |_| "cet ordinateur".to_owned(),
+            |address| address.ip().to_string(),
+        )
 }
 
 /// One bar per band of the sound, from 0 to 1.
