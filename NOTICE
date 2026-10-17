@@ -54,3 +54,6 @@ The NDI library itself is not part of Prism and is not distributed with it:
 it is installed by the user and used under the NDI SDK license terms
 (https://ndi.video). NDI® is a registered trademark of Vizrt NDI AB. Prism
 is not a product of, nor endorsed by, Vizrt NDI AB.
+
+Application icon (assets/icon-1024.png): an original drawing made for
+Prism by scripts/make-icon.swift, under the licence of Prism.
