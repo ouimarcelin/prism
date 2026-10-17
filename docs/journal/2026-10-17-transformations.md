@@ -18,9 +18,13 @@
 ## Résultat
 
 - Tests : modèle (miroir, demi-tour, quart de tour sur une zone carrée en pixels), GPU (demi-tour, double miroir qui s'annule, fondu qui suit la découpe sur un écran retourné).
-- 276 tests passent. Le cahier des charges de la phase 4 est couvert : écrans, découpes, déformation par grille, masques, transformations, edge blending.
+- 275 tests passent. Le cahier des charges de la phase 4 est couvert : écrans, découpes, déformation par grille, masques, transformations, edge blending.
 
 ## Problèmes et points ouverts
 
 - Rotation de la zone lue : la poignée de la vue de la composition reste celle du rectangle non tourné.
 - Pas de rotation de l'écran par quarts de tour (un projecteur en portrait se règle par la taille de l'écran et les coins de la découpe).
+
+## Archive
+
+- Transcription : `2026-10-17-211211-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `ae720a909bd047894e3505348c6dd7ef7e29179ce6f7c91b9226e34fb3d60a77` (même session que les tickets 33 à 45, archivée après le ticket 45 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
