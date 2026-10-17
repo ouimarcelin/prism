@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Pixel mapping DMX : bandes de LED et luminaires posés sur la composition (onglet « Lumière (DMX) » de la fenêtre Sortie avancée), couleurs prises sur l'image et envoyées en Art-Net ou sACN (ADR 0033).
 - Crate `prism-dmx` : paquets Art-Net et sACN (E1.31), envoi d'univers DMX sur le réseau (ADR 0033).
 - Pad MIDI virtuel : horloge MIDI au tempo réglé, avec Start et Stop.
 - Tempo suivi de l'horloge MIDI (menu Contrôle > Suivre l'horloge MIDI) : le tempo d'un logiciel de musique ou de DJ, son Start commence une mesure (ADR 0032).
