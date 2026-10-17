@@ -74,7 +74,9 @@ pub fn midi_feedback(composition: &Composition) -> Vec<[u8; 3]> {
                 ControlSource::MidiControl { channel, number } => {
                     Some([0xB0 | (channel & 0x0F), number & 0x7F, value])
                 }
-                ControlSource::Osc { .. } | ControlSource::Key { .. } => None,
+                ControlSource::Osc { .. }
+                | ControlSource::Key { .. }
+                | ControlSource::Dmx { .. } => None,
             }
         })
         .collect()

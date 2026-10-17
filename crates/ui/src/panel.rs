@@ -81,6 +81,10 @@ pub struct MidiStatus {
     pub osc_errors: Vec<String>,
     /// Tempo of the MIDI clock received, while one is.
     pub clock_bpm: Option<f64>,
+    /// Whether DMX is listened to, and why it cannot be.
+    pub dmx_listening: bool,
+    /// Why DMX cannot be listened to.
+    pub dmx_error: Option<String>,
 }
 
 /// State of the audio input, for the interface.
@@ -790,6 +794,27 @@ impl ControlPanel {
         )
         .on_hover_text("Allume les pads des clips qui jouent, place les faders motorisés");
         ui.separator();
+        ui.label(egui::RichText::new("DMX (console lumière)").strong());
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut preferences.dmx_input, "Écouter")
+                .on_hover_text("Chaque canal DMX reçu d'une console s'apprend comme un fader MIDI (Apprentissage MIDI, cliquer une commande, bouger le canal)");
+            ui.selectable_value(
+                &mut preferences.dmx_input_protocol,
+                prism_core::DmxProtocol::ArtNet,
+                "Art-Net",
+            );
+            ui.selectable_value(
+                &mut preferences.dmx_input_protocol,
+                prism_core::DmxProtocol::Sacn,
+                "sACN",
+            );
+        });
+        if let Some(error) = &midi.dmx_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        } else if midi.dmx_listening {
+            ui.label(egui::RichText::new("À l'écoute (sACN : univers 1 à 16)").weak());
+        }
+        ui.separator();
         ui.label(egui::RichText::new("OSC").strong());
         ui.horizontal(|ui| {
             ui.checkbox(&mut preferences.osc_input, "Écouter sur le port");
@@ -1359,6 +1384,38 @@ mod tests {
     use super::*;
     use prism_core::{ControlSource, ControlTarget};
     use prism_engine::LayerStatus;
+
+    #[test]
+    fn console_channels_are_learned_like_faders() {
+        let mut panel = ControlPanel::new(
+            Document::new(prism_core::Composition::default()),
+            Vec::new(),
+        );
+        let layer = panel.document.composition().layers()[0].id();
+        let channel = |value: f32| ControlMessage {
+            source: ControlSource::Dmx {
+                universe: 0,
+                channel: 12,
+            },
+            value,
+            pressed: value >= 0.5,
+        };
+        panel.learn.active = true;
+        panel.learn.selected = Some(ControlTarget::LayerOpacity { layer });
+        // Even low, a console channel learns.
+        panel.control([channel(0.1)]);
+        assert_eq!(panel.document.composition().mappings.len(), 1);
+        panel.learn.active = false;
+        panel.control([channel(0.75)]);
+        let opacity = panel
+            .document
+            .composition()
+            .layer(layer)
+            .unwrap()
+            .opacity
+            .get();
+        assert!((opacity - 0.75).abs() < 1e-6, "{opacity}");
+    }
 
     #[test]
     fn learned_controls_drive_the_composition() {

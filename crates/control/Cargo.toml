@@ -12,6 +12,7 @@ publish.workspace = true
 midir = "0.11.1"
 prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
+prism-dmx = { path = "../dmx" }
 prism-fx = { path = "../fx" }
 rosc = "0.11.4"
 

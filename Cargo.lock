@@ -2361,6 +2361,7 @@ dependencies = [
  "midir",
  "prism-clock",
  "prism-core",
+ "prism-dmx",
  "prism-fx",
  "rosc",
 ]

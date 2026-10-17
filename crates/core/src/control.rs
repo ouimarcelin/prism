@@ -34,6 +34,13 @@ pub enum ControlSource {
         /// Name of the key.
         key: String,
     },
+    /// A channel of a DMX universe received from a lighting console.
+    Dmx {
+        /// Universe, as the protocol numbers it.
+        universe: u16,
+        /// Channel, 1 to 512.
+        channel: u16,
+    },
 }
 
 /// Whose effect a mapping drives.

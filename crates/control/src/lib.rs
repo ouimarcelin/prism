@@ -6,12 +6,14 @@
 //! ([`prism_core::Mapping`]); [`learn`] adds a mapping.
 
 mod apply;
+mod dmx;
 mod feedback;
 mod message;
 mod midi;
 mod osc;
 
 pub use apply::{Controls, Outcome, learn};
+pub use dmx::{DmxInput, dmx_changes};
 pub use feedback::{MidiOutputs, midi_feedback};
 pub use message::{ControlMessage, describe_source, parse_midi};
 pub use midi::{ClockReading, MidiInputs, midi_ports};
