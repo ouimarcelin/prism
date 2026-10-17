@@ -141,7 +141,7 @@ pub struct StageRenderer {
     sampler: wgpu::Sampler,
     /// Vertices of every screen of a frame, written once per frame.
     vertices: Option<wgpu::Buffer>,
-    /// Mask headers and mask points of a frame.
+    /// What the shader knows of each slice, and the mask points, of a frame.
     masks: Option<wgpu::Buffer>,
     points: Option<wgpu::Buffer>,
     bind_group: Option<(wgpu::TextureView, wgpu::BindGroup)>,
@@ -239,8 +239,7 @@ impl StageRenderer {
         targets: &[ScreenTarget<'_>],
     ) {
         let mut vertices = Vec::new();
-        // Mask 0: none.
-        let mut masks: Vec<u8> = mask_header(0, 0, false, 0.0).to_vec();
+        let mut masks: Vec<u8> = Vec::new();
         let mut points: Vec<u8> = vec![0; 8];
         let mut draws: Vec<Vec<(std::ops::Range<u32>, u32)>> = Vec::with_capacity(targets.len());
         for target in targets {
@@ -249,25 +248,15 @@ impl StageRenderer {
             for slice in target.screen.slices.iter().filter(|slice| slice.enabled) {
                 let start = vertices.len() as u32;
                 vertices.extend(slice_vertices(slice));
-                let mask = match &slice.mask {
-                    Some(mask) if mask.is_valid() => {
-                        let index = (masks.len() / MASK_HEADER_BYTES) as u32;
-                        let first = (points.len() / 8) as u32;
-                        for point in &mask.points {
-                            points.extend((point.x * width as f32).to_le_bytes());
-                            points.extend((point.y * height as f32).to_le_bytes());
-                        }
-                        masks.extend(mask_header(
-                            first,
-                            mask.points.len() as u32,
-                            mask.inverted,
-                            mask.feather,
-                        ));
-                        index
-                    }
-                    _ => 0,
-                };
-                screen_draws.push((start..vertices.len() as u32, mask));
+                let index = (masks.len() / SLICE_INFO_BYTES) as u32;
+                let first = (points.len() / 8) as u32;
+                let mask = slice.mask.as_ref().filter(|mask| mask.is_valid());
+                for point in mask.iter().flat_map(|mask| &mask.points) {
+                    points.extend((point.x * width as f32).to_le_bytes());
+                    points.extend((point.y * height as f32).to_le_bytes());
+                }
+                masks.extend(slice_info(slice, first, target.screen.test_pattern, index));
+                screen_draws.push((start..vertices.len() as u32, index));
             }
             draws.push(screen_draws);
         }
@@ -366,7 +355,7 @@ impl StageRenderer {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
-            // The instance index carries the mask of the slice.
+            // The instance index names the slice for the shader.
             for (range, mask) in screen_draws {
                 pass.draw(range, mask..mask + 1);
             }
@@ -374,16 +363,40 @@ impl StageRenderer {
     }
 }
 
-/// Bytes of a mask header in the shader: first point, point count,
-/// inverted, soft edge width in pixels.
-const MASK_HEADER_BYTES: usize = 16;
+/// Bytes of what the shader knows of a slice: its mask (first point,
+/// point count, inverted, soft edge in pixels), its area of the
+/// composition, its edge fades, and the fade curve, test pattern and
+/// pattern color.
+const SLICE_INFO_BYTES: usize = 64;
 
-fn mask_header(first: u32, count: u32, inverted: bool, feather: f32) -> [u8; MASK_HEADER_BYTES] {
-    let mut bytes = [0; MASK_HEADER_BYTES];
-    bytes[0..4].copy_from_slice(&first.to_le_bytes());
-    bytes[4..8].copy_from_slice(&count.to_le_bytes());
-    bytes[8..12].copy_from_slice(&u32::from(inverted).to_le_bytes());
-    bytes[12..16].copy_from_slice(&feather.max(0.0).to_le_bytes());
+fn slice_info(slice: &Slice, first: u32, pattern: bool, index: u32) -> Vec<u8> {
+    let mask = slice.mask.as_ref().filter(|mask| mask.is_valid());
+    let count = mask.map_or(0, |mask| mask.points.len() as u32);
+    let inverted = mask.is_some_and(|mask| mask.inverted);
+    let feather = mask.map_or(0.0, |mask| mask.feather.max(0.0));
+    let blend = slice.blend;
+    let input = slice.input;
+    let mut bytes = Vec::with_capacity(SLICE_INFO_BYTES);
+    for word in [first, count, u32::from(inverted)] {
+        bytes.extend(word.to_le_bytes());
+    }
+    for value in [
+        feather,
+        input.x,
+        input.y,
+        input.width,
+        input.height,
+        blend.left.max(0.0),
+        blend.right.max(0.0),
+        blend.top.max(0.0),
+        blend.bottom.max(0.0),
+        blend.power.max(0.1),
+        blend.gamma.max(0.1),
+        if pattern { 1.0 } else { 0.0 },
+        index as f32,
+    ] {
+        bytes.extend(value.to_le_bytes());
+    }
     bytes
 }
 
