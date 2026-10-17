@@ -156,6 +156,27 @@ impl prism_engine::Output for SyphonOutput {
     }
 }
 
+/// The image of a screen of the stage published over Syphon, as an output
+/// of the engine.
+#[cfg(target_os = "macos")]
+struct ScreenSyphonOutput {
+    screen: prism_core::ScreenId,
+    server: prism_io_video::SyphonServer,
+}
+
+#[cfg(target_os = "macos")]
+impl prism_engine::Output for ScreenSyphonOutput {
+    fn present(&mut self, _gpu: &prism_render::Gpu, _program: &prism_engine::ProgramOutput) {}
+
+    fn present_images(&mut self, gpu: &prism_render::Gpu, images: &prism_engine::OutputImages<'_>) {
+        if let Some(image) = images.screen(self.screen) {
+            let size = image.resolution();
+            self.server
+                .publish(gpu, image.view(), (size.width, size.height));
+        }
+    }
+}
+
 /// The program image published as an NDI source, as an output of the
 /// engine.
 #[cfg(feature = "ndi")]
@@ -371,6 +392,9 @@ struct AudioState {
     sound_wanted: Option<bool>,
     /// Engine output of the Syphon server, while publishing.
     syphon: Option<u64>,
+    /// Screens of the stage published over Syphon: screen, server name,
+    /// engine output.
+    screen_syphon: Vec<(prism_core::ScreenId, String, u64)>,
     /// Engine output of the NDI source, while publishing.
     #[cfg(feature = "ndi")]
     ndi: Option<u64>,
@@ -451,6 +475,48 @@ impl Running {
         }
         #[cfg(not(feature = "ndi"))]
         let _ = (preferences, composition);
+    }
+
+    /// Publishes over Syphon the screens of the stage that ask for it, under
+    /// their current names.
+    fn follow_stage_syphon(&mut self, stage: &prism_core::Stage) {
+        let wanted: Vec<(prism_core::ScreenId, String)> = stage
+            .screens()
+            .iter()
+            .filter(|screen| screen.syphon)
+            .map(|screen| (screen.id(), format!("Prism – {}", screen.name)))
+            .collect();
+        let engine = &self.engine;
+        self.audio.screen_syphon.retain(|(id, name, output)| {
+            let keep = wanted
+                .iter()
+                .any(|(want, want_name)| want == id && want_name == name);
+            if !keep {
+                engine.send(Command::RemoveOutput { id: *output });
+            }
+            keep
+        });
+        #[cfg(target_os = "macos")]
+        for (screen, name) in wanted {
+            if self
+                .audio
+                .screen_syphon
+                .iter()
+                .any(|(id, _, _)| *id == screen)
+            {
+                continue;
+            }
+            let output = self.next_output;
+            self.next_output += 1;
+            self.engine.send(Command::AddOutput {
+                id: output,
+                output: Box::new(ScreenSyphonOutput {
+                    screen,
+                    server: prism_io_video::SyphonServer::new(name.clone()),
+                }),
+            });
+            self.audio.screen_syphon.push((screen, name, output));
+        }
     }
 
     /// Publishes over Syphon, or stops, as the preferences say.
@@ -725,6 +791,7 @@ impl App {
         }
         running.follow_audio_preferences(self.panel.preferences());
         running.follow_syphon_preference(self.panel.preferences());
+        running.follow_stage_syphon(&self.panel.document().composition().stage);
         running.follow_ndi_preference(
             self.panel.preferences(),
             self.panel.document().composition(),

@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Écrans de la scène publiés sur Syphon (case « Syphon » de la fenêtre Sortie avancée), sous « Prism – » et le nom de l'écran.
 - Icône de l'application (cristal à facettes), dessinée par `scripts/make-icon.swift` et posée par `scripts/make-app.sh`.
 - « Répartir » (fenêtre Sortie avancée) : la composition étalée sur plusieurs projecteurs côte à côte avec leur recouvrement et le fondu des bords réglé.
 - Fondu des bords : niveau de noir, pour égaler le noir hors du recouvrement à celui, plus clair, de deux projecteurs.

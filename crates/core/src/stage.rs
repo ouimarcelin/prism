@@ -364,6 +364,10 @@ pub struct Screen {
     /// to line projectors up.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub test_pattern: bool,
+    /// Whether the screen's image is published over Syphon (macOS), under
+    /// « Prism – » and its name.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub syphon: bool,
 }
 
 impl Screen {
@@ -544,6 +548,7 @@ impl Stage {
             slices: Vec::new(),
             flip: Flip::default(),
             test_pattern: false,
+            syphon: false,
         });
         self.add_slice(id, "Découpe 1");
         Ok(id)

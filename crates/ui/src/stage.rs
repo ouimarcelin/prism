@@ -387,6 +387,10 @@ impl ControlPanel {
                 .on_hover_text("Tout l'écran retourné de gauche à droite : projection par l'arrière");
             ui.checkbox(&mut screen.flip.vertical, "Miroir V")
                 .on_hover_text("Tout l'écran retourné de haut en bas ; avec « Miroir H » : projecteur accroché à l'envers");
+            if cfg!(target_os = "macos") {
+                ui.checkbox(&mut screen.syphon, "Syphon")
+                    .on_hover_text("L'image de cet écran publiée sur Syphon sous « Prism – » et son nom, pour un autre logiciel du Mac");
+            }
             ui.checkbox(&mut screen.test_pattern, "Mire")
                 .on_hover_text("Les découpes montrent une grille au lieu de la composition, pour aligner les projecteurs");
             if ui.button("Supprimer l'écran").clicked() {
