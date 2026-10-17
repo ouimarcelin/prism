@@ -25,3 +25,5 @@ La phase 3 demande le mapping MIDI par apprentissage (MIDI learn), et son critè
 - Latence : celle de la boucle d'interface réveillée par le message, puis une image du moteur.
 - Les correspondances vers une couche, une colonne ou un effet retirés restent dans le projet et ne font rien ; la fenêtre les montre comme « retirée ».
 - Sortie MIDI (retour lumineux des pads) et OSC : tickets suivants.
+- **Ajout du 2026-10-17 (ticket 30) : touches.** Une touche sans modificateur est une source comme une autre (`ControlSource::Key`, nom anglais d'egui : `A`, `1`, `Space`, `Up`…). Elle s'apprend de la même façon (appuyer pendant l'apprentissage) et agit depuis la fenêtre de contrôle comme depuis la sortie plein écran. Une touche apprise remplace son raccourci habituel (par exemple `T` pour le tap) ; les touches avec Cmd restent réservées aux commandes de l'application.
+
