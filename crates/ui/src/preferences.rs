@@ -37,6 +37,9 @@ pub struct Preferences {
     pub clip_sound_volume: f32,
     /// MIDI inputs not listened to; every other input is.
     pub midi_disabled: Vec<String>,
+    /// Whether MIDI controllers are sent the state of their controls
+    /// (lit pads, faders).
+    pub midi_feedback: bool,
     /// Whether Prism listens for OSC.
     pub osc_input: bool,
     /// UDP port Prism listens on for OSC.
@@ -61,6 +64,7 @@ impl Default for Preferences {
             clip_sound: true,
             clip_sound_volume: 1.0,
             midi_disabled: Vec::new(),
+            midi_feedback: true,
             osc_input: false,
             osc_port: 7000,
             osc_output: false,

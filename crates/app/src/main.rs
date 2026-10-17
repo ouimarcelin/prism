@@ -92,6 +92,7 @@ fn main() -> ExitCode {
     let mut app = App {
         midi: Midi {
             inputs: MidiInputs::new(control_sender.clone(), Arc::clone(&wake)),
+            outputs: prism_control::MidiOutputs::default(),
             sender: control_sender,
             wake,
             osc_input: None,
@@ -104,6 +105,7 @@ fn main() -> ExitCode {
             checked: None,
         },
         midi_disabled_seen: Vec::new(),
+        midi_feedback_seen: true,
         output_screen: options.output_screen,
         panel: ControlPanel::new(document, missing).with_preferences(preferences, preferences_path),
         running: None,
@@ -146,6 +148,7 @@ enum UserEvent {
 /// MIDI inputs, OSC input and output, and the messages they sent.
 struct Midi {
     inputs: MidiInputs,
+    outputs: prism_control::MidiOutputs,
     sender: std::sync::mpsc::Sender<ControlMessage>,
     wake: Arc<dyn Fn() + Send + Sync>,
     osc_input: Option<prism_control::OscInput>,
@@ -185,10 +188,17 @@ impl Midi {
             .into_iter()
             .map(str::to_owned)
             .collect();
+        let feedback = if preferences.midi_feedback {
+            self.status.connected.clone()
+        } else {
+            Vec::new()
+        };
+        self.outputs.sync(&feedback);
     }
 
     /// Starts, moves or stops the OSC input and output as the preferences
-    /// say, and sends the values of `composition` that changed.
+    /// say, and sends the values of `composition` that changed, over OSC
+    /// and back to the MIDI controllers.
     fn follow_osc(&mut self, preferences: &Preferences, composition: &prism_core::Composition) {
         let wanted = preferences.osc_input.then_some(preferences.osc_port);
         if wanted != self.osc_wanted {
@@ -230,6 +240,8 @@ impl Midi {
                 }
             }
         }
+        self.outputs
+            .send_changes(&prism_control::midi_feedback(composition));
         if let Some((_, output)) = &mut self.osc_output
             && let Err(error) = output.send_changes(&prism_control::osc_feedback(composition))
         {
@@ -249,6 +261,8 @@ struct App {
     midi: Midi,
     /// MIDI inputs turned off when they were last connected.
     midi_disabled_seen: Vec<String>,
+    /// Whether MIDI feedback was on when the outputs were last connected.
+    midi_feedback_seen: bool,
     /// Screen, numbered from 1, for the output at start.
     output_screen: Option<usize>,
     panel: ControlPanel,
@@ -590,7 +604,10 @@ impl App {
         let output_screen = running.output.as_ref().map(|output| output.screen);
         let screens = running.screens.clone();
         let audio = running.audio_status();
-        let preferences_changed = self.panel.preferences().midi_disabled != self.midi_disabled_seen;
+        let preferences_changed = (
+            &self.panel.preferences().midi_disabled,
+            self.panel.preferences().midi_feedback,
+        ) != (&self.midi_disabled_seen, self.midi_feedback_seen);
         self.midi
             .refresh(self.panel.preferences(), preferences_changed);
         self.midi.follow_osc(
@@ -598,6 +615,7 @@ impl App {
             self.panel.document().composition(),
         );
         self.midi_disabled_seen = self.panel.preferences().midi_disabled.clone();
+        self.midi_feedback_seen = self.panel.preferences().midi_feedback;
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
