@@ -253,6 +253,7 @@ impl ControlPanel {
             let device = match &clip.source {
                 prism_core::MediaSource::Camera { name, .. } => format!("Caméra : {name}"),
                 prism_core::MediaSource::Syphon { app, name } => format!("Syphon : {app} – {name}"),
+                prism_core::MediaSource::Ndi { name } => format!("NDI® : {name}"),
                 _ => String::new(),
             };
             egui::Grid::new("camera clip")
