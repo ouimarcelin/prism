@@ -43,6 +43,9 @@ pub struct Preferences {
     /// Whether the program image is published over Syphon, for other
     /// applications of the Mac.
     pub syphon_output: bool,
+    /// Whether the program image is published as an NDI® source of the
+    /// network.
+    pub ndi_output: bool,
     /// Whether Prism listens for OSC.
     pub osc_input: bool,
     /// UDP port Prism listens on for OSC.
@@ -69,6 +72,7 @@ impl Default for Preferences {
             midi_disabled: Vec::new(),
             midi_feedback: true,
             syphon_output: false,
+            ndi_output: false,
             osc_input: false,
             osc_port: 7000,
             osc_output: false,

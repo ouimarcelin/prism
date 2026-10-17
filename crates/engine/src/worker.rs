@@ -100,9 +100,11 @@ fn open(source: &MediaSource) -> Result<Box<dyn FrameSource>, prism_media::Decod
             format!("générateur {}", generator.kind),
         )),
         // Read live by the render thread.
-        MediaSource::Camera { name, .. } | MediaSource::Syphon { name, .. } => Err(
-            prism_media::DecodeError::UnsupportedCodec(format!("source en direct {name}")),
-        ),
+        MediaSource::Camera { name, .. }
+        | MediaSource::Syphon { name, .. }
+        | MediaSource::Ndi { name } => Err(prism_media::DecodeError::UnsupportedCodec(format!(
+            "source en direct {name}"
+        ))),
     }
 }
 

@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- NDI® (option de compilation `ndi`, désactivée par défaut) : image programme publiée sur le réseau sous le nom « Prism » (menu Sortie), source du réseau reçue comme clip (« NDI®… » sur une case vide) ; bibliothèque NDI installée par l'utilisateur et chargée au lancement, non livrée (ADR 0026).
 - Pad MIDI virtuel (exemple `midi-pad`, macOS) : 32 pads, 8 boutons, 8 faders et un crossfader sur des ports MIDI virtuels « Pad virtuel », allumés et déplacés par le retour de Prism, pour jouer sans contrôleur ; test de bout en bout de l'entrée et du retour MIDI par des ports virtuels.
 - Sortie plein écran sur plusieurs écrans à la fois : une case à cocher par écran dans le menu Sortie, `F` rouvre les écrans de la dernière fois, `Échap` ferme toutes les sorties (ADR 0025).
 - Entrée Syphon (macOS) : l'image qu'une autre application publie devient un clip (« Syphon… » sur une case vide), reconnecté si l'application redémarre (ADR 0024).

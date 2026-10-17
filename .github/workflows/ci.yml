@@ -68,6 +68,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
+      # NDI is optional (ADR 0026): it must build too; its tests skip without the NDI library.
+      - run: cargo clippy --workspace --all-targets --features prism-app/ndi -- -D warnings
       - run: cargo test --workspace
       - run: cargo build --workspace --release
 

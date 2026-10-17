@@ -877,3 +877,21 @@ fn an_absent_syphon_server_is_waited_for() {
     };
     assert!(message.contains("en attente"), "{message}");
 }
+
+#[test]
+fn an_ndi_source_is_waited_for_or_explained() {
+    let Some(gpu) = gpu() else { return };
+    let (mut comp, slot) = composition_with(Clip::from_ndi("NULLE PART (Rien)"));
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    let status = driver.settle(|status| matches!(status.state, ClipState::Error(_)));
+    let ClipState::Error(message) = status.state else {
+        unreachable!()
+    };
+    // Without the NDI library or the `ndi` feature, the clip says why.
+    let expected = match prism_engine::ndi_status() {
+        Ok(_) => "en attente",
+        Err(_) => "NDI",
+    };
+    assert!(message.contains(expected), "{message}");
+}

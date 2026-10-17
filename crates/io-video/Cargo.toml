@@ -1,6 +1,6 @@
 [package]
 name = "prism-io-video"
-description = "Video shared with other applications: Syphon on macOS."
+description = "Video shared with other applications: Syphon on macOS, NDI on the network (optional)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,7 +9,13 @@ repository.workspace = true
 publish.workspace = true
 build = "build.rs"
 
+[features]
+# NDI® input and output, through the NDI library installed by the user
+# (loaded at run time, not distributed). Off by default: see ADR 0026.
+ndi = ["dep:libloading"]
+
 [dependencies]
+libloading = { version = "0.8", optional = true }
 prism-render = { path = "../render" }
 wgpu = "30"
 

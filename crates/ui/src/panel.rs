@@ -625,6 +625,24 @@ impl ControlPanel {
                         self.save_preferences();
                     }
                 }
+                ui.separator();
+                let status = prism_engine::ndi_status();
+                let mut ndi = self.preferences.ndi_output && status.is_ok();
+                let hover = match &status {
+                    Ok(version) => format!(
+                        "L'image programme, sous le nom « Prism », pour les machines du réseau\nBibliothèque : {version}\nNDI® est une marque déposée de Vizrt NDI AB."
+                    ),
+                    Err(reason) => format!("Indisponible : {reason}"),
+                };
+                if ui
+                    .add_enabled(status.is_ok(), egui::Checkbox::new(&mut ndi, "Publier en NDI®"))
+                    .on_hover_text(&hover)
+                    .on_disabled_hover_text(&hover)
+                    .changed()
+                {
+                    self.preferences.ndi_output = ndi;
+                    self.save_preferences();
+                }
             });
             ui.menu_button("Contrôle", |ui| self.control_menu(ui, &frame.midi));
             let audio = ui.menu_button("Audio", |ui| self.audio_menu(ui, &frame.audio));

@@ -56,6 +56,11 @@ pub enum MediaSource {
         /// Name of its server.
         name: String,
     },
+    /// An NDI® source of the network, live.
+    Ndi {
+        /// Full name of the source: `MACHINE (SOURCE)`.
+        name: String,
+    },
 }
 
 impl MediaSource {
@@ -63,7 +68,10 @@ impl MediaSource {
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } | Self::Camera { .. } | Self::Syphon { .. } => None,
+            Self::Generator { .. }
+            | Self::Camera { .. }
+            | Self::Syphon { .. }
+            | Self::Ndi { .. } => None,
         }
     }
 
@@ -71,14 +79,20 @@ impl MediaSource {
     pub fn path_mut(&mut self) -> Option<&mut PathBuf> {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
-            Self::Generator { .. } | Self::Camera { .. } | Self::Syphon { .. } => None,
+            Self::Generator { .. }
+            | Self::Camera { .. }
+            | Self::Syphon { .. }
+            | Self::Ndi { .. } => None,
         }
     }
 
     /// Whether the frames come live from a device, without position or
     /// duration.
     pub fn is_live(&self) -> bool {
-        matches!(self, Self::Camera { .. } | Self::Syphon { .. })
+        matches!(
+            self,
+            Self::Camera { .. } | Self::Syphon { .. } | Self::Ndi { .. }
+        )
     }
 
     /// The generator, for a clip drawn by the GPU.
@@ -249,6 +263,18 @@ impl Clip {
         }
     }
 
+    /// Creates a clip showing the NDI source `name`.
+    pub fn from_ndi(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            name: name.clone(),
+            source: MediaSource::Ndi { name },
+            playback: Playback::default(),
+            effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
+        }
+    }
+
     /// Creates a clip drawn by a generator of `kind`, every setting at its
     /// default.
     pub fn from_generator(name: impl Into<String>, kind: impl Into<String>) -> Self {
@@ -283,6 +309,23 @@ impl Clip {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ndi_clips_are_live_and_saved_by_name() {
+        let clip = Clip::from_ndi("REGIE (Caméra 1)");
+        assert!(clip.source.is_live());
+        assert_eq!(clip.source.path(), None);
+        assert_eq!(clip.name, "REGIE (Caméra 1)");
+        let json = serde_json::to_value(&clip.source).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"kind": "ndi", "name": "REGIE (Caméra 1)"})
+        );
+        assert_eq!(
+            serde_json::from_value::<MediaSource>(json).unwrap(),
+            clip.source
+        );
+    }
 
     #[test]
     fn generators_have_no_file_and_keep_their_settings() {

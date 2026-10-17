@@ -64,6 +64,14 @@ Dans la fenêtre de contrôle :
 
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
+NDI® (vidéo par le réseau) est une option de compilation, désactivée par défaut (ADR 0026). Installer le NDI SDK for Apple ou NDI Tools, puis :
+
+```bash
+cargo run --release -p prism-app --features ndi
+```
+
+Menu Sortie > « Publier en NDI® », et « NDI®… » sur une case vide pour recevoir une source du réseau. NDI® est une marque déposée de Vizrt NDI AB ; Prism n'est ni un produit de Vizrt NDI AB ni approuvé par elle.
+
 Sans contrôleur MIDI, un pad virtuel en tient lieu (macOS) :
 
 ```bash

@@ -2413,6 +2413,7 @@ name = "prism-io-video"
 version = "0.0.0"
 dependencies = [
  "cc",
+ "libloading 0.8.9",
  "prism-core",
  "prism-render",
  "wgpu",
