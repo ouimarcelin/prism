@@ -706,19 +706,21 @@ impl App {
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
-        running.control.draw(&running.gpu, program, |ui, preview| {
-            let frame = FrameInfo {
-                status: &status,
-                preview,
-                screens: &screens,
-                output_screens: &output_screens,
-                audio: audio.clone(),
-                midi: midi.clone(),
-            };
-            // egui may run the interface twice in one frame; only the first
-            // pass sees the input, so keep the actions of every pass.
-            actions.extend(panel.ui(ui, &frame));
-        });
+        running
+            .control
+            .draw(&running.gpu, Some(program), |ui, preview| {
+                let frame = FrameInfo {
+                    status: &status,
+                    preview,
+                    screens: &screens,
+                    output_screens: &output_screens,
+                    audio: audio.clone(),
+                    midi: midi.clone(),
+                };
+                // egui may run the interface twice in one frame; only the first
+                // pass sees the input, so keep the actions of every pass.
+                actions.extend(panel.ui(ui, &frame));
+            });
         self.handle(event_loop, actions);
         // Playheads and the preview move: keep drawing, at the screen rate
         // while the user acts or something animates, at 30 per second when

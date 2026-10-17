@@ -92,11 +92,11 @@ impl ControlWindow {
     }
 
     /// Draws one frame of the interface; `run` builds it, with the program
-    /// texture and its size.
+    /// texture and its size when there is a program.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
-        program: Arc<ProgramOutput>,
+        program: Option<Arc<ProgramOutput>>,
         run: impl FnMut(&mut egui::Ui, Option<(egui::TextureId, Resolution)>),
     ) {
         let mut run = run;
@@ -111,10 +111,11 @@ impl ControlWindow {
         }
 
         // The engine replaces the program image when the resolution changes.
-        if self
-            .preview
-            .as_ref()
-            .is_none_or(|(registered, _)| !Arc::ptr_eq(registered, &program))
+        if let Some(program) = program
+            && self
+                .preview
+                .as_ref()
+                .is_none_or(|(registered, _)| !Arc::ptr_eq(registered, &program))
         {
             if let Some((_, id)) = self.preview.take() {
                 self.renderer.free_texture(&id);

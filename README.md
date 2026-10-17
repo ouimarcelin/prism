@@ -64,6 +64,14 @@ Dans la fenêtre de contrôle :
 
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
+Sans contrôleur MIDI, un pad virtuel en tient lieu (macOS) :
+
+```bash
+cargo run --release -p prism-app --example midi-pad
+```
+
+Il apparaît dans Prism sous le nom « Pad virtuel » : 32 pads, 8 boutons, 8 faders et un crossfader, à apprendre comme un vrai contrôleur. Les touches `1` à `8` de sa fenêtre tiennent les pads de la première rangée.
+
 ## Tester la lecture HAP
 
 Générer une mire HAP 1080p de 4 secondes (variantes : `hap`, `hap-alpha`, `hap-q`, `hap-q-alpha`) :
