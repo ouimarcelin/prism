@@ -81,7 +81,7 @@ Sans contrôleur MIDI, un pad virtuel en tient lieu (macOS) :
 cargo run --release -p prism-app --example midi-pad
 ```
 
-Il apparaît dans Prism sous le nom « Pad virtuel » : 32 pads, 8 boutons, 8 faders et un crossfader, à apprendre comme un vrai contrôleur. Les touches `1` à `8` de sa fenêtre tiennent les pads de la première rangée.
+Il apparaît dans Prism sous le nom « Pad virtuel » : 32 pads, 8 boutons, 8 faders et un crossfader, à apprendre comme un vrai contrôleur. Les touches `1` à `8` de sa fenêtre tiennent les pads de la première rangée. Il envoie aussi une horloge MIDI (tempo réglable, Start, Stop) pour essayer « Suivre l'horloge MIDI ».
 
 ## Tester la lecture HAP
 

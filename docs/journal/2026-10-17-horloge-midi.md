@@ -25,3 +25,4 @@
 ## Problèmes et points ouverts
 
 - À essayer avec un vrai logiciel qui envoie l'horloge (Ableton Live, Traktor, rekordbox… : réglage « envoyer l'horloge MIDI » vers un port, par exemple le bus IAC de macOS).
+- Ticket 55 (même journée) : le pad virtuel envoie une horloge MIDI, pour l'essai sans logiciel de musique.

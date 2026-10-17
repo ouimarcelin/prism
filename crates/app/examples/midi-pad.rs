@@ -11,7 +11,8 @@
 //!
 //! Layout, on MIDI channel 1: 32 pads (notes 36 to 67, four rows of eight),
 //! 8 buttons (notes 68 to 75), 8 faders (CC 1 to 8) and a crossfader
-//! (CC 9). Keys `1` to `8` press the pads of the first row while held, so
+//! (CC 9). It also sends a MIDI clock at the tempo set, with Start and
+//! Stop. Keys `1` to `8` press the pads of the first row while held, so
 //! a learned clip can be launched without the mouse.
 
 use std::process::ExitCode;
@@ -35,6 +36,7 @@ fn main() -> ExitCode {
 mod pad {
     use std::error::Error;
     use std::process::ExitCode;
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
@@ -123,9 +125,69 @@ mod pad {
 
     /// The virtual ports and the controls.
     struct Controller {
-        output: MidiOutputConnection,
+        output: Arc<Mutex<MidiOutputConnection>>,
         _input: MidiInputConnection<()>,
         surface: Arc<Mutex<Surface>>,
+        clock: Clock,
+    }
+
+    /// A MIDI clock sent by a thread of its own: 24 pulses per beat.
+    struct Clock {
+        bpm: f32,
+        /// Tempo read by the thread, as the bits of an `f32`.
+        shared_bpm: Arc<AtomicU32>,
+        running: Arc<AtomicBool>,
+        thread: Option<std::thread::JoinHandle<()>>,
+    }
+
+    impl Clock {
+        fn new() -> Self {
+            Self {
+                bpm: 120.0,
+                shared_bpm: Arc::new(AtomicU32::new(120.0_f32.to_bits())),
+                running: Arc::new(AtomicBool::new(false)),
+                thread: None,
+            }
+        }
+
+        /// Sends Start, then pulses until stopped.
+        fn start(&mut self, output: &Arc<Mutex<MidiOutputConnection>>) {
+            self.stop(output);
+            if let Ok(mut output) = output.lock() {
+                let _ = output.send(&[0xFA]);
+            }
+            self.running.store(true, Ordering::Release);
+            let (output, running, bpm) = (
+                Arc::clone(output),
+                Arc::clone(&self.running),
+                Arc::clone(&self.shared_bpm),
+            );
+            self.thread = std::thread::Builder::new()
+                .name("midi-pad-clock".into())
+                .spawn(move || {
+                    let mut next = Instant::now();
+                    while running.load(Ordering::Acquire) {
+                        if let Ok(mut output) = output.lock() {
+                            let _ = output.send(&[0xF8]);
+                        }
+                        let bpm = f64::from(f32::from_bits(bpm.load(Ordering::Relaxed)));
+                        next += Duration::from_secs_f64(60.0 / (bpm.max(1.0) * 24.0));
+                        std::thread::sleep(next.saturating_duration_since(Instant::now()));
+                    }
+                })
+                .ok();
+        }
+
+        /// Sends Stop and ends the pulses.
+        fn stop(&mut self, output: &Arc<Mutex<MidiOutputConnection>>) {
+            self.running.store(false, Ordering::Release);
+            if let Some(thread) = self.thread.take() {
+                let _ = thread.join();
+                if let Ok(mut output) = output.lock() {
+                    let _ = output.send(&[0xFC]);
+                }
+            }
+        }
     }
 
     impl Controller {
@@ -147,15 +209,18 @@ mod pad {
                 )
                 .map_err(|error| error.to_string())?;
             Ok(Self {
-                output,
+                output: Arc::new(Mutex::new(output)),
                 _input: input,
                 surface,
+                clock: Clock::new(),
             })
         }
 
         fn send(&mut self, message: Option<[u8; 3]>) {
-            if let Some(message) = message {
-                let _ = self.output.send(&message);
+            if let Some(message) = message
+                && let Ok(mut output) = self.output.lock()
+            {
+                let _ = output.send(&message);
             }
         }
 
@@ -168,6 +233,23 @@ mod pad {
                     .unwrap_or_else(|error| error.into_inner());
                 ui.heading(format!("{PORT_NAME} – MIDI canal 1"));
                 ui.label("Dans Prism : Contrôle > Apprentissage MIDI, cliquer une commande, puis un pad ou un fader ici.");
+                ui.horizontal(|ui| {
+                    ui.label("Horloge MIDI");
+                    if ui
+                        .add(egui::DragValue::new(&mut self.clock.bpm).range(20.0..=300.0).speed(0.1).suffix(" BPM"))
+                        .changed()
+                    {
+                        self.clock
+                            .shared_bpm
+                            .store(self.clock.bpm.to_bits(), Ordering::Relaxed);
+                    }
+                    if ui.button("Start").on_hover_text("Envoie Start puis 24 impulsions par temps ; dans Prism : Contrôle > Suivre l'horloge MIDI").clicked() {
+                        self.clock.start(&self.output);
+                    }
+                    if ui.button("Stop").clicked() {
+                        self.clock.stop(&self.output);
+                    }
+                });
                 ui.add_space(8.0);
 
                 // Keys 1 to 8 hold the pads of the first row.
@@ -296,7 +378,7 @@ mod pad {
                 event_loop.create_window(
                     Window::default_attributes()
                         .with_title("Prism – pad MIDI virtuel")
-                        .with_inner_size(LogicalSize::new(600.0, 640.0)),
+                        .with_inner_size(LogicalSize::new(600.0, 680.0)),
                 )?,
             );
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
