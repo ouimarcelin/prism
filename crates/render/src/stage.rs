@@ -15,6 +15,8 @@ pub struct SliceVertex {
     pub position: [f32; 2],
     /// Position in the composition times `q`, then `q`.
     pub source: [f32; 3],
+    /// Position in the slice (fractions across and down) times `q`.
+    pub local: [f32; 2],
 }
 
 /// Weights making a quad's texture follow its perspective: for each corner,
@@ -58,26 +60,28 @@ const STEPS: (usize, usize) = (32, 256);
 
 /// The triangles drawing `slice`: two for a quad in perspective, a fine
 /// mesh following its warp grid when it has one.
-pub fn slice_vertices(slice: &Slice) -> Vec<SliceVertex> {
+/// `aspect` is the composition's width over its height.
+pub fn slice_vertices(slice: &Slice, aspect: f32) -> Vec<SliceVertex> {
     match &slice.warp {
-        Some(warp) if warp.is_valid() => warp_vertices(slice, warp),
-        _ => quad_vertices(slice).to_vec(),
+        Some(warp) if warp.is_valid() => warp_vertices(slice, warp, aspect),
+        _ => quad_vertices(slice, aspect).to_vec(),
     }
 }
 
-fn warp_vertices(slice: &Slice, warp: &prism_core::Warp) -> Vec<SliceVertex> {
+fn warp_vertices(slice: &Slice, warp: &prism_core::Warp, aspect: f32) -> Vec<SliceVertex> {
     let (columns, rows) = warp.cells();
     let steps = |cells: u8| (usize::from(cells) * STEPS_PER_CELL).clamp(STEPS.0, STEPS.1);
     let (across, down) = (steps(columns), steps(rows));
-    let input = slice.input;
     let grid: Vec<SliceVertex> = (0..=down)
         .flat_map(|row| {
             (0..=across).map(move |column| {
                 let (u, v) = (column as f32 / across as f32, row as f32 / down as f32);
                 let position = warp.evaluate(u, v);
+                let source = slice.source(u, v, aspect);
                 SliceVertex {
                     position: [position.x, position.y],
-                    source: [input.x + u * input.width, input.y + v * input.height, 1.0],
+                    source: [source.x, source.y, 1.0],
+                    local: [u, v],
                 }
             })
         })
@@ -98,17 +102,19 @@ fn warp_vertices(slice: &Slice, warp: &prism_core::Warp) -> Vec<SliceVertex> {
     vertices
 }
 
-fn quad_vertices(slice: &Slice) -> [SliceVertex; 6] {
+fn quad_vertices(slice: &Slice, aspect: f32) -> [SliceVertex; 6] {
     let corners = slice.output.0;
-    let sources = slice.input.corners();
+    let locals = prism_core::Area::FULL.corners();
     let weights = perspective_weights(&corners);
-    let vertex = |index: usize| SliceVertex {
-        position: [corners[index].x, corners[index].y],
-        source: [
-            sources[index].x * weights[index],
-            sources[index].y * weights[index],
-            weights[index],
-        ],
+    let vertex = |index: usize| {
+        let local = locals[index];
+        let source = slice.source(local.x, local.y, aspect);
+        let weight = weights[index];
+        SliceVertex {
+            position: [corners[index].x, corners[index].y],
+            source: [source.x * weight, source.y * weight, weight],
+            local: [local.x * weight, local.y * weight],
+        }
     };
     [0, 1, 2, 0, 2, 3].map(vertex)
 }
@@ -189,7 +195,11 @@ impl StageRenderer {
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: size_of::<SliceVertex>() as u64,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x3],
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x2,
+                        1 => Float32x3,
+                        2 => Float32x2
+                    ],
                 })],
             },
             fragment: Some(wgpu::FragmentState {
@@ -236,8 +246,10 @@ impl StageRenderer {
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
         program: &wgpu::TextureView,
+        program_size: (u32, u32),
         targets: &[ScreenTarget<'_>],
     ) {
+        let aspect = program_size.0 as f32 / program_size.1.max(1) as f32;
         let mut vertices = Vec::new();
         let mut masks: Vec<u8> = Vec::new();
         let mut points: Vec<u8> = vec![0; 8];
@@ -245,13 +257,20 @@ impl StageRenderer {
         for target in targets {
             let (width, height) = target.screen.size();
             let mut screen_draws = Vec::new();
+            let flip = target.screen.flip;
             for slice in target.screen.slices.iter().filter(|slice| slice.enabled) {
                 let start = vertices.len() as u32;
-                vertices.extend(slice_vertices(slice));
+                // A mirrored screen mirrors everything drawn on it.
+                vertices.extend(slice_vertices(slice, aspect).into_iter().map(|mut vertex| {
+                    let position = flip.apply(Point::new(vertex.position[0], vertex.position[1]));
+                    vertex.position = [position.x, position.y];
+                    vertex
+                }));
                 let index = (masks.len() / SLICE_INFO_BYTES) as u32;
                 let first = (points.len() / 8) as u32;
                 let mask = slice.mask.as_ref().filter(|mask| mask.is_valid());
                 for point in mask.iter().flat_map(|mask| &mask.points) {
+                    let point = flip.apply(*point);
                     points.extend((point.x * width as f32).to_le_bytes());
                     points.extend((point.y * height as f32).to_le_bytes());
                 }
@@ -267,6 +286,7 @@ impl StageRenderer {
                     .position
                     .iter()
                     .chain(&vertex.source)
+                    .chain(&vertex.local)
                     .flat_map(|value| value.to_le_bytes())
             })
             .collect();

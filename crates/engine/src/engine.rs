@@ -865,6 +865,10 @@ impl EngineState {
             &gpu.queue,
             encoder,
             &self.program.view,
+            (
+                self.program.resolution.width,
+                self.program.resolution.height,
+            ),
             &targets,
         );
         self.draw_simulation(gpu, encoder);
