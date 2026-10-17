@@ -113,6 +113,19 @@ fn quad_vertices(slice: &Slice) -> [SliceVertex; 6] {
     [0, 1, 2, 0, 2, 3].map(vertex)
 }
 
+fn storage_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
 /// A screen to draw, and where.
 pub struct ScreenTarget<'a> {
     /// Its slices.
@@ -128,6 +141,9 @@ pub struct StageRenderer {
     sampler: wgpu::Sampler,
     /// Vertices of every screen of a frame, written once per frame.
     vertices: Option<wgpu::Buffer>,
+    /// Mask headers and mask points of a frame.
+    masks: Option<wgpu::Buffer>,
+    points: Option<wgpu::Buffer>,
     bind_group: Option<(wgpu::TextureView, wgpu::BindGroup)>,
 }
 
@@ -154,6 +170,8 @@ impl StageRenderer {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                storage_entry(2),
+                storage_entry(3),
             ],
         });
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -180,7 +198,8 @@ impl StageRenderer {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: WORKING_FORMAT,
-                    blend: None,
+                    // Masked slices are faded into what lies below.
+                    blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
             }),
@@ -203,12 +222,14 @@ impl StageRenderer {
             layout,
             sampler,
             vertices: None,
+            masks: None,
+            points: None,
             bind_group: None,
         }
     }
 
     /// Records the drawing of `targets`, each from `program`: black, then
-    /// its enabled slices, first to last.
+    /// its enabled slices, first to last, each inside its mask.
     pub fn encode(
         &mut self,
         device: &wgpu::Device,
@@ -218,13 +239,37 @@ impl StageRenderer {
         targets: &[ScreenTarget<'_>],
     ) {
         let mut vertices = Vec::new();
-        let mut ranges = Vec::with_capacity(targets.len());
+        // Mask 0: none.
+        let mut masks: Vec<u8> = mask_header(0, 0, false, 0.0).to_vec();
+        let mut points: Vec<u8> = vec![0; 8];
+        let mut draws: Vec<Vec<(std::ops::Range<u32>, u32)>> = Vec::with_capacity(targets.len());
         for target in targets {
-            let start = vertices.len() as u32;
+            let (width, height) = target.screen.size();
+            let mut screen_draws = Vec::new();
             for slice in target.screen.slices.iter().filter(|slice| slice.enabled) {
+                let start = vertices.len() as u32;
                 vertices.extend(slice_vertices(slice));
+                let mask = match &slice.mask {
+                    Some(mask) if mask.is_valid() => {
+                        let index = (masks.len() / MASK_HEADER_BYTES) as u32;
+                        let first = (points.len() / 8) as u32;
+                        for point in &mask.points {
+                            points.extend((point.x * width as f32).to_le_bytes());
+                            points.extend((point.y * height as f32).to_le_bytes());
+                        }
+                        masks.extend(mask_header(
+                            first,
+                            mask.points.len() as u32,
+                            mask.inverted,
+                            mask.feather,
+                        ));
+                        index
+                    }
+                    _ => 0,
+                };
+                screen_draws.push((start..vertices.len() as u32, mask));
             }
-            ranges.push(start..vertices.len() as u32);
+            draws.push(screen_draws);
         }
         let bytes: Vec<u8> = vertices
             .iter()
@@ -236,30 +281,40 @@ impl StageRenderer {
                     .flat_map(|value| value.to_le_bytes())
             })
             .collect();
-        let size = (bytes.len() as u64).max(4);
-        if self
-            .vertices
-            .as_ref()
-            .is_none_or(|buffer| buffer.size() < size)
-        {
-            self.vertices = Some(device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("stage vertices"),
-                size: size.next_power_of_two(),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
-        }
-        let Some(buffer) = &self.vertices else {
+        let mut rebound = grow(
+            device,
+            &mut self.vertices,
+            bytes.len(),
+            wgpu::BufferUsages::VERTEX,
+        );
+        rebound |= grow(
+            device,
+            &mut self.masks,
+            masks.len(),
+            wgpu::BufferUsages::STORAGE,
+        );
+        rebound |= grow(
+            device,
+            &mut self.points,
+            points.len(),
+            wgpu::BufferUsages::STORAGE,
+        );
+        let (Some(buffer), Some(mask_buffer), Some(point_buffer)) =
+            (&self.vertices, &self.masks, &self.points)
+        else {
             return;
         };
         if !bytes.is_empty() {
             queue.write_buffer(buffer, 0, &bytes);
         }
+        queue.write_buffer(mask_buffer, 0, &masks);
+        queue.write_buffer(point_buffer, 0, &points);
         // The program image changes only with the resolution.
-        if self
-            .bind_group
-            .as_ref()
-            .is_none_or(|(view, _)| view != program)
+        if rebound
+            || self
+                .bind_group
+                .as_ref()
+                .is_none_or(|(view, _)| view != program)
         {
             let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("stage"),
@@ -273,6 +328,14 @@ impl StageRenderer {
                         binding: 1,
                         resource: wgpu::BindingResource::Sampler(&self.sampler),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: mask_buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: point_buffer.as_entire_binding(),
+                    },
                 ],
             });
             self.bind_group = Some((program.clone(), bind_group));
@@ -280,7 +343,7 @@ impl StageRenderer {
         let Some((_, bind_group)) = &self.bind_group else {
             return;
         };
-        for (target, range) in targets.iter().zip(ranges) {
+        for (target, screen_draws) in targets.iter().zip(draws) {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("stage"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -297,15 +360,52 @@ impl StageRenderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            if range.is_empty() {
+            if screen_draws.is_empty() {
                 continue;
             }
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, bind_group, &[]);
             pass.set_vertex_buffer(0, buffer.slice(..));
-            pass.draw(range, 0..1);
+            // The instance index carries the mask of the slice.
+            for (range, mask) in screen_draws {
+                pass.draw(range, mask..mask + 1);
+            }
         }
     }
+}
+
+/// Bytes of a mask header in the shader: first point, point count,
+/// inverted, soft edge width in pixels.
+const MASK_HEADER_BYTES: usize = 16;
+
+fn mask_header(first: u32, count: u32, inverted: bool, feather: f32) -> [u8; MASK_HEADER_BYTES] {
+    let mut bytes = [0; MASK_HEADER_BYTES];
+    bytes[0..4].copy_from_slice(&first.to_le_bytes());
+    bytes[4..8].copy_from_slice(&count.to_le_bytes());
+    bytes[8..12].copy_from_slice(&u32::from(inverted).to_le_bytes());
+    bytes[12..16].copy_from_slice(&feather.max(0.0).to_le_bytes());
+    bytes
+}
+
+/// Makes `slot` a buffer of at least `size` bytes; returns whether it was
+/// replaced.
+fn grow(
+    device: &wgpu::Device,
+    slot: &mut Option<wgpu::Buffer>,
+    size: usize,
+    usage: wgpu::BufferUsages,
+) -> bool {
+    let size = (size as u64).max(16);
+    if slot.as_ref().is_some_and(|buffer| buffer.size() >= size) {
+        return false;
+    }
+    *slot = Some(device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("stage"),
+        size: size.next_power_of_two(),
+        usage: usage | wgpu::BufferUsages::COPY_DST,
+        mapped_at_creation: false,
+    }));
+    true
 }
 
 #[cfg(test)]

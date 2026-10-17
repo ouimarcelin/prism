@@ -7,7 +7,8 @@
 
 use egui::{Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use prism_core::{
-    Area, MAX_WARP_CELLS, Point, Quad, Resolution, ScreenId, Slice, SliceId, Warp, WarpCurve,
+    Area, MAX_MASK_POINTS, MAX_WARP_CELLS, Mask, Point, Quad, Resolution, ScreenId, Slice, SliceId,
+    Warp, WarpCurve,
 };
 
 use crate::panel::{Action, ControlPanel, Screen as Display};
@@ -19,6 +20,7 @@ const MIN_SIZE: f32 = 0.01;
 
 const SELECTED: Color32 = Color32::from_rgb(240, 170, 30);
 const OTHER: Color32 = Color32::from_rgb(90, 160, 230);
+const MASK: Color32 = Color32::from_rgb(220, 90, 200);
 
 /// What the stage window shows besides the document.
 pub struct StageFrame<'a> {
@@ -153,7 +155,7 @@ fn warp_lines(warp: &Warp) -> Vec<Vec<Point>> {
 /// Draws a corner handle and returns its drag response.
 fn handle(ui: &egui::Ui, id: egui::Id, center: Pos2, color: Color32) -> egui::Response {
     let rect = Rect::from_center_size(center, Vec2::splat(HANDLE * 2.5));
-    let response = ui.interact(rect, id, Sense::drag());
+    let response = ui.interact(rect, id, Sense::click_and_drag());
     let radius = if response.hovered() || response.dragged() {
         HANDLE * 1.3
     } else {
@@ -549,6 +551,36 @@ impl ControlPanel {
                 warp.curve = curve;
             }
         }
+        ui.separator();
+        let mut masked = slice.mask.is_some();
+        if ui
+            .checkbox(&mut masked, RichText::new("Masque").strong())
+            .on_hover_text("Un polygone sur l'écran : la découpe ne se montre qu'à l'intérieur")
+            .changed()
+        {
+            slice.mask = masked.then(|| Mask::inside(&outline(slice)));
+        }
+        if let Some(mask) = &mut slice.mask {
+            ui.checkbox(&mut mask.inverted, "Inversé")
+                .on_hover_text("La découpe se montre à l'extérieur du polygone");
+            ui.horizontal(|ui| {
+                ui.label("Bord adouci");
+                ui.add(egui::Slider::new(&mut mask.feather, 0.0..=200.0).suffix(" px"));
+            });
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        mask.points.len() < MAX_MASK_POINTS,
+                        egui::Button::new("+ Point"),
+                    )
+                    .on_hover_text("Un point au milieu du plus long côté")
+                    .clicked()
+                {
+                    mask.split_longest_edge();
+                }
+                ui.label(RichText::new("clic droit sur un point : le retirer").weak());
+            });
+        }
     }
 
     fn stage_views(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) {
@@ -701,6 +733,36 @@ impl ControlPanel {
             for point in slice.output.0.iter_mut().chain(warp_points) {
                 point.x += delta.x / output.width();
                 point.y += delta.y / output.height();
+            }
+        }
+
+        // Points of the mask: drag to move, right click to remove.
+        if let Some(mask) = &mut slice.mask {
+            let outline_points: Vec<Pos2> = mask
+                .points
+                .iter()
+                .map(|point| to_screen(output, *point))
+                .collect();
+            ui.painter().add(egui::Shape::closed_line(
+                outline_points,
+                Stroke::new(1.5, MASK),
+            ));
+            let mut removed = None;
+            let count = mask.points.len();
+            for (index, point) in mask.points.iter_mut().enumerate() {
+                let center = to_screen(output, *point);
+                let response = handle(ui, base.with(("mask", index)), center, MASK);
+                if response.dragged()
+                    && let Some(position) = response.interact_pointer_pos()
+                {
+                    *point = to_fraction(output, position);
+                }
+                if response.secondary_clicked() && count > 3 {
+                    removed = Some(index);
+                }
+            }
+            if let Some(index) = removed {
+                mask.points.remove(index);
             }
         }
 
