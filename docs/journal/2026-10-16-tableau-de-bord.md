@@ -32,4 +32,4 @@
 
 ## Archive
 
-- Transcription : à archiver en fin de session.
+- Transcription : `2026-10-17-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `40fde0c4b388ef6fbfa6e739844447f0d6cb2b1bfc9dda4f97f999cc1e0e58a6` (même session, archivée le 17 octobre après le ticket 25 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
