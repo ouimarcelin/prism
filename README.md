@@ -7,7 +7,7 @@ Logiciel open source de VJing et de projection mapping, écrit en Rust, avec ren
 
 ## État
 
-Phases 1 à 3 écrites et validées à la main (la phase 3 au pad MIDI virtuel) : lecture et mixage des clips, sortie plein écran sur plusieurs écrans, effets, générateurs, animation des réglages, tempo, son, contrôle MIDI, OSC et clavier, caméras, Syphon, NDI en option. Phase 4 écrite : écrans et découpes, déformation, masques, fondu des bords, transformations, simulation des projecteurs ; elle attend son test à la main.
+Phases 1 à 4 écrites et validées par l'observateur (phase 3 au pad MIDI virtuel, phase 4 par la simulation des projecteurs). Phase 5 écrite : pixel mapping DMX (Art-Net, sACN), réception DMX d'une console, timecode MIDI et audio (LTC), repères et clips calés sur le timecode ; elle attend son test à la main.
 Feuille de route : [`docs/SPEC.md`](docs/SPEC.md), section « Plan de développement ».
 
 | Phase | Contenu | Version |

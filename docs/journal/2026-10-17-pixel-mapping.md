@@ -27,3 +27,7 @@
 
 - Pas de luminaire réel pour l'essai ; à brancher sur un contrôleur de LED Art-Net.
 - Pas de correction gamma des LED ni de découverte des nœuds (ArtPoll).
+
+## Archive
+
+- Transcription : `2026-10-17-235242-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `ce64aa71f301f15dfc8e474b2a79a80f97de19d662c21815dfe3fba352006e6c` (même session, archivée après le ticket 62 ; dossier `~/Documents/prism-archives/sessions/`, hors du dépôt).
