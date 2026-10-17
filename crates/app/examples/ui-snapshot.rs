@@ -2,7 +2,7 @@
 //! layout of the interface.
 //!
 //! ```text
-//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator|learn]]
+//! cargo run -p prism-app --example ui-snapshot -- OUTPUT.png [WIDTH HEIGHT [generator|learn|stage]]
 //! ```
 //!
 //! The window shows a sample project: clips in the grid, the first one
@@ -103,7 +103,7 @@ fn sample() -> (Document, Slot, Slot, EngineStatus) {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(path) = args.first() else {
-        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator|learn]]");
+        eprintln!("usage: ui-snapshot OUTPUT.png [WIDTH HEIGHT [generator|learn|stage]]");
         return ExitCode::FAILURE;
     };
     let size = |index: usize, default: u32| {
@@ -120,7 +120,35 @@ fn main() -> ExitCode {
         }
     };
 
-    let (document, slot, generated, status) = sample();
+    let (mut document, slot, generated, status) = sample();
+    let show_stage = args.get(3).is_some_and(|arg| arg == "stage");
+    if show_stage {
+        // Two slices: the left and right halves, the right one tilted.
+        let stage = &mut document.composition_mut().stage;
+        let screen = stage
+            .add_screen("Projecteur 1", 1920, 1080)
+            .unwrap_or(prism_core::ScreenId(0));
+        if let Some(screen) = stage.screen_mut(screen) {
+            screen.display = Some("Intégré".into());
+            screen.slices[0].input.width = 0.5;
+            screen.slices[0].output.0[1].x = 0.5;
+            screen.slices[0].output.0[2].x = 0.5;
+        }
+        if let Some(slice) = stage.add_slice(screen, "Découpe 2")
+            && let Some(slice) = stage
+                .screen_mut(screen)
+                .and_then(|screen| screen.slice_mut(slice))
+        {
+            slice.input.x = 0.5;
+            slice.input.width = 0.5;
+            slice.output = prism_core::Quad([
+                prism_core::Point::new(0.55, 0.1),
+                prism_core::Point::new(0.95, 0.0),
+                prism_core::Point::new(1.0, 1.0),
+                prism_core::Point::new(0.5, 0.9),
+            ]);
+        }
+    }
     let mut panel = ControlPanel::new(document, Vec::new());
     let show_generator = args.get(3).is_some_and(|arg| arg == "generator");
     panel.set_midi_learn(args.get(3).is_some_and(|arg| arg == "learn"));
@@ -161,7 +189,16 @@ fn main() -> ExitCode {
     let mut output = None;
     for _ in 0..4 {
         let mut frame = ctx.run_ui(input(), |ui| {
-            panel.ui(ui, &info);
+            if show_stage {
+                let frame = prism_ui::StageFrame {
+                    composition: None,
+                    screens: &[],
+                    displays: &screens,
+                };
+                panel.stage_ui(ui, &frame);
+            } else {
+                panel.ui(ui, &info);
+            }
         });
         for (id, deltas) in &frame.textures_delta.set {
             for delta in deltas {

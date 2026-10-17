@@ -40,7 +40,7 @@ pub trait Output: Send {
 /// of the stage.
 pub struct OutputImages<'a> {
     program: &'a ProgramOutput,
-    screens: &'a [(ScreenId, ProgramOutput)],
+    screens: &'a [(ScreenId, Arc<ProgramOutput>)],
 }
 
 impl<'a> OutputImages<'a> {
@@ -54,7 +54,7 @@ impl<'a> OutputImages<'a> {
         self.screens
             .iter()
             .find(|(screen, _)| *screen == id)
-            .map(|(_, image)| image)
+            .map(|(_, image)| &**image)
     }
 }
 
@@ -327,7 +327,7 @@ pub struct EngineState {
     transparent: wgpu::TextureView,
     program: Arc<ProgramOutput>,
     /// Images of the screens of the stage, drawn after the program.
-    screens: Vec<(ScreenId, ProgramOutput)>,
+    screens: Vec<(ScreenId, Arc<ProgramOutput>)>,
     stage_renderer: StageRenderer,
     outputs: Vec<(u64, Box<dyn Output>)>,
     random: Random,
@@ -833,7 +833,10 @@ impl EngineState {
                 let (width, height) = screen.size();
                 self.screens.push((
                     screen.id(),
-                    ProgramOutput::new(&gpu.device, Resolution { width, height }),
+                    Arc::new(ProgramOutput::new(
+                        &gpu.device,
+                        Resolution { width, height },
+                    )),
                 ));
             }
         }
@@ -862,6 +865,11 @@ impl EngineState {
     /// Number of screen images drawn after each frame.
     pub fn screen_count(&self) -> usize {
         self.screens.len()
+    }
+
+    /// Images of the screens of the stage, drawn after each frame.
+    pub fn screen_images(&self) -> Vec<(ScreenId, Arc<ProgramOutput>)> {
+        self.screens.clone()
     }
 }
 
@@ -985,6 +993,7 @@ fn milliseconds(duration: Duration) -> f64 {
 struct Shared {
     status: Mutex<EngineStatus>,
     program: Mutex<Arc<ProgramOutput>>,
+    screens: Mutex<Vec<(ScreenId, Arc<ProgramOutput>)>>,
 }
 
 /// Handle on the render thread.
@@ -1007,6 +1016,7 @@ impl Engine {
         let shared = Arc::new(Shared {
             status: Mutex::new(state.status()),
             program: Mutex::new(state.program()),
+            screens: Mutex::new(Vec::new()),
         });
         let (commands, receiver) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
@@ -1042,6 +1052,16 @@ impl Engine {
     pub fn status(&self) -> EngineStatus {
         self.shared
             .status
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Images of the screens of the stage, for previews. Replaced when a
+    /// screen is added, removed or resized.
+    pub fn screen_images(&self) -> Vec<(ScreenId, Arc<ProgramOutput>)> {
+        self.shared
+            .screens
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -1118,5 +1138,18 @@ fn run(mut state: EngineState, commands: Receiver<Command>, shared: Arc<Shared>)
         {
             *program = state.program();
         }
+        if let Ok(mut screens) = shared.screens.try_lock()
+            && !same_images(&screens, &state.screens)
+        {
+            *screens = state.screen_images();
+        }
     }
+}
+
+/// Whether two lists hold the same images.
+fn same_images(a: &[(ScreenId, Arc<ProgramOutput>)], b: &[(ScreenId, Arc<ProgramOutput>)]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b)
+            .all(|((a_id, a), (b_id, b))| a_id == b_id && Arc::ptr_eq(a, b))
 }

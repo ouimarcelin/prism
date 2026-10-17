@@ -20,11 +20,13 @@ mod panel;
 mod preferences;
 mod presets;
 mod shortcuts;
+mod stage;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
 pub use panel::{Action, AudioStatus, ControlPanel, FrameInfo, MidiStatus, Screen};
 pub use preferences::{MAX_RECENT, Preferences};
 pub use shortcuts::{SHORTCUT_HELP, Shortcut};
+pub use stage::StageFrame;
 
 /// Message of an error and of all its causes.
 pub(crate) fn describe(error: &dyn std::error::Error) -> String {

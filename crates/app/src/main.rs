@@ -21,6 +21,7 @@ use prism_output::{Fit, OutputShared, OutputSurface};
 use prism_render::{Gpu, wgpu};
 use prism_ui::{
     Action, AudioStatus, ControlPanel, FrameInfo, MidiStatus, Preferences, Screen, Shortcut,
+    StageFrame,
 };
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -346,6 +347,8 @@ struct Running {
     engine: Engine,
     gpu: Arc<Gpu>,
     control: ControlWindow,
+    /// The stage editor window, while open.
+    stage: Option<ControlWindow>,
     /// Full-screen outputs, at most one per screen.
     outputs: Vec<OutputWindow>,
     next_output: u64,
@@ -404,6 +407,7 @@ impl Running {
             engine,
             gpu,
             control,
+            stage: None,
             outputs: Vec::new(),
             next_output: 1,
             monitors: Vec::new(),
@@ -620,6 +624,25 @@ impl Running {
         Ok(())
     }
 
+    /// Opens the stage editor window, or brings it forward.
+    fn open_stage(&mut self, event_loop: &ActiveEventLoop) -> Result<(), Box<dyn Error>> {
+        if let Some(stage) = &self.stage {
+            stage.window.focus_window();
+            return Ok(());
+        }
+        let window = Arc::new(
+            event_loop.create_window(
+                Window::default_attributes()
+                    .with_title("Prism – sortie avancée")
+                    .with_inner_size(LogicalSize::new(1280.0, 800.0))
+                    .with_min_inner_size(LogicalSize::new(800.0, 500.0)),
+            )?,
+        );
+        let surface = self.gpu.instance.create_surface(Arc::clone(&window))?;
+        self.stage = Some(ControlWindow::new(&self.gpu, window, surface)?);
+        Ok(())
+    }
+
     /// Closes the output on `screen`, if one is open there.
     fn close_output(&mut self, screen: usize) {
         let Some(index) = self
@@ -686,6 +709,7 @@ impl App {
                     running.close_outputs();
                     Ok(())
                 }
+                Action::OpenStage => running.open_stage(event_loop),
                 Action::Engine(command) => {
                     running.engine.send(command);
                     Ok(())
@@ -770,10 +794,10 @@ impl App {
         let mut actions = Vec::new();
         running
             .control
-            .draw(&running.gpu, Some(program), |ui, preview| {
+            .draw(&running.gpu, &[program], |ui, textures| {
                 let frame = FrameInfo {
                     status: &status,
-                    preview,
+                    preview: textures.first().copied(),
                     screens: &screens,
                     output_screens: &output_screens,
                     audio: audio.clone(),
@@ -784,6 +808,14 @@ impl App {
                 actions.extend(panel.ui(ui, &frame));
             });
         self.handle(event_loop, actions);
+        // The stage editor shows live images: drawn with the control window.
+        if let Some(stage) = self
+            .running
+            .as_ref()
+            .and_then(|running| running.stage.as_ref())
+        {
+            stage.window.request_redraw();
+        }
         // Playheads and the preview move: keep drawing, at the screen rate
         // while the user acts or something animates, at 30 per second when
         // idle.
@@ -795,6 +827,36 @@ impl App {
         } else {
             event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + IDLE_FRAME));
         }
+    }
+
+    fn redraw_stage(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(running) = &mut self.running else {
+            return;
+        };
+        let Some(stage) = &mut running.stage else {
+            return;
+        };
+        let screens = running.engine.screen_images();
+        let images: Vec<_> = std::iter::once(running.engine.program())
+            .chain(screens.iter().map(|(_, image)| Arc::clone(image)))
+            .collect();
+        let displays = running.screens.clone();
+        let panel = &mut self.panel;
+        let mut actions = Vec::new();
+        stage.draw(&running.gpu, &images, |ui, textures| {
+            let screen_textures: Vec<_> = screens
+                .iter()
+                .zip(textures.iter().skip(1))
+                .map(|((id, _), (texture, _))| (*id, *texture))
+                .collect();
+            let frame = StageFrame {
+                composition: textures.first().copied(),
+                screens: &screen_textures,
+                displays: &displays,
+            };
+            actions.extend(panel.stage_ui(ui, &frame));
+        });
+        self.handle(event_loop, actions);
     }
 
     fn output_key(&mut self, event_loop: &ActiveEventLoop, key: &Key) {
@@ -875,6 +937,17 @@ impl ApplicationHandler<UserEvent> for App {
         let Some(running) = &mut self.running else {
             return;
         };
+        if let Some(stage) = &mut running.stage
+            && stage.window.id() == window_id
+        {
+            stage.on_event(&event);
+            match event {
+                WindowEvent::CloseRequested => running.stage = None,
+                WindowEvent::RedrawRequested => self.redraw_stage(event_loop),
+                _ => stage.window.request_redraw(),
+            }
+            return;
+        }
         if running.control.window.id() == window_id {
             let repaint = running.control.on_event(&event);
             if !matches!(event, WindowEvent::RedrawRequested) {

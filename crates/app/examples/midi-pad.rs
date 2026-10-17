@@ -335,7 +335,7 @@ mod pad {
                 WindowEvent::CloseRequested => event_loop.exit(),
                 WindowEvent::RedrawRequested => {
                     let controller = &mut self.controller;
-                    window.draw(gpu, None, |ui, _| {
+                    window.draw(gpu, &[], |ui, _| {
                         egui::Frame::central_panel(ui.style()).show(ui, |ui| controller.ui(ui));
                     });
                 }
