@@ -51,6 +51,31 @@ pub fn syphon_servers() -> Vec<(String, String)> {
     }
 }
 
+/// The NDI® sources of the network, by full name; empty when Prism is
+/// built without NDI or the NDI library is missing.
+pub fn ndi_sources() -> Vec<String> {
+    #[cfg(all(target_os = "macos", feature = "ndi"))]
+    {
+        prism_io_video::ndi_sources()
+    }
+    #[cfg(not(all(target_os = "macos", feature = "ndi")))]
+    {
+        Vec::new()
+    }
+}
+
+/// The version of the NDI library in use, or why NDI cannot be used.
+pub fn ndi_status() -> Result<String, String> {
+    #[cfg(all(target_os = "macos", feature = "ndi"))]
+    {
+        prism_io_video::ndi_version()
+    }
+    #[cfg(not(all(target_os = "macos", feature = "ndi")))]
+    {
+        Err("Prism compilé sans NDI (option « ndi »)".into())
+    }
+}
+
 enum State {
     Opening(Receiver<Result<Device, String>>),
     Ready(Device),

@@ -8,6 +8,11 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+# NDI® input and output (ADR 0026), through the NDI library the user
+# installs. Off by default.
+ndi = ["prism-io-video/ndi"]
+
 [dependencies]
 prism-audio = { path = "../audio" }
 prism-clock = { path = "../clock" }
