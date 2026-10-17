@@ -856,6 +856,16 @@ impl App {
         );
         self.midi_disabled_seen = self.panel.preferences().midi_disabled.clone();
         self.midi_feedback_seen = self.panel.preferences().midi_feedback;
+        // The MIDI clock drives the tempo when followed.
+        let clock = self.midi.inputs.clock();
+        self.midi.status.clock_bpm = clock.bpm;
+        let clock_actions = self.panel.follow_clock(clock);
+        if !clock_actions.is_empty() {
+            self.handle(event_loop, clock_actions);
+        }
+        let Some(running) = &mut self.running else {
+            return;
+        };
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();

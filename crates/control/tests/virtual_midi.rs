@@ -67,3 +67,29 @@ fn a_virtual_controller_is_heard_and_answered() {
     assert!(wait_for(|| !received.lock().unwrap().is_empty()));
     assert_eq!(received.lock().unwrap()[0], [0x90, 36, 127]);
 }
+
+#[test]
+fn a_midi_clock_gives_the_tempo() {
+    let name = format!("Prism clock {}", std::process::id());
+    let Ok(output) = MidiOutput::new("prism-test") else {
+        eprintln!("no MIDI on this system: skipped");
+        return;
+    };
+    let mut sender = output.create_virtual(&name).unwrap();
+    assert!(wait_for(|| midi_ports().contains(&name)));
+    let (messages, _) = mpsc::channel();
+    let mut inputs = MidiInputs::new(messages, Arc::new(|| {}));
+    assert!(inputs.sync(|port| port == name).is_empty());
+    assert_eq!(inputs.clock().bpm, None);
+    sender.send(&[0xFA]).unwrap();
+    // 125 BPM: a pulse every 20 ms.
+    let start = Instant::now();
+    for pulse in 1..=60u32 {
+        sender.send(&[0xF8]).unwrap();
+        let next = start + Duration::from_millis(20) * pulse;
+        std::thread::sleep(next.saturating_duration_since(Instant::now()));
+    }
+    assert!(wait_for(|| inputs.clock().starts == 1));
+    let bpm = inputs.clock().bpm.unwrap();
+    assert!((bpm - 125.0).abs() < 3.0, "{bpm}");
+}
