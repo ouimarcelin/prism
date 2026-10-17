@@ -722,6 +722,10 @@ impl ControlPanel {
             ui.add(egui::Slider::new(&mut blend.gamma, 1.0..=3.0))
                 .on_hover_text("Gamma des projecteurs (2,2 en général) : corrige la zone de recouvrement trop sombre ou trop claire");
             ui.end_row();
+            ui.label("Noir");
+            ui.add(egui::Slider::new(&mut blend.black, 0.0..=0.2).max_decimals(3))
+                .on_hover_text("Relève le noir hors des zones de fondu, pour qu'il égale le noir plus clair du recouvrement (deux projecteurs) ; régler sur une image noire");
+            ui.end_row();
         });
         ui.separator();
         let mut masked = slice.mask.is_some();

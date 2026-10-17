@@ -15,6 +15,8 @@ struct Slice {
     edges: vec4<f32>,
     // Fade power, gamma, test pattern (1 or 0), slice index.
     curve: vec4<f32>,
+    // Black level added outside the fades, then unused.
+    black: vec4<f32>,
 }
 
 @group(0) @binding(2) var<storage, read> slices: array<Slice>;
@@ -65,6 +67,26 @@ fn fade(t: f32, power: f32, gamma: f32) -> f32 {
         light = 1.0 - 0.5 * pow(2.0 * (1.0 - x), power);
     }
     return pow(light, 1.0 / gamma);
+}
+
+// How far `local` lies from every fade: 1 outside them, 0 inside one
+// (with a short ramp at its inner edge, so the black level has no step).
+fn outside_fades(slice: Slice, local: vec2<f32>) -> f32 {
+    var outside = 1.0;
+    let ramp = 0.02;
+    if slice.edges.x > 0.0 {
+        outside *= smoothstep(slice.edges.x - ramp, slice.edges.x, local.x);
+    }
+    if slice.edges.y > 0.0 {
+        outside *= smoothstep(slice.edges.y - ramp, slice.edges.y, 1.0 - local.x);
+    }
+    if slice.edges.z > 0.0 {
+        outside *= smoothstep(slice.edges.z - ramp, slice.edges.z, local.y);
+    }
+    if slice.edges.w > 0.0 {
+        outside *= smoothstep(slice.edges.w - ramp, slice.edges.w, 1.0 - local.y);
+    }
+    return outside;
 }
 
 fn edge_fade(slice: Slice, local: vec2<f32>) -> f32 {
@@ -118,5 +140,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let image = textureSample(program, program_sampler, uv);
     let test = pattern(local, slice.curve.w);
     let color = select(image, test, slice.curve.z > 0.5);
-    return color * edge_fade(slice, local) * coverage(in.position.xy);
+    // The black level lifts the dark parts outside the overlaps only, and
+    // less where the image is already bright.
+    let lift = slice.black.x * outside_fades(slice, local);
+    let faded = color * edge_fade(slice, local);
+    let lifted = vec4<f32>(faded.rgb + lift * (1.0 - faded.rgb), faded.a);
+    return lifted * coverage(in.position.xy);
 }

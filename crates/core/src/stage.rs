@@ -161,6 +161,9 @@ pub struct EdgeBlend {
     /// Gamma of the projectors, to fade in light rather than in pixel
     /// values.
     pub gamma: f32,
+    /// Pixel value added outside the fades, so the black of the image
+    /// matches the overlap, where two projectors' black adds up.
+    pub black: f32,
 }
 
 impl Default for EdgeBlend {
@@ -172,6 +175,7 @@ impl Default for EdgeBlend {
             bottom: 0.0,
             power: 2.0,
             gamma: 2.2,
+            black: 0.0,
         }
     }
 }
