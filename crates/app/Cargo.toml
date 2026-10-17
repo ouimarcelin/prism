@@ -21,6 +21,7 @@ ndi = ["prism-engine/ndi", "prism-io-video/ndi"]
 egui = "0.36.2"
 egui-wgpu = "0.36.2"
 egui-winit = "0.36.2"
+png = "0.18.1"
 pollster = "1.0.1"
 prism-audio = { path = "../audio" }
 prism-control = { path = "../control" }
@@ -30,13 +31,11 @@ prism-io-video = { path = "../io-video" }
 prism-output = { path = "../output" }
 prism-render = { path = "../render" }
 prism-ui = { path = "../ui" }
+softbuffer = { version = "0.4.8", default-features = false }
 winit = "0.30.13"
 
 [lints]
 workspace = true
-
-[dev-dependencies]
-png = "0.18.1"
 
 [target.'cfg(unix)'.dev-dependencies]
 midir = "0.11.1"
