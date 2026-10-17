@@ -132,6 +132,8 @@ pub struct Playback {
     pub out_point: Option<f64>,
     /// Cue points, each one set or empty.
     pub cue_points: [Option<f64>; CUE_POINT_COUNT],
+    /// Volume of the clip's sound; the opacity of its layer scales it too.
+    pub volume: Unit,
 }
 
 impl Default for Playback {
@@ -143,6 +145,7 @@ impl Default for Playback {
             in_point: 0.0,
             out_point: None,
             cue_points: [None; CUE_POINT_COUNT],
+            volume: Unit::ONE,
         }
     }
 }

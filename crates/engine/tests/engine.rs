@@ -806,3 +806,49 @@ fn settings_follow_the_bands_of_the_sound() {
     let loud = brightness(&mut driver);
     assert!((loud - 0.75).abs() < 0.01, "{loud}");
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn clips_sound_through_the_mixer_at_their_volume() {
+    let Some(gpu) = gpu() else { return };
+    // A quarter of a second: 440 Hz on the left, 1 kHz on the right.
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../media/tests/fixtures/tone-440-1000.mov");
+    let (mut comp, slot) = composition_with(Clip::from_file(path));
+    comp.trigger_clip(slot).unwrap();
+    let (mut mixer, sender) = prism_audio::Mixer::new();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    driver.state.apply(Command::SetSound(Some(sender)));
+    driver.settle(|status| status.state == ClipState::Playing);
+    let loudness = |mixer: &mut prism_audio::Mixer| {
+        let mut output = vec![0.0f32; 2 * 4800];
+        mixer.render(&mut output, 2, 48_000, 1.0);
+        output.iter().map(|sample| sample.abs()).sum::<f32>() / output.len() as f32
+    };
+    // The sound is decoded on a thread of its own: wait for its voice.
+    let limit = Instant::now() + Duration::from_secs(10);
+    while loudness(&mut mixer) < 0.01 {
+        assert!(
+            Instant::now() < limit,
+            "no sound: {} voices, {:?}",
+            mixer.voice_count(),
+            driver.layer()
+        );
+        driver.tick();
+        thread::sleep(Duration::from_millis(5));
+    }
+
+    // Volume at zero: silence.
+    comp.clip_mut(slot).unwrap().playback.volume = prism_core::Unit::ZERO;
+    driver.state.set_composition(comp.clone());
+    driver.tick();
+    loudness(&mut mixer);
+    assert!(loudness(&mut mixer) < 1e-4);
+
+    // Stopped: the voice fades out and leaves.
+    comp.stop_all();
+    driver.state.set_composition(comp);
+    driver.tick();
+    loudness(&mut mixer);
+    assert_eq!(mixer.voice_count(), 0);
+}
