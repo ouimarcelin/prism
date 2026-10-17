@@ -423,3 +423,41 @@ fn the_midi_clock_drives_the_tempo_when_followed() {
     // The tempo is not an edit to undo.
     assert!(!panel.document().can_undo());
 }
+
+/// The criterion of phase 5, second half: a clip starts at the right
+/// timecode.
+#[test]
+fn a_cue_starts_its_column_when_the_timecode_passes_it() {
+    use prism_clock::{Timecode, TimecodeRate};
+    let (mut document, slot) = sample_document();
+    document.composition_mut().stop_all();
+    let at = |text| Timecode::parse(text, TimecodeRate::Fps25).unwrap();
+    document.composition_mut().timeline = prism_core::Timeline {
+        enabled: true,
+        cues: vec![prism_core::Cue {
+            at: at("01:00:05:00").seconds(),
+            target: prism_core::CueTarget::Column {
+                column: slot.column,
+            },
+        }],
+    };
+    let mut panel = ControlPanel::new(document, Vec::new());
+    let playing = |panel: &ControlPanel| {
+        panel
+            .document()
+            .composition()
+            .active_clip(slot.layer)
+            .is_some()
+    };
+    panel.follow_timecode(Some(at("01:00:04:20")));
+    panel.follow_timecode(Some(at("01:00:04:24")));
+    assert!(!playing(&panel), "one frame early");
+    panel.follow_timecode(Some(at("01:00:05:00")));
+    assert!(playing(&panel), "on time");
+    // A jump back over the cue does not launch it again.
+    panel.shortcut(Shortcut::StopAll);
+    panel.follow_timecode(Some(at("01:00:04:00")));
+    panel.follow_timecode(None);
+    panel.follow_timecode(Some(at("01:00:06:00")));
+    assert!(!playing(&panel));
+}

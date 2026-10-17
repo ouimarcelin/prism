@@ -22,6 +22,7 @@ mod preferences;
 mod presets;
 mod shortcuts;
 mod stage;
+mod timecode;
 
 pub use document::{Document, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, is_image, is_video};
 pub use panel::{Action, AudioStatus, ControlPanel, FrameInfo, MidiStatus, Screen};
