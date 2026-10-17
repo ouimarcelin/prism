@@ -152,6 +152,16 @@ fn main() -> ExitCode {
             warp.curve = prism_core::WarpCurve::Smooth;
             warp.points_mut()[5].x += 0.05;
             slice.warp = Some(warp);
+            let mut mask = prism_core::Mask::inside(&prism_core::Quad::FULL);
+            mask.points = vec![
+                prism_core::Point::new(0.6, 0.2),
+                prism_core::Point::new(0.9, 0.15),
+                prism_core::Point::new(0.92, 0.85),
+                prism_core::Point::new(0.75, 0.95),
+                prism_core::Point::new(0.58, 0.8),
+            ];
+            mask.feather = 20.0;
+            slice.mask = Some(mask);
         }
     }
     let mut panel = ControlPanel::new(document, Vec::new());
