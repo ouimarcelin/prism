@@ -9,7 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ModelError;
+use crate::{ModelError, Warp};
 
 /// Largest width or height of a screen, in pixels.
 pub const MAX_SCREEN_SIZE: u32 = 16_384;
@@ -122,6 +122,9 @@ pub struct Slice {
     /// Where it lands on the screen.
     #[serde(default)]
     pub output: Quad,
+    /// Grid warping the slice; it then replaces [`Slice::output`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warp: Option<Warp>,
 }
 
 fn enabled() -> bool {
@@ -214,6 +217,13 @@ impl<'de> Deserialize<'de> for Stage {
         let mut highest = None;
         for screen in &repr.screens {
             check_size(screen.width, screen.height).map_err(serde::de::Error::custom)?;
+            if screen
+                .slices
+                .iter()
+                .any(|slice| slice.warp.as_ref().is_some_and(|warp| !warp.is_valid()))
+            {
+                return Err(serde::de::Error::custom("warp grid of the wrong size"));
+            }
             let slice_ids = screen.slices.iter().map(|slice| slice.id.0);
             for id in std::iter::once(screen.id.0).chain(slice_ids) {
                 if !ids.insert(id) {
@@ -298,6 +308,7 @@ impl Stage {
             enabled: true,
             input: Area::FULL,
             output: Quad::FULL,
+            warp: None,
         };
         self.screen_mut(screen)?.slices.push(slice);
         Some(id)

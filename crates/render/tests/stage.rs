@@ -145,3 +145,45 @@ fn a_slice_in_perspective_keeps_the_middle_of_its_image_where_the_diagonals_cros
     // Outside the trapezoid, at the top corners: black.
     assert_eq!(at(2, 2)[..3], [0.0, 0.0, 0.0]);
 }
+
+#[test]
+fn a_warp_grid_follows_its_quad_and_moves_the_image_with_its_points() {
+    let Some(gpu) = gpu() else { return };
+    let mut stage = Stage::default();
+    let id = stage.add_screen("Écran", 64, 64).unwrap();
+    let trapezoid = Quad([
+        Point::new(0.25, 0.0),
+        Point::new(0.75, 0.0),
+        Point::new(1.0, 1.0),
+        Point::new(0.0, 1.0),
+    ]);
+    let slice = &mut stage.screen_mut(id).unwrap().slices[0];
+    slice.output = trapezoid;
+    slice.warp = Some(prism_core::Warp::from_quad(&trapezoid, 4, 4));
+    // As without the warp: the middle row a third of the way down.
+    let (pixels, width) = draw(&gpu, &stage, id, true);
+    let at = |pixels: &[[f32; 4]], x: u32, y: u32| pixels[(y * width + x) as usize];
+    assert!(close(at(&pixels, 32, 19), RED), "{:?}", at(&pixels, 32, 19));
+    assert!(
+        close(at(&pixels, 32, 24), GREEN),
+        "{:?}",
+        at(&pixels, 32, 24)
+    );
+
+    // The whole grid moved down by a quarter: so is the image.
+    let warp = stage.screen_mut(id).unwrap().slices[0]
+        .warp
+        .as_mut()
+        .unwrap();
+    for point in warp.points_mut() {
+        point.y += 0.25;
+    }
+    let (pixels, _) = draw(&gpu, &stage, id, true);
+    assert!(close(at(&pixels, 32, 35), RED), "{:?}", at(&pixels, 32, 35));
+    assert!(
+        close(at(&pixels, 32, 40), GREEN),
+        "{:?}",
+        at(&pixels, 32, 40)
+    );
+    assert_eq!(at(&pixels, 32, 8)[..3], [0.0, 0.0, 0.0]);
+}
