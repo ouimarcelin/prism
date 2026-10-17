@@ -40,6 +40,8 @@ pub struct Preferences {
     /// Whether MIDI controllers are sent the state of their controls
     /// (lit pads, faders).
     pub midi_feedback: bool,
+    /// Whether the tempo follows the MIDI clock received on the inputs.
+    pub midi_clock: bool,
     /// Whether the program image is published over Syphon, for other
     /// applications of the Mac.
     pub syphon_output: bool,
@@ -71,6 +73,7 @@ impl Default for Preferences {
             clip_sound_volume: 1.0,
             midi_disabled: Vec::new(),
             midi_feedback: true,
+            midi_clock: false,
             syphon_output: false,
             ndi_output: false,
             osc_input: false,

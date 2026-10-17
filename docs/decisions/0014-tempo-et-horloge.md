@@ -25,3 +25,4 @@ La phase 2 cale des effets et des animations sur le tempo. Son critère de valid
 
 - Le tempo vient de l'horloge du Mac. Une musique jouée par une autre machine dérive lentement par rapport à lui : quelques dizaines de millisecondes en 10 minutes, l'écart habituel entre deux horloges à quartz. Les tap et resync servent à recaler. La synchro par horloge MIDI viendra avec le contrôle MIDI, en phase 3.
 - Les paramètres calés sur le tempo (phase 2) liront la position en temps publiée par le moteur à chaque image.
+- **Ajout du 2026-10-17 (ticket 54) :** en attendant Link, le tempo peut suivre l'horloge MIDI (ADR 0032).

@@ -4,7 +4,8 @@
 //! position is computed from one anchor, an instant and the beat at that
 //! instant, never accumulated frame after frame: it does not drift, however
 //! long it runs, and skipped frames do not shift it. [`TapTempo`] turns taps
-//! on a key or a button into a tempo.
+//! on a key or a button into a tempo, [`MidiClock`] the pulses of a MIDI
+//! clock.
 //!
 //! Beats are counted from `0.0` at the start of a bar; a bar has
 //! [`BEATS_PER_BAR`] beats.
@@ -98,6 +99,72 @@ pub fn beat_in_bar(beat: f64) -> u32 {
 /// Taps further apart than this start a new measure.
 pub const TAP_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// MIDI clock pulses per beat (MIDI 1.0: 24 per quarter note).
+pub const CLOCK_PULSES_PER_BEAT: usize = 24;
+
+/// Pulses averaged for the tempo: two beats.
+const CLOCK_WINDOW: usize = 2 * CLOCK_PULSES_PER_BEAT;
+
+/// Longest gap between pulses, in microseconds, before the clock is taken
+/// as stopped.
+const CLOCK_TIMEOUT_MICROS: u64 = 500_000;
+
+/// Tempo from a MIDI clock: the average interval between its last pulses,
+/// timed by the MIDI driver.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct MidiClock {
+    /// Times of the last pulses, in microseconds.
+    pulses: Vec<u64>,
+    /// Times the sender started, counted.
+    starts: u64,
+}
+
+impl MidiClock {
+    /// Records a pulse at `micros`; returns the tempo once a beat of pulses
+    /// came in.
+    pub fn pulse(&mut self, micros: u64) -> Option<f64> {
+        if let Some(&last) = self.pulses.last()
+            && (micros <= last || micros - last > CLOCK_TIMEOUT_MICROS)
+        {
+            self.pulses.clear();
+        }
+        self.pulses.push(micros);
+        if self.pulses.len() > CLOCK_WINDOW + 1 {
+            self.pulses.remove(0);
+        }
+        self.bpm()
+    }
+
+    /// Tempo of the last pulses, in beats per minute, once a beat of them
+    /// came in.
+    pub fn bpm(&self) -> Option<f64> {
+        let intervals = self.pulses.len().checked_sub(1)?;
+        if intervals < CLOCK_PULSES_PER_BEAT {
+            return None;
+        }
+        let span = (self.pulses.last()? - self.pulses.first()?) as f64 / 1e6;
+        (span > 0.0).then(|| 60.0 * intervals as f64 / (span * CLOCK_PULSES_PER_BEAT as f64))
+    }
+
+    /// Whether pulses still come in at `micros`.
+    pub fn is_running(&self, micros: u64) -> bool {
+        self.pulses
+            .last()
+            .is_some_and(|&last| micros.saturating_sub(last) <= CLOCK_TIMEOUT_MICROS)
+    }
+
+    /// The sender started (MIDI Start): the bar begins now.
+    pub fn start(&mut self) {
+        self.starts += 1;
+        self.pulses.clear();
+    }
+
+    /// Times the sender started, counted from the first.
+    pub fn starts(&self) -> u64 {
+        self.starts
+    }
+}
+
 /// Taps averaged for the tempo.
 pub const TAP_WINDOW: usize = 8;
 
@@ -138,6 +205,31 @@ impl TapTempo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn midi_clock_pulses_give_the_tempo() {
+        let mut clock = MidiClock::default();
+        // 125 BPM: 20 000 µs between pulses.
+        let mut time = 1_000_000;
+        let mut tempo = None;
+        for pulse in 0..60 {
+            tempo = clock.pulse(time);
+            if pulse < CLOCK_PULSES_PER_BEAT {
+                assert_eq!(tempo, None, "pulse {pulse}");
+            }
+            // A little jitter, as from a real driver.
+            time += if pulse % 2 == 0 { 20_150 } else { 19_850 };
+        }
+        let tempo = tempo.unwrap();
+        assert!((tempo - 125.0).abs() < 0.2, "{tempo}");
+        assert!(clock.is_running(time));
+        assert!(!clock.is_running(time + 600_000));
+        // A long gap starts over.
+        assert_eq!(clock.pulse(time + 600_000), None);
+        clock.start();
+        assert_eq!(clock.starts(), 1);
+        assert_eq!(clock.bpm(), None);
+    }
 
     fn at(start: Instant, seconds: f64) -> Instant {
         if seconds >= 0.0 {

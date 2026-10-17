@@ -391,3 +391,31 @@ fn tap_tempo_and_resync_reach_the_engine() {
         "{actions:?}"
     );
 }
+
+#[test]
+fn the_midi_clock_drives_the_tempo_when_followed() {
+    let (document, _) = sample_document();
+    let reading = |bpm, starts| prism_control::ClockReading { bpm, starts };
+    let mut panel = ControlPanel::new(document, Vec::new());
+    // Not followed: nothing changes.
+    assert!(panel.follow_clock(reading(Some(128.04), 1)).is_empty());
+    assert_eq!(panel.document().composition().tempo.get(), 120.0);
+
+    let preferences = prism_ui::Preferences {
+        midi_clock: true,
+        ..prism_ui::Preferences::default()
+    };
+    let mut panel =
+        ControlPanel::new(sample_document().0, Vec::new()).with_preferences(preferences, None);
+    let actions = panel.follow_clock(reading(Some(128.04), 0));
+    assert!(actions.is_empty());
+    assert_eq!(panel.document().composition().tempo.get(), 128.0);
+    // A start begins a bar.
+    let actions = panel.follow_clock(reading(Some(128.0), 1));
+    assert!(matches!(
+        actions.as_slice(),
+        [Action::Engine(Command::Resync { .. })]
+    ));
+    // The tempo is not an edit to undo.
+    assert!(!panel.document().can_undo());
+}

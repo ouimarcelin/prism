@@ -14,5 +14,5 @@ mod osc;
 pub use apply::{Controls, Outcome, learn};
 pub use feedback::{MidiOutputs, midi_feedback};
 pub use message::{ControlMessage, describe_source, parse_midi};
-pub use midi::{MidiInputs, midi_ports};
+pub use midi::{ClockReading, MidiInputs, midi_ports};
 pub use osc::{DEFAULT_OSC_PORT, OscInput, OscOutput, osc_feedback, osc_target, parse_osc};

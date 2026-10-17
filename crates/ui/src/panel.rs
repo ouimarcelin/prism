@@ -79,6 +79,8 @@ pub struct MidiStatus {
     pub osc_port: Option<u16>,
     /// Why OSC cannot be listened to or sent.
     pub osc_errors: Vec<String>,
+    /// Tempo of the MIDI clock received, while one is.
+    pub clock_bpm: Option<f64>,
 }
 
 /// State of the audio input, for the interface.
@@ -133,6 +135,8 @@ pub struct ControlPanel {
     pub(crate) learn: Learn,
     controls: Controls,
     pub(crate) stage: crate::stage::StageEditor,
+    /// Starts of the MIDI clock already seen.
+    clock_starts: u64,
 }
 
 impl ControlPanel {
@@ -158,6 +162,7 @@ impl ControlPanel {
             learn: Learn::default(),
             controls: Controls::default(),
             stage: crate::stage::StageEditor::default(),
+            clock_starts: 0,
         }
     }
 
@@ -294,6 +299,29 @@ impl ControlPanel {
             at: now,
             bpm: bpm.get(),
         }));
+    }
+
+    /// Follows the MIDI clock, when the preferences ask for it: its tempo
+    /// becomes the composition's (to a tenth of a beat per minute), and its
+    /// start begins a bar.
+    pub fn follow_clock(&mut self, reading: prism_control::ClockReading) -> Vec<Action> {
+        let new_starts = reading.starts > self.clock_starts;
+        self.clock_starts = reading.starts;
+        if !self.preferences.midi_clock {
+            return Vec::new();
+        }
+        let before = self.document.composition().clone();
+        if let Some(bpm) = reading.bpm {
+            let bpm = Bpm::new((bpm * 10.0).round() / 10.0);
+            if bpm != self.document.composition().tempo {
+                self.document.composition_mut().tempo = bpm;
+            }
+        }
+        if new_starts {
+            self.resync();
+        }
+        self.document.commit_live(&before);
+        std::mem::take(&mut self.actions)
     }
 
     /// Starts a bar now.
@@ -746,6 +774,15 @@ impl ControlPanel {
         }
         for error in &midi.errors {
             ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.checkbox(&mut preferences.midi_clock, "Suivre l'horloge MIDI")
+            .on_hover_text("Le tempo suit l'horloge MIDI (MIDI Clock) envoyée par un logiciel de musique ou de DJ ; son « Start » commence une mesure");
+        if preferences.midi_clock {
+            let text = match midi.clock_bpm {
+                Some(bpm) => format!("Horloge : {bpm:.1} BPM"),
+                None => "Aucune horloge reçue".to_owned(),
+            };
+            ui.label(egui::RichText::new(text).weak());
         }
         ui.checkbox(
             &mut preferences.midi_feedback,
