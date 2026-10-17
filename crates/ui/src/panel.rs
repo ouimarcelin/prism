@@ -146,6 +146,8 @@ pub struct ControlPanel {
     pub(crate) timecode_seconds: Option<f64>,
     /// Last timecode received, for its rate.
     pub(crate) timecode_seen: Option<prism_clock::Timecode>,
+    /// Whether the engine was last told a timecode runs.
+    pub(crate) timecode_sent: bool,
 }
 
 impl ControlPanel {
@@ -174,6 +176,7 @@ impl ControlPanel {
             clock_starts: 0,
             timecode_seconds: None,
             timecode_seen: None,
+            timecode_sent: false,
         }
     }
 

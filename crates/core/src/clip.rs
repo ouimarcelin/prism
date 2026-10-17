@@ -168,6 +168,10 @@ pub struct Playback {
     pub cue_points: [Option<f64>; CUE_POINT_COUNT],
     /// Volume of the clip's sound; the opacity of its layer scales it too.
     pub volume: Unit,
+    /// Seconds of timecode at which the start of the media plays: while a
+    /// timecode is followed, the playhead stands where the timecode says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timecode_start: Option<f64>,
 }
 
 impl Default for Playback {
@@ -180,6 +184,7 @@ impl Default for Playback {
             out_point: None,
             cue_points: [None; CUE_POINT_COUNT],
             volume: Unit::ONE,
+            timecode_start: None,
         }
     }
 }

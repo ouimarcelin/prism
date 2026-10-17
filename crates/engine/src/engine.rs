@@ -114,6 +114,9 @@ pub enum Command {
     },
     /// Plays the sound of the clips through this mixer, or stops it.
     SetSound(Option<Sender<VoiceCommand>>),
+    /// The timecode followed: its seconds at an instant, or `None` when it
+    /// stops. Clips with a timecode start follow it.
+    Timecode(Option<(f64, Instant)>),
 }
 
 impl std::fmt::Debug for Command {
@@ -132,6 +135,9 @@ impl std::fmt::Debug for Command {
             Self::Tap { bpm, .. } => write!(f, "Tap({bpm} BPM)"),
             Self::Resync { .. } => f.write_str("Resync"),
             Self::SetSound(sound) => write!(f, "SetSound({})", sound.is_some()),
+            Self::Timecode(timecode) => {
+                write!(f, "Timecode({:?})", timecode.map(|(seconds, _)| seconds))
+            }
         }
     }
 }
@@ -351,6 +357,8 @@ pub struct EngineState {
     audio: Arc<AudioLevels>,
     /// Mixer of the sound of the clips, if sound is on.
     sound: Option<Sender<VoiceCommand>>,
+    /// Timecode followed: its seconds at an instant.
+    timecode: Option<(f64, Instant)>,
     next_voice: u64,
 }
 
@@ -396,6 +404,7 @@ impl EngineState {
             gpu_progress: Arc::default(),
             audio: Arc::default(),
             sound: None,
+            timecode: None,
             next_voice: 0,
             stats: Stats {
                 frames: 0,
@@ -490,6 +499,7 @@ impl EngineState {
                 self.clock.align_beat(at);
             }
             Command::Resync { at } => self.clock.restart_bar(at),
+            Command::Timecode(timecode) => self.timecode = timecode,
             Command::SetSound(sound) => {
                 self.sound = sound;
                 if self.sound.is_none() {
@@ -649,6 +659,20 @@ impl EngineState {
                 }
                 stream.receive();
                 stream.advance(elapsed, tick, &mut self.random);
+                // Clips set on the timecode stand where it says; they hold
+                // still while it stops.
+                let start = self
+                    .composition
+                    .clip(stream.slot())
+                    .and_then(|clip| clip.playback.timecode_start);
+                match (start, self.timecode) {
+                    (Some(start), Some((seconds, at))) => {
+                        let now_seconds = seconds + now.saturating_duration_since(at).as_secs_f64();
+                        stream.chase(now_seconds - start);
+                    }
+                    (Some(_), None) => {}
+                    (None, _) => stream.stop_chasing(),
+                }
             }
         }
         let played = Instant::now();

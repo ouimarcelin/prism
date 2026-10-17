@@ -337,6 +337,8 @@ impl ControlPanel {
         self.playhead(ui, slot, playing);
 
         let mut relocate = false;
+        let timecode_now = self.timecode_seconds;
+        let timecode_rate = self.timecode_rate();
         let Some(clip) = self.document.composition_mut().clip_mut(slot) else {
             return;
         };
@@ -411,6 +413,50 @@ impl ControlPanel {
                 ui.add(egui::Slider::new(&mut volume, 0.0..=1.0))
                     .on_hover_text("Volume du son du clip ; l'opacité de la couche le règle aussi");
                 playback.volume = Unit::new(volume);
+                ui.end_row();
+
+                ui.label("Timecode");
+                ui.horizontal(|ui| {
+                    let mut chased = playback.timecode_start.is_some();
+                    if ui
+                        .checkbox(&mut chased, "Calé")
+                        .on_hover_text("La position de lecture suit le timecode (fenêtre Composition > Timecode, « Suivre le timecode ») : le début du média joue à l'heure de départ")
+                        .changed()
+                    {
+                        playback.timecode_start = chased.then(|| timecode_now.unwrap_or(0.0));
+                    }
+                    if let Some(start) = &mut playback.timecode_start {
+                        let id = ui.id().with("timecode start");
+                        let mut text = ui
+                            .data_mut(|data| data.get_temp::<String>(id))
+                            .unwrap_or_else(|| {
+                                prism_clock::Timecode::from_seconds(*start, timecode_rate).to_string()
+                            });
+                        let response = ui.add(
+                            egui::TextEdit::singleline(&mut text)
+                                .desired_width(100.0)
+                                .font(egui::TextStyle::Monospace),
+                        );
+                        if response.changed() {
+                            if let Some(timecode) =
+                                prism_clock::Timecode::parse(&text, timecode_rate)
+                            {
+                                *start = timecode.seconds();
+                            }
+                            ui.data_mut(|data| data.insert_temp(id, text));
+                        } else if !response.has_focus() {
+                            ui.data_mut(|data| data.remove::<String>(id));
+                        }
+                        if let Some(now) = timecode_now
+                            && ui
+                                .small_button("Maintenant")
+                                .on_hover_text("Le début du média joue au timecode reçu à cet instant")
+                                .clicked()
+                        {
+                            *start = now;
+                        }
+                    }
+                });
                 ui.end_row();
 
                 ui.label("Fin");

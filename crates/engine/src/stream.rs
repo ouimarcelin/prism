@@ -71,6 +71,8 @@ pub(crate) struct ClipStream {
     late_frames: u64,
     frame_errors: u64,
     pending_seek: Option<(f64, bool)>,
+    /// Whether a timecode holds the playhead.
+    chasing: bool,
     /// Beat position and seconds of the engine when the clip was launched.
     launched: (f64, f64),
     sound: Option<ClipSound>,
@@ -137,6 +139,7 @@ impl ClipStream {
             late_frames: 0,
             frame_errors: 0,
             pending_seek: None,
+            chasing: false,
             launched,
             sound: None,
             sound_position: None,
@@ -331,6 +334,20 @@ impl ClipStream {
             }
             Phase::Opening => self.pending_seek = Some((position, hold)),
             _ => {}
+        }
+    }
+
+    /// Puts the playhead where a timecode says, and holds it there until
+    /// the next frame.
+    pub(crate) fn chase(&mut self, position: f64) {
+        self.chasing = true;
+        self.seek(position, true);
+    }
+
+    /// Lets a playhead held by a timecode move again.
+    pub(crate) fn stop_chasing(&mut self) {
+        if std::mem::take(&mut self.chasing) {
+            self.release();
         }
     }
 
