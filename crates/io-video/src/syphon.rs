@@ -13,6 +13,8 @@ use std::ffi::{CStr, CString, c_char, c_int, c_uint, c_void};
 use std::ptr::NonNull;
 
 use prism_render::{Gpu, wgpu};
+
+use crate::convert::Converter;
 use wgpu::hal::api::Metal;
 
 unsafe extern "C" {
@@ -87,19 +89,11 @@ impl Drop for Server {
     }
 }
 
-/// Image converted for Syphon, at the size of the program.
-struct Target {
-    size: (u32, u32),
-    texture: wgpu::Texture,
-    bind_group: wgpu::BindGroup,
-}
-
 /// The program image published over Syphon under a name.
 pub struct SyphonServer {
     name: String,
     server: Option<Server>,
-    pipeline: Option<(wgpu::RenderPipeline, wgpu::BindGroupLayout)>,
-    target: Option<Target>,
+    converter: Converter,
     failed: bool,
 }
 
@@ -113,8 +107,7 @@ impl SyphonServer {
         Self {
             name: name.into(),
             server: None,
-            pipeline: None,
-            target: None,
+            converter: Converter::default(),
             failed: false,
         }
     }
@@ -131,122 +124,6 @@ impl SyphonServer {
             self.failed = self.server.is_none();
         }
         self.server.as_ref()
-    }
-
-    fn convert(&mut self, gpu: &Gpu, program: &wgpu::TextureView, size: (u32, u32)) {
-        let (pipeline, layout) = self.pipeline.get_or_insert_with(|| {
-            let module = gpu
-                .device
-                .create_shader_module(wgpu::include_wgsl!("convert.wgsl"));
-            let layout = gpu
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("syphon"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            multisampled: false,
-                        },
-                        count: None,
-                    }],
-                });
-            let pipeline_layout =
-                gpu.device
-                    .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                        label: Some("syphon"),
-                        bind_group_layouts: &[Some(&layout)],
-                        immediate_size: 0,
-                    });
-            let pipeline = gpu
-                .device
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("syphon"),
-                    layout: Some(&pipeline_layout),
-                    vertex: wgpu::VertexState {
-                        module: &module,
-                        entry_point: Some("vs_main"),
-                        compilation_options: Default::default(),
-                        buffers: &[],
-                    },
-                    fragment: Some(wgpu::FragmentState {
-                        module: &module,
-                        entry_point: Some("fs_main"),
-                        compilation_options: Default::default(),
-                        targets: &[Some(wgpu::TextureFormat::Bgra8Unorm.into())],
-                    }),
-                    primitive: wgpu::PrimitiveState::default(),
-                    depth_stencil: None,
-                    multisample: wgpu::MultisampleState::default(),
-                    multiview_mask: None,
-                    cache: None,
-                });
-            (pipeline, layout)
-        });
-        if self
-            .target
-            .as_ref()
-            .is_none_or(|target| target.size != size)
-        {
-            let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("syphon"),
-                size: wgpu::Extent3d {
-                    width: size.0,
-                    height: size.1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Bgra8Unorm,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
-            });
-            let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("syphon"),
-                layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(program),
-                }],
-            });
-            self.target = Some(Target {
-                size,
-                texture,
-                bind_group,
-            });
-        }
-        let Some(target) = &self.target else {
-            return;
-        };
-        let view = target
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("syphon"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(pipeline);
-            pass.set_bind_group(0, &target.bind_group, &[]);
-            pass.draw(0..3, 0..1);
-        }
-        gpu.queue.submit([encoder.finish()]);
     }
 
     /// Whether the server runs (it starts at the first frame presented).
@@ -270,26 +147,19 @@ impl SyphonServer {
         if self.server(gpu).is_none() {
             return;
         }
-        // A new program image (new resolution): converted from now on.
-        if self
-            .target
-            .as_ref()
-            .is_some_and(|target| target.size != size)
-        {
-            self.target = None;
-        }
-        self.convert(gpu, program, size);
-        let (Some(server), Some(target)) = (&self.server, &self.target) else {
+        let Some(converted) = self.converter.convert(gpu, program, size) else {
+            return;
+        };
+        let Some(server) = &self.server else {
             return;
         };
         // SAFETY: wgpu's Metal queue and the converted texture, borrowed
         // for the call; the copy is queued after the conversion submitted
         // above, on the same queue.
         unsafe {
-            let (Some(queue), Some(texture)) = (
-                gpu.queue.as_hal::<Metal>(),
-                target.texture.as_hal::<Metal>(),
-            ) else {
+            let (Some(queue), Some(texture)) =
+                (gpu.queue.as_hal::<Metal>(), converted.as_hal::<Metal>())
+            else {
                 return;
             };
             prism_syphon_server_publish(
