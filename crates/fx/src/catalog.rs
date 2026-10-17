@@ -129,6 +129,11 @@ impl EffectInfo {
         values
     }
 
+    /// Number of full-screen passes the effect runs.
+    pub fn passes(&self) -> usize {
+        self.passes.len()
+    }
+
     /// A new effect of this kind, every parameter at its default.
     pub fn create(&self) -> Effect {
         let mut effect = Effect::new(self.kind);

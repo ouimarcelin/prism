@@ -62,3 +62,11 @@ Plus ce temps est court, moins un autre programme qui occupe le GPU retarde les 
 | [2026-10-14](2026-10-14-phase-1.md) | Idem | Idem, thread temps réel et tampons d'envoi réutilisés | FLUIDE côté processeur : 0 saccade, pire écart 16,8 ms, travail moyen 2,5 ms ; retards du GPU non mesurés |
 | [2026-10-14](2026-10-14-phase-1.md) | Idem | Idem, code final (au plus 3 images en attente sur le GPU) | PAS FLUIDE : 2 images sautées sur un blocage du GPU de 80 ms ; processeur à l'heure, mémoire stable (11 tampons GPU) |
 | [2026-10-14](../decisions/0013-quatre-couches-par-passe.md) | Apple M1, 8 Go | `gpu-bench`, 4 et 8 couches HAP 1080p de bruit, avant et après l'ADR 0013 | 4 couches : 3,66 → 2,19 ms de GPU par image ; 8 couches : 6,91 → 5,62 ms ; `engine-run` 60 s : FLUIDE, 2,05 ms de travail par image |
+
+## Temps GPU des effets
+
+`fx-bench` mesure, sans fenêtre, chaque effet et générateur seul, à ses réglages par défaut, sur une image 1080p (images deux par deux, comme `gpu-bench`). Le coût d'une chaîne est à peu près la somme de ses effets ; à comparer aux 16,7 ms d'une image à 60 images/s, moins le mixage.
+
+```bash
+cargo run --release -p prism-fx --example fx-bench -- --frames 300
+```

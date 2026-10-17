@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Flou : 7 lectures par passe au lieu de 13 (filtrage linéaire), de 2,16 à 0,88 ms en 1080p sur M1, même courbe.
 - README : état des phases 1 et 2 et mode d'emploi des effets, générateurs, animations et du son.
 - Le crossfader occupe toute sa longueur dans la barre du bas.
 - L'application garde les actions de toutes les passes d'egui dans une image : un raccourci ou un clic ne se perd plus quand egui refait la mise en page.
@@ -26,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Outil `fx-bench` : temps GPU de chaque effet et générateur en 1080p ; rapport `docs/benchmarks/2026-10-17-phase-2-effets.md`.
 - L'opacité d'une couche peut suivre une bande du son (menu à côté de « ~ »), aussi enregistrée dans les préréglages de couche.
 - Son des clips : la piste son des vidéos est jouée sur la sortie du système, calée sur la tête de lecture (vitesse, sens, boucles, scratch), au volume du clip multiplié par l'opacité de sa couche ; fondu pendant les transitions ; « Son des clips » et volume général dans le menu Audio, volume par clip dans l'inspecteur (ADR 0020).
 - Préréglages : une chaîne d'effets ou les réglages d'une couche (opacité, fusion, crossfader, transition, effets) enregistrés sous un nom et réutilisés dans tout projet (menus « Préréglages… »), fichiers JSON dans le dossier `Préréglages` à côté des préférences.
