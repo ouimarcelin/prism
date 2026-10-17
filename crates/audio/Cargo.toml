@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 cpal = "0.18.2"
+prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
 prism-media = { path = "../media" }
 rustfft = "6.4.1"

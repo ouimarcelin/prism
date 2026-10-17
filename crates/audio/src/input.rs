@@ -1,6 +1,10 @@
 //! Sound from an input of the computer (microphone, line in, virtual
 //! device), measured as it arrives.
 
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+
+use prism_clock::{LtcDecoder, Timecode};
 use std::sync::Arc;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -40,7 +44,13 @@ pub struct AudioInput {
     _stream: cpal::Stream,
     name: String,
     levels: Arc<AudioLevels>,
+    /// Last LTC timecode read on the first channel, and when.
+    timecode: Arc<Mutex<Option<(Timecode, Instant)>>>,
 }
+
+/// Longest silence of an LTC still taken as running: a frame lasts at most
+/// 42 ms.
+const LTC_SILENCE: Duration = Duration::from_millis(150);
 
 impl AudioInput {
     /// Starts measuring the input named `name`, or the default input, into
@@ -65,9 +75,24 @@ impl AudioInput {
         let channels = usize::from(config.channels.max(1));
         let mut analyzer = Analyzer::new(config.sample_rate);
         let shared = Arc::clone(&levels);
-        let mut feed = move |frame_sum: f32| {
-            if analyzer.push(frame_sum / channels as f32, shared.gain_db()) {
-                shared.set(analyzer.levels());
+        let timecode: Arc<Mutex<Option<(Timecode, Instant)>>> = Arc::default();
+        let mut ltc = LtcDecoder::new(config.sample_rate);
+        let mut first_channel = Vec::new();
+        let read_timecode = Arc::clone(&timecode);
+        // Every frame: the levels from the sum of the channels, the LTC
+        // from the first channel.
+        let mut feed = move |frames: &mut dyn Iterator<Item = (f32, f32)>| {
+            first_channel.clear();
+            for (frame_sum, first) in frames {
+                if analyzer.push(frame_sum / channels as f32, shared.gain_db()) {
+                    shared.set(analyzer.levels());
+                }
+                first_channel.push(first);
+            }
+            if let Some(read) = ltc.push(&first_channel)
+                && let Ok(mut timecode) = read_timecode.lock()
+            {
+                *timecode = Some((read, Instant::now()));
             }
         };
         let on_error = |error| eprintln!("prism: audio input: {error}");
@@ -75,9 +100,11 @@ impl AudioInput {
             cpal::SampleFormat::F32 => device.build_input_stream(
                 config,
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    for frame in data.chunks(channels) {
-                        feed(frame.iter().sum());
-                    }
+                    feed(
+                        &mut data
+                            .chunks(channels)
+                            .map(|frame| (frame.iter().sum(), frame[0])),
+                    );
                 },
                 on_error,
                 None,
@@ -85,9 +112,10 @@ impl AudioInput {
             cpal::SampleFormat::I16 => device.build_input_stream(
                 config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    for frame in data.chunks(channels) {
-                        feed(frame.iter().map(|s| f32::from(*s) / 32768.0).sum());
-                    }
+                    feed(&mut data.chunks(channels).map(|frame| {
+                        let value = |sample: &i16| f32::from(*sample) / 32768.0;
+                        (frame.iter().map(value).sum(), value(&frame[0]))
+                    }));
                 },
                 on_error,
                 None,
@@ -104,6 +132,17 @@ impl AudioInput {
             _stream: stream,
             name,
             levels,
+            timecode,
+        })
+    }
+
+    /// The LTC timecode on the first channel now, moved on since its last
+    /// frame, while one comes in.
+    pub fn timecode(&self) -> Option<Timecode> {
+        let (timecode, read) = (*self.timecode.lock().ok()?)?;
+        let elapsed = read.elapsed();
+        (elapsed <= LTC_SILENCE).then(|| {
+            Timecode::from_seconds(timecode.seconds() + elapsed.as_secs_f64(), timecode.rate)
         })
     }
 

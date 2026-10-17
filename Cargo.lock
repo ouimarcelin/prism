@@ -2344,6 +2344,7 @@ name = "prism-audio"
 version = "0.0.0"
 dependencies = [
  "cpal",
+ "prism-clock",
  "prism-core",
  "prism-media",
  "rustfft",

@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Timecode audio (LTC) lu sur l'entrée audio, au choix avec le timecode MIDI dans la fenêtre Timecode.
 - Timecode MIDI (MTC) et repères : colonnes et clips lancés quand le timecode reçu passe leur heure (Composition > Timecode…) ; le pad virtuel envoie du timecode (ADR 0034).
 - Réception DMX d'une console lumière (Art-Net ou sACN, menu Contrôle) : chaque canal s'apprend comme un fader MIDI pour déclencher clips et réglages.
 - Pixel mapping DMX : bandes de LED et luminaires posés sur la composition (onglet « Lumière (DMX) » de la fenêtre Sortie avancée), couleurs prises sur l'image et envoyées en Art-Net ou sACN (ADR 0033).
