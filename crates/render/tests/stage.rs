@@ -258,3 +258,67 @@ fn edges_fade_along_the_blend_curve_and_the_test_pattern_replaces_the_image() {
         "{border:?}"
     );
 }
+
+#[test]
+fn simulated_projectors_add_their_light_where_they_overlap() {
+    let Some(gpu) = gpu() else { return };
+    // Two grey screens of 20 × 4 overlapping on 10 pixels.
+    let grey = 0.5_f32;
+    let screen = || {
+        pixels_texture(
+            &gpu.device,
+            &gpu.queue,
+            20,
+            4,
+            &[[grey, grey, grey, 1.0]; 80],
+        )
+        .create_view(&wgpu::TextureViewDescriptor::default())
+    };
+    let (a, b) = (screen(), screen());
+    let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("simulation"),
+        size: wgpu::Extent3d {
+            width: 30,
+            height: 4,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: WORKING_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut renderer = prism_render::SimulationRenderer::new(&gpu.device);
+    let mut encoder = gpu.device.create_command_encoder(&Default::default());
+    let screens = [
+        prism_render::SimulatedScreen {
+            view: &a,
+            left: 0,
+            size: (20, 4),
+        },
+        prism_render::SimulatedScreen {
+            view: &b,
+            left: 10,
+            size: (20, 4),
+        },
+    ];
+    renderer.encode(
+        &gpu.device,
+        &gpu.queue,
+        &mut encoder,
+        &screens,
+        2.2,
+        &view,
+        (30, 4),
+    );
+    gpu.queue.submit([encoder.finish()]);
+    let pixels = read_texture(&gpu.device, &gpu.queue, &target).unwrap();
+    let alone = pixels[2 * 30 + 3][0];
+    let both = pixels[2 * 30 + 15][0];
+    assert!((alone - grey).abs() < 0.01, "{alone}");
+    // Twice the light: 0.5^2.2 × 2, back to pixel values.
+    let expected = (2.0 * grey.powf(2.2)).powf(1.0 / 2.2);
+    assert!((both - expected).abs() < 0.01, "{both} vs {expected}");
+}

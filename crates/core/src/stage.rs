@@ -333,6 +333,40 @@ fn check_size(width: u32, height: u32) -> Result<(), ModelError> {
 pub struct Stage {
     screens: Vec<Screen>,
     next_id: u32,
+    /// Rehearsal of the projection on the computer's own display.
+    #[serde(skip_serializing_if = "Simulation::is_off")]
+    pub simulation: Simulation,
+}
+
+/// The screens shown side by side, in order, each overlapping the previous
+/// one, their light added as overlapping projectors would: to check edge
+/// blending without projectors.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Simulation {
+    /// Whether the engine draws the simulation.
+    pub enabled: bool,
+    /// Width shared by two neighbouring screens, in pixels.
+    pub overlap: u32,
+    /// Gamma of the simulated projectors.
+    pub gamma: f32,
+}
+
+impl Default for Simulation {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            overlap: 192,
+            gamma: 2.2,
+        }
+    }
+}
+
+impl Simulation {
+    /// Whether the simulation is off.
+    pub fn is_off(&self) -> bool {
+        !self.enabled
+    }
 }
 
 #[derive(Deserialize)]
@@ -341,6 +375,8 @@ struct StageRepr {
     screens: Vec<Screen>,
     #[serde(default)]
     next_id: u32,
+    #[serde(default)]
+    simulation: Simulation,
 }
 
 impl<'de> Deserialize<'de> for Stage {
@@ -380,6 +416,7 @@ impl<'de> Deserialize<'de> for Stage {
         Ok(Self {
             screens: repr.screens,
             next_id: repr.next_id.max(next_free),
+            simulation: repr.simulation,
         })
     }
 }
@@ -465,6 +502,25 @@ impl Stage {
             let index = screen.slices.iter().position(|slice| slice.id == id)?;
             Some(screen.slices.remove(index))
         })
+    }
+
+    /// Where each screen lies in the simulation, as left edge in pixels,
+    /// and the simulation's size.
+    pub fn simulation_layout(&self) -> (Vec<(ScreenId, u32)>, (u32, u32)) {
+        let mut left = 0u32;
+        let mut placed = Vec::with_capacity(self.screens.len());
+        let mut size = (0, 0);
+        for screen in &self.screens {
+            let start = if placed.is_empty() {
+                0
+            } else {
+                left.saturating_sub(self.simulation.overlap)
+            };
+            placed.push((screen.id, start));
+            left = start + screen.width;
+            size = (left, size.1.max(screen.height));
+        }
+        (placed, size)
     }
 
     /// The screen shown on the display named `display`.
@@ -568,6 +624,17 @@ mod tests {
         }
         // In pixel values, the middle of the overlap is brighter than half.
         assert!(blend.factor(0.5) > 0.7);
+    }
+
+    #[test]
+    fn simulated_screens_overlap_side_by_side() {
+        let mut stage = Stage::default();
+        let a = stage.add_screen("A", 1920, 1080).unwrap();
+        let b = stage.add_screen("B", 1280, 720).unwrap();
+        stage.simulation.overlap = 200;
+        let (placed, size) = stage.simulation_layout();
+        assert_eq!(placed, [(a, 0), (b, 1720)]);
+        assert_eq!(size, (3000, 1080));
     }
 
     #[test]

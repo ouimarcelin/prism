@@ -207,6 +207,7 @@ fn main() -> ExitCode {
             if show_stage {
                 let frame = prism_ui::StageFrame {
                     composition: None,
+                    simulation: None,
                     screens: &[],
                     displays: &screens,
                 };
