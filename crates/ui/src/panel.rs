@@ -607,6 +607,18 @@ impl ControlPanel {
                 {
                     self.actions.push(Action::CloseOutput);
                 }
+                if cfg!(target_os = "macos") {
+                    ui.separator();
+                    let mut syphon = self.preferences.syphon_output;
+                    if ui
+                        .checkbox(&mut syphon, "Publier sur Syphon")
+                        .on_hover_text("L'image programme, sous le nom « Prism », pour les autres applications du Mac")
+                        .changed()
+                    {
+                        self.preferences.syphon_output = syphon;
+                        self.save_preferences();
+                    }
+                }
             });
             ui.menu_button("Contrôle", |ui| self.control_menu(ui, &frame.midi));
             let audio = ui.menu_button("Audio", |ui| self.audio_menu(ui, &frame.audio));

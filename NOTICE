@@ -24,3 +24,8 @@ Hack):
 - emoji-icon-font: MIT License
 The license texts ship with the epaint_default_fonts crate and will be
 copied next to the application.
+
+Syphon (third_party/syphon), compiled into Prism on macOS:
+Copyright 2010 bangnoise (Tom Butterworth) & vade (Anton Marini).
+All rights reserved. BSD 3-clause licence: see third_party/syphon/License.txt.
+The name of the Syphon Project is not used to endorse or promote Prism.
