@@ -13,3 +13,7 @@
 
 # Local Claude Code settings
 .claude/settings.local.json
+
+# Design files of the maintainer (Illustrator), and their temporary files.
+*.ai
+~ai-*.tmp
