@@ -863,3 +863,17 @@ fn a_missing_camera_is_reported_on_its_layer() {
     assert_eq!(status.slot, Some(slot));
     assert_eq!(status.duration, 0.0);
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn an_absent_syphon_server_is_waited_for() {
+    let Some(gpu) = gpu() else { return };
+    let (mut comp, slot) = composition_with(Clip::from_syphon("Nulle part", "Rien"));
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    let status = driver.settle(|status| matches!(status.state, ClipState::Error(_)));
+    let ClipState::Error(message) = status.state else {
+        unreachable!()
+    };
+    assert!(message.contains("en attente"), "{message}");
+}

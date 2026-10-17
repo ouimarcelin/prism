@@ -2383,6 +2383,7 @@ dependencies = [
  "prism-clock",
  "prism-core",
  "prism-fx",
+ "prism-io-video",
  "prism-media",
  "prism-render",
  "tempfile",
@@ -2412,7 +2413,6 @@ version = "0.0.0"
 dependencies = [
  "cc",
  "prism-core",
- "prism-engine",
  "prism-render",
  "wgpu",
 ]
