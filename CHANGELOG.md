@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Sortie Syphon (macOS) : l'image programme publiée sous le nom « Prism » pour les autres applications du Mac (menu Sortie > Publier sur Syphon) ; code de Syphon repris dans `third_party/syphon` (BSD), crate `prism-io-video` (ADR 0024).
 - Caméras en direct : une caméra USB, intégrée ou une carte de capture vue comme caméra devient un clip (« Caméra… » sur une case vide), avec effets et tableau de bord (ADR 0023).
 - Retour MIDI : les pads des clips qui jouent s'allument, bypass, solo et effets actifs aussi ; faders motorisés et bagues suivent les valeurs (menu Contrôle, ADR 0021).
 - Raccourcis clavier assignables : une touche s'apprend comme une commande MIDI et agit aussi depuis la sortie plein écran (ADR 0021).

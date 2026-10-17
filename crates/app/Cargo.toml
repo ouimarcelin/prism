@@ -21,6 +21,7 @@ prism-audio = { path = "../audio" }
 prism-control = { path = "../control" }
 prism-core = { path = "../core" }
 prism-engine = { path = "../engine" }
+prism-io-video = { path = "../io-video" }
 prism-output = { path = "../output" }
 prism-render = { path = "../render" }
 prism-ui = { path = "../ui" }

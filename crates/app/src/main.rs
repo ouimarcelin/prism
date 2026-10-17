@@ -334,6 +334,8 @@ struct AudioState {
     error: Option<String>,
     /// Whether the sound of the clips was asked for.
     sound_wanted: Option<bool>,
+    /// Engine output of the Syphon server, while publishing.
+    syphon: Option<u64>,
     output: Option<AudioOutput>,
     output_error: Option<String>,
     volume: Arc<Volume>,
@@ -378,7 +380,31 @@ impl Running {
         };
         running.read_screens(event_loop);
         running.follow_audio_preferences(panel.preferences());
+        running.follow_syphon_preference(panel.preferences());
         Ok(running)
+    }
+
+    /// Publishes over Syphon, or stops, as the preferences say.
+    fn follow_syphon_preference(&mut self, preferences: &Preferences) {
+        #[cfg(target_os = "macos")]
+        match (preferences.syphon_output, self.audio.syphon) {
+            (true, None) => {
+                let id = self.next_output;
+                self.next_output += 1;
+                self.engine.send(Command::AddOutput {
+                    id,
+                    output: Box::new(prism_io_video::SyphonOutput::new("Prism")),
+                });
+                self.audio.syphon = Some(id);
+            }
+            (false, Some(id)) => {
+                self.engine.send(Command::RemoveOutput { id });
+                self.audio.syphon = None;
+            }
+            _ => {}
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = preferences;
     }
 
     /// Starts, stops or changes the audio input and output to match the
@@ -568,6 +594,7 @@ impl App {
             }
         }
         running.follow_audio_preferences(self.panel.preferences());
+        running.follow_syphon_preference(self.panel.preferences());
         // Remember the screen of the output for next time.
         if let Some(name) = running
             .output

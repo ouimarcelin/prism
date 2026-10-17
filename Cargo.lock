@@ -2331,6 +2331,7 @@ dependencies = [
  "prism-control",
  "prism-core",
  "prism-engine",
+ "prism-io-video",
  "prism-output",
  "prism-render",
  "prism-ui",
@@ -2403,6 +2404,17 @@ dependencies = [
  "serde_json",
  "skrifa",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "prism-io-video"
+version = "0.0.0"
+dependencies = [
+ "cc",
+ "prism-core",
+ "prism-engine",
+ "prism-render",
+ "wgpu",
 ]
 
 [[package]]
