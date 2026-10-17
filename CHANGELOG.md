@@ -27,6 +27,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Sortie plein écran sur plusieurs écrans à la fois : une case à cocher par écran dans le menu Sortie, `F` rouvre les écrans de la dernière fois, `Échap` ferme toutes les sorties (ADR 0025).
 - Entrée Syphon (macOS) : l'image qu'une autre application publie devient un clip (« Syphon… » sur une case vide), reconnecté si l'application redémarre (ADR 0024).
 - Sortie Syphon (macOS) : l'image programme publiée sous le nom « Prism » pour les autres applications du Mac (menu Sortie > Publier sur Syphon) ; code de Syphon repris dans `third_party/syphon` (BSD), crate `prism-io-video` (ADR 0024).
 - Caméras en direct : une caméra USB, intégrée ou une carte de capture vue comme caméra devient un clip (« Caméra… » sur une case vide), avec effets et tableau de bord (ADR 0023).
