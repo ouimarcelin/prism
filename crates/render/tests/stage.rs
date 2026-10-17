@@ -228,3 +228,33 @@ fn a_mask_shows_the_slice_inside_it_or_outside_when_inverted() {
     assert!(edge > 0.4 && edge < 0.75, "{edge}");
     assert!(at(&pixels, 12, 10)[0] > 0.95);
 }
+
+#[test]
+fn edges_fade_along_the_blend_curve_and_the_test_pattern_replaces_the_image() {
+    let Some(gpu) = gpu() else { return };
+    let mut stage = Stage::default();
+    let id = stage.add_screen("Écran", 40, 20).unwrap();
+    let blend = prism_core::EdgeBlend {
+        left: 0.5,
+        ..prism_core::EdgeBlend::default()
+    };
+    stage.screen_mut(id).unwrap().slices[0].blend = blend;
+    let (pixels, width) = draw(&gpu, &stage, id, false);
+    let at = |pixels: &[[f32; 4]], x: u32, y: u32| pixels[(y * width + x) as usize];
+    // Pixel 5 is centered at 5.5 / 40 of the slice, 0.275 of the fade.
+    let expected = blend.factor(5.5 / 40.0 / 0.5);
+    let red = at(&pixels, 5, 10)[0];
+    assert!((red - expected).abs() < 0.01, "{red} vs {expected}");
+    // Past the fade, the image is untouched.
+    assert!(close(at(&pixels, 30, 10), GREEN));
+
+    stage.screen_mut(id).unwrap().test_pattern = true;
+    let (pixels, _) = draw(&gpu, &stage, id, false);
+    // No green from the program; a bright border at the edge of the slice.
+    assert!(at(&pixels, 30, 9)[1] < 0.9 || at(&pixels, 30, 9)[0] > 0.5);
+    let border = at(&pixels, 39, 10);
+    assert!(
+        border[0] > 0.9 && border[1] > 0.9 && border[2] > 0.9,
+        "{border:?}"
+    );
+}

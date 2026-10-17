@@ -324,6 +324,8 @@ impl ControlPanel {
                 })
                 .response
                 .on_hover_text("La sortie plein écran ouverte sur cet écran du système montre cet écran de la scène");
+            ui.checkbox(&mut screen.test_pattern, "Mire")
+                .on_hover_text("Les découpes montrent une grille au lieu de la composition, pour aligner les projecteurs");
             if ui.button("Supprimer l'écran").clicked() {
                 stage.remove_screen(id);
                 self.stage.screen = None;
@@ -551,6 +553,36 @@ impl ControlPanel {
                 warp.curve = curve;
             }
         }
+        ui.separator();
+        ui.label(RichText::new("Fondu des bords").strong())
+            .on_hover_text("Là où l'image de deux projecteurs se recouvre, chacun s'assombrit vers son bord pour que la somme reste égale");
+        let blend = &mut slice.blend;
+        egui::Grid::new("slice blend").num_columns(2).show(ui, |ui| {
+            for (name, value) in [
+                ("Gauche", &mut blend.left),
+                ("Droite", &mut blend.right),
+                ("Haut", &mut blend.top),
+                ("Bas", &mut blend.bottom),
+            ] {
+                ui.label(name);
+                let mut percent = *value * 100.0;
+                if ui
+                    .add(egui::Slider::new(&mut percent, 0.0..=50.0).suffix(" %"))
+                    .changed()
+                {
+                    *value = percent / 100.0;
+                }
+                ui.end_row();
+            }
+            ui.label("Courbe");
+            ui.add(egui::Slider::new(&mut blend.power, 1.0..=4.0))
+                .on_hover_text("1 : rampe droite ; plus haut : plus de lumière au milieu du recouvrement");
+            ui.end_row();
+            ui.label("Gamma");
+            ui.add(egui::Slider::new(&mut blend.gamma, 1.0..=3.0))
+                .on_hover_text("Gamma des projecteurs (2,2 en général) : corrige la zone de recouvrement trop sombre ou trop claire");
+            ui.end_row();
+        });
         ui.separator();
         let mut masked = slice.mask.is_some();
         if ui

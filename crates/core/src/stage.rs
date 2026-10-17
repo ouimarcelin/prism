@@ -128,6 +128,67 @@ pub struct Slice {
     /// Shape limiting where the slice shows on its screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mask: Option<Mask>,
+    /// Darkening of the slice's edges where it overlaps the image of
+    /// another projector.
+    #[serde(default, skip_serializing_if = "EdgeBlend::is_off")]
+    pub blend: EdgeBlend,
+}
+
+/// Soft edges of a slice, so two projectors overlapping on a strip add up
+/// to an even image: each side fades out over its width, along a curve
+/// that sums to one with the other projector's, corrected for the display
+/// gamma.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EdgeBlend {
+    /// Width of the fade on the left side, as a fraction of the slice.
+    pub left: f32,
+    /// Width of the fade on the right side.
+    pub right: f32,
+    /// Height of the fade on the top side.
+    pub top: f32,
+    /// Height of the fade on the bottom side.
+    pub bottom: f32,
+    /// Steepness of the fade: 1 is a straight ramp, higher values keep more
+    /// light near the middle of the overlap.
+    pub power: f32,
+    /// Gamma of the projectors, to fade in light rather than in pixel
+    /// values.
+    pub gamma: f32,
+}
+
+impl Default for EdgeBlend {
+    fn default() -> Self {
+        Self {
+            left: 0.0,
+            right: 0.0,
+            top: 0.0,
+            bottom: 0.0,
+            power: 2.0,
+            gamma: 2.2,
+        }
+    }
+}
+
+impl EdgeBlend {
+    /// Whether no side fades.
+    pub fn is_off(&self) -> bool {
+        self.left <= 0.0 && self.right <= 0.0 && self.top <= 0.0 && self.bottom <= 0.0
+    }
+
+    /// Light kept at `t`, from 0 at the outer edge of a fade to 1 at its
+    /// inner edge, as a pixel value: two overlapping projectors, one at
+    /// `t` and the other at `1 - t`, add up to full light.
+    pub fn factor(&self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        let power = self.power.max(0.1);
+        let light = if t < 0.5 {
+            0.5 * (2.0 * t).powf(power)
+        } else {
+            1.0 - 0.5 * (2.0 * (1.0 - t)).powf(power)
+        };
+        light.powf(1.0 / self.gamma.max(0.1))
+    }
 }
 
 /// Most points of a mask.
@@ -222,6 +283,10 @@ pub struct Screen {
     /// Slices, drawn first to last: a later slice covers an earlier one.
     #[serde(default)]
     pub slices: Vec<Slice>,
+    /// Whether the slices show a test pattern instead of the composition,
+    /// to line projectors up.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub test_pattern: bool,
 }
 
 impl Screen {
@@ -363,6 +428,7 @@ impl Stage {
             height,
             display: None,
             slices: Vec::new(),
+            test_pattern: false,
         });
         self.add_slice(id, "Découpe 1");
         Ok(id)
@@ -387,6 +453,7 @@ impl Stage {
             output: Quad::FULL,
             warp: None,
             mask: None,
+            blend: EdgeBlend::default(),
         };
         self.screen_mut(screen)?.slices.push(slice);
         Some(id)
@@ -485,6 +552,22 @@ mod tests {
         assert_eq!(mask.points[1], Point::new(0.5, 0.0));
         mask.points.truncate(2);
         assert!(!mask.is_valid());
+    }
+
+    #[test]
+    fn overlapping_fades_add_up_to_full_light() {
+        let blend = EdgeBlend::default();
+        assert!(blend.is_off());
+        assert_eq!(blend.factor(0.0), 0.0);
+        assert!((blend.factor(1.0) - 1.0).abs() < 1e-6);
+        for t in [0.1, 0.3, 0.5, 0.8] {
+            // Back to light, through the gamma, then summed.
+            let light = |value: f32| value.powf(blend.gamma);
+            let sum = light(blend.factor(t)) + light(blend.factor(1.0 - t));
+            assert!((sum - 1.0).abs() < 1e-5, "{t}: {sum}");
+        }
+        // In pixel values, the middle of the overlap is brighter than half.
+        assert!(blend.factor(0.5) > 0.7);
     }
 
     #[test]
