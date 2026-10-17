@@ -90,6 +90,11 @@ pub struct Fixture {
     /// Brightness, from 0 to 1.
     #[serde(default = "full")]
     pub brightness: f32,
+    /// Gamma applied to the colours sent: 1 sends the image's values as
+    /// they are; about 2.2 suits LEDs whose controller does not correct
+    /// them, which otherwise show mid tones too bright.
+    #[serde(default = "full")]
+    pub gamma: f32,
 }
 
 fn enabled() -> bool {
@@ -189,6 +194,7 @@ impl Lighting {
             universe,
             channel,
             brightness: 1.0,
+            gamma: 1.0,
         });
         id
     }

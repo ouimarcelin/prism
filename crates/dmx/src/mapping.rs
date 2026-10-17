@@ -28,6 +28,11 @@ pub fn universes(fixtures: &[Fixture], colors: &[[u8; 3]]) -> BTreeMap<u16, Univ
         let mut universe = fixture.universe;
         let mut offset = usize::from(fixture.channel.clamp(1, UNIVERSE_SIZE as u16)) - 1;
         let brightness = fixture.brightness.clamp(0.0, 1.0);
+        let gamma = fixture.gamma.clamp(0.1, 5.0);
+        // One table per fixture: 256 powers instead of one per channel.
+        let table: [u8; 256] = std::array::from_fn(|value| {
+            ((value as f32 / 255.0).powf(gamma) * brightness * 255.0).round() as u8
+        });
         for _ in 0..fixture.pixels {
             let Some(color) = colors.next() else {
                 return universes;
@@ -39,7 +44,7 @@ pub fn universes(fixtures: &[Fixture], colors: &[[u8; 3]]) -> BTreeMap<u16, Univ
                 universe = next;
                 offset = 0;
             }
-            let color = color.map(|value| (f32::from(value) * brightness).round() as u8);
+            let color = color.map(|value| table[usize::from(value)]);
             let channels = universes.entry(universe).or_insert([0; UNIVERSE_SIZE]);
             for (index, value) in fixture.order.values(color).into_iter().enumerate() {
                 channels[offset + index] = value;
@@ -78,5 +83,15 @@ mod tests {
         assert_eq!(universes[&1][..4], [1, 2, 3, 0]);
         // The lamp: channel 10 of universe 5, green first, half bright.
         assert_eq!(universes[&5][9..12], [50, 100, 25]);
+    }
+
+    #[test]
+    fn gamma_darkens_mid_tones_only() {
+        let mut lighting = Lighting::default();
+        let strip = lighting.add_strip("Bande", 1);
+        lighting.fixture_mut(strip).unwrap().gamma = 2.0;
+        let universes = universes(lighting.fixtures(), &[[255, 128, 0]]);
+        // 128/255 squared: about a quarter.
+        assert_eq!(universes[&0][..3], [255, 64, 0]);
     }
 }

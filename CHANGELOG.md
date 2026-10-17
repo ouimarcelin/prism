@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Pixel mapping : gamma par luminaire, pour les LED aux tons moyens trop clairs.
 - Clips calés sur le timecode : la lecture suit le timecode reçu à partir d'une heure de départ (inspecteur, « Timecode : Calé »).
 - Timecode audio (LTC) lu sur l'entrée audio, au choix avec le timecode MIDI dans la fenêtre Timecode.
 - Timecode MIDI (MTC) et repères : colonnes et clips lancés quand le timecode reçu passe leur heure (Composition > Timecode…) ; le pad virtuel envoie du timecode (ADR 0034).
