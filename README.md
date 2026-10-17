@@ -63,6 +63,8 @@ Dans la fenêtre de contrôle :
 - le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau) ;
 - le menu Contrôle relie un contrôleur MIDI ou des messages OSC : « Apprentissage MIDI », cliquer une commande, puis bouger le bouton ou le fader. En OSC, sans rien apprendre : `/prism/layer/1/opacity` (0 à 1), `/prism/layer/1/clip/2`, `/prism/column/3`, `/prism/crossfader`, `/prism/tap`, `/prism/stop`…
 
+Sans terminal : `scripts/make-app.sh` (ou `scripts/make-app.sh --ndi`) construit l'application `Prism.app` et l'installe dans le dossier Applications de l'utilisateur (`~/Applications`) ; elle s'ouvre ensuite depuis le Finder, le Dock ou Spotlight. Relancer le script après chaque mise à jour du code.
+
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
 NDI® (vidéo par le réseau) est une option de compilation, désactivée par défaut (ADR 0026). Installer le NDI SDK for Apple ou NDI Tools, puis :
