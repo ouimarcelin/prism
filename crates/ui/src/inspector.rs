@@ -244,6 +244,30 @@ impl ControlPanel {
                         .response
                         .on_hover_text("L'image qu'une autre application publie sur Syphon");
                 }
+                egui::ComboBox::from_id_salt("new ndi")
+                    .selected_text("NDI®…")
+                    .show_ui(ui, |ui| match prism_engine::ndi_status() {
+                        Err(reason) => {
+                            ui.label(RichText::new(reason).weak());
+                        }
+                        Ok(_) => {
+                            let sources = prism_engine::ndi_sources();
+                            if sources.is_empty() {
+                                ui.label(
+                                    RichText::new("Recherche des sources du réseau…").weak(),
+                                );
+                            }
+                            for name in sources {
+                                if ui.selectable_label(false, &name).clicked() {
+                                    let clip = Clip::from_ndi(name);
+                                    let _ =
+                                        self.document.composition_mut().set_clip(slot, Some(clip));
+                                }
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("L'image d'une source NDI® du réseau local (NDI® est une marque déposée de Vizrt NDI AB)");
             });
             return;
         }

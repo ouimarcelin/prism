@@ -155,6 +155,20 @@ impl prism_engine::Output for SyphonOutput {
     }
 }
 
+/// The program image published as an NDI source, as an output of the
+/// engine.
+#[cfg(feature = "ndi")]
+struct NdiOutput(prism_io_video::NdiSender);
+
+#[cfg(feature = "ndi")]
+impl prism_engine::Output for NdiOutput {
+    fn present(&mut self, gpu: &prism_render::Gpu, program: &prism_engine::ProgramOutput) {
+        let size = program.resolution();
+        self.0
+            .publish(gpu, program.view(), (size.width, size.height));
+    }
+}
+
 /// Events sent to the event loop from other threads.
 #[derive(Debug)]
 enum UserEvent {
@@ -354,6 +368,9 @@ struct AudioState {
     sound_wanted: Option<bool>,
     /// Engine output of the Syphon server, while publishing.
     syphon: Option<u64>,
+    /// Engine output of the NDI source, while publishing.
+    #[cfg(feature = "ndi")]
+    ndi: Option<u64>,
     output: Option<AudioOutput>,
     output_error: Option<String>,
     volume: Arc<Volume>,
@@ -399,7 +416,37 @@ impl Running {
         running.read_screens(event_loop);
         running.follow_audio_preferences(panel.preferences());
         running.follow_syphon_preference(panel.preferences());
+        running.follow_ndi_preference(panel.preferences(), document.composition());
         Ok(running)
+    }
+
+    /// Publishes as an NDI source, or stops, as the preferences say.
+    fn follow_ndi_preference(
+        &mut self,
+        preferences: &Preferences,
+        composition: &prism_core::Composition,
+    ) {
+        #[cfg(feature = "ndi")]
+        match (preferences.ndi_output, self.audio.ndi) {
+            (true, None) => {
+                let id = self.next_output;
+                self.next_output += 1;
+                let sender =
+                    prism_io_video::NdiSender::new("Prism", composition.frame_rate().as_f64());
+                self.engine.send(Command::AddOutput {
+                    id,
+                    output: Box::new(NdiOutput(sender)),
+                });
+                self.audio.ndi = Some(id);
+            }
+            (false, Some(id)) => {
+                self.engine.send(Command::RemoveOutput { id });
+                self.audio.ndi = None;
+            }
+            _ => {}
+        }
+        #[cfg(not(feature = "ndi"))]
+        let _ = (preferences, composition);
     }
 
     /// Publishes over Syphon, or stops, as the preferences say.
@@ -654,6 +701,10 @@ impl App {
         }
         running.follow_audio_preferences(self.panel.preferences());
         running.follow_syphon_preference(self.panel.preferences());
+        running.follow_ndi_preference(
+            self.panel.preferences(),
+            self.panel.document().composition(),
+        );
         // Remember the screens of the outputs for next time.
         let names: Vec<String> = running
             .output_screens()

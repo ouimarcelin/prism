@@ -12,6 +12,11 @@ publish.workspace = true
 name = "prism"
 path = "src/main.rs"
 
+[features]
+# NDI® input and output, off by default (ADR 0026):
+# cargo run --release -p prism-app --features ndi
+ndi = ["prism-engine/ndi", "prism-io-video/ndi"]
+
 [dependencies]
 egui = "0.36.2"
 egui-wgpu = "0.36.2"
