@@ -154,6 +154,10 @@ impl ControlPanel {
             ui.label("Luminosité");
             ui.add(egui::Slider::new(&mut fixture.brightness, 0.0..=1.0));
             ui.end_row();
+            ui.label("Gamma");
+            ui.add(egui::Slider::new(&mut fixture.gamma, 1.0..=3.0))
+                .on_hover_text("1 : valeurs de l'image telles quelles ; 2,2 environ pour des LED dont le contrôleur ne corrige pas (tons moyens trop clairs sinon)");
+            ui.end_row();
         });
         let channels = usize::from(fixture.pixels) * fixture.order.channels();
         ui.label(
