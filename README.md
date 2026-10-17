@@ -56,7 +56,7 @@ Dans la fenêtre de contrôle :
 - Sortie > Sortie avancée… règle les écrans et les découpes (mode d'emploi : [`docs/guide/sortie-avancee.md`](docs/guide/sortie-avancee.md)) : un écran de la scène réglé « sur » un écran du système remplace l'image entière de la sortie ouverte sur cet écran ;
 - le menu Sortie ouvre une sortie plein écran sur chaque écran coché ; `F` rouvre les écrans de la dernière fois (sinon le premier écran libre), `Échap` ferme toutes les sorties ;
 - `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
-- le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`) ;
+- le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`), ou suit l'horloge MIDI d'un logiciel de musique (menu Contrôle) ;
 - « Ajouter un effet… » ajoute un effet à la composition, à la couche ou au clip (18 effets, ou un shader ISF) ; « Préréglages… » enregistre et réutilise des chaînes d'effets et des réglages de couche ;
 - une case vide propose « Générateur… » : couleur, dégradé, lignes, cercles, damier, bruit, texte ou shader ISF (exemples dans `examples/isf/`) ;
 - à côté de chaque réglage : `~` l'anime (onde au tempo ou en secondes, ou « une fois » au lancement du clip), le menu `—` le relie à un curseur du tableau de bord du clip ou à une bande du son ;

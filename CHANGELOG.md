@@ -28,6 +28,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Tempo suivi de l'horloge MIDI (menu Contrôle > Suivre l'horloge MIDI) : le tempo d'un logiciel de musique ou de DJ, son Start commence une mesure (ADR 0032).
 - Écrans de la scène publiés sur Syphon (case « Syphon » de la fenêtre Sortie avancée), sous « Prism – » et le nom de l'écran.
 - Icône de l'application (cristal à facettes), dessinée par `scripts/make-icon.swift` et posée par `scripts/make-app.sh`.
 - « Répartir » (fenêtre Sortie avancée) : la composition étalée sur plusieurs projecteurs côte à côte avec leur recouvrement et le fondu des bords réglé.
