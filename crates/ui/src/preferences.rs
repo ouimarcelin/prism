@@ -15,8 +15,8 @@ pub const MAX_RECENT: usize = 8;
 pub struct Preferences {
     /// Projects opened or saved, most recent first.
     pub recent_projects: Vec<PathBuf>,
-    /// Name of the screen last used for the output.
-    pub output_screen: Option<String>,
+    /// Names of the screens last used for the output.
+    pub output_screens: Vec<String>,
     /// Duration of the automatic crossfade, in seconds.
     pub crossfade_seconds: f32,
     /// Duration of the automatic crossfade, in beats.
@@ -57,7 +57,7 @@ impl Default for Preferences {
     fn default() -> Self {
         Self {
             recent_projects: Vec::new(),
-            output_screen: None,
+            output_screens: Vec::new(),
             crossfade_seconds: 2.0,
             crossfade_beats: 4.0,
             crossfade_on_beats: false,
@@ -98,10 +98,24 @@ impl Preferences {
 
     /// Reads preferences; a missing or unreadable file gives the defaults.
     pub fn load(path: &Path) -> Self {
-        std::fs::read_to_string(path)
+        let Some(value) = std::fs::read_to_string(path)
             .ok()
-            .and_then(|json| serde_json::from_str(&json).ok())
-            .unwrap_or_default()
+            .and_then(|json| serde_json::from_str::<serde_json::Value>(&json).ok())
+        else {
+            return Self::default();
+        };
+        // Earlier versions kept a single output screen.
+        let legacy_screen = value
+            .get("output_screen")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned);
+        let mut preferences: Self = serde_json::from_value(value).unwrap_or_default();
+        if let Some(screen) = legacy_screen
+            && preferences.output_screens.is_empty()
+        {
+            preferences.output_screens.push(screen);
+        }
+        preferences
     }
 
     /// Writes preferences, creating their folder if needed.
@@ -161,7 +175,7 @@ mod tests {
         assert_eq!(Preferences::load(&path), Preferences::default());
 
         let mut preferences = Preferences {
-            output_screen: Some("Projecteur".into()),
+            output_screens: vec!["Projecteur".into(), "Écran LED".into()],
             crossfade_seconds: 4.5,
             ..Preferences::default()
         };
@@ -176,6 +190,19 @@ mod tests {
         let loaded = Preferences::load(&path);
         assert_eq!(loaded.crossfade_seconds, 1.0);
         assert!(loaded.recent_projects.is_empty());
+    }
+
+    #[test]
+    fn the_single_output_screen_of_earlier_versions_is_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("preferences.json");
+        std::fs::write(&path, br#"{"output_screen": "Projecteur"}"#).unwrap();
+        let loaded = Preferences::load(&path);
+        assert_eq!(loaded.output_screens, ["Projecteur"]);
+        loaded.save(&path).unwrap();
+        let json = std::fs::read_to_string(&path).unwrap();
+        assert!(!json.contains("\"output_screen\""));
+        assert_eq!(Preferences::load(&path), loaded);
     }
 
     #[test]

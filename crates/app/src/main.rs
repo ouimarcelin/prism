@@ -1,5 +1,5 @@
 //! The Prism application: the control window, with the egui interface and
-//! the program preview, and a full-screen output on a second screen.
+//! the program preview, and full-screen outputs on the other screens.
 //!
 //! The main thread handles window events and draws the interface. The
 //! render thread of the engine plays the clips and presents the program to
@@ -332,7 +332,8 @@ struct Running {
     engine: Engine,
     gpu: Arc<Gpu>,
     control: ControlWindow,
-    output: Option<OutputWindow>,
+    /// Full-screen outputs, at most one per screen.
+    outputs: Vec<OutputWindow>,
     next_output: u64,
     monitors: Vec<MonitorHandle>,
     screens: Vec<Screen>,
@@ -386,7 +387,7 @@ impl Running {
             engine,
             gpu,
             control,
-            output: None,
+            outputs: Vec::new(),
             next_output: 1,
             monitors: Vec::new(),
             screens: Vec::new(),
@@ -503,19 +504,24 @@ impl Running {
         self.screens_read = Instant::now();
     }
 
-    /// Screen for the output when none is chosen: the one used last time,
-    /// otherwise the first one that does not show the control window.
-    fn default_screen(&self, preferred: Option<&str>) -> Option<usize> {
-        if let Some(index) =
-            preferred.and_then(|name| self.screens.iter().position(|screen| screen.name == name))
-        {
-            return Some(index);
+    /// Screens for the output when none is chosen: those used last time
+    /// that are still connected, otherwise the first screen that does not
+    /// show the control window.
+    fn default_screens(&self, preferred: &[String]) -> Vec<usize> {
+        let remembered: Vec<usize> = preferred
+            .iter()
+            .filter_map(|name| self.screens.iter().position(|screen| &screen.name == name))
+            .collect();
+        if !remembered.is_empty() {
+            return remembered;
         }
         let current = self.control.window.current_monitor();
         self.monitors
             .iter()
             .position(|monitor| Some(monitor) != current.as_ref())
             .or_else(|| (!self.monitors.is_empty()).then_some(0))
+            .into_iter()
+            .collect()
     }
 
     fn open_output(
@@ -523,14 +529,9 @@ impl Running {
         event_loop: &ActiveEventLoop,
         screen: usize,
     ) -> Result<(), Box<dyn Error>> {
-        if self
-            .output
-            .as_ref()
-            .is_some_and(|output| output.screen == screen)
-        {
+        if self.outputs.iter().any(|output| output.screen == screen) {
             return Ok(());
         }
-        self.close_output();
         let monitor = self
             .monitors
             .get(screen)
@@ -554,23 +555,56 @@ impl Running {
             id,
             output: Box::new(output),
         });
-        self.output = Some(OutputWindow {
+        // One process keeps every screen awake.
+        let keep_awake = if self.outputs.is_empty() {
+            keep_displays_awake()
+        } else {
+            None
+        };
+        self.outputs.push(OutputWindow {
             id,
             screen,
             window,
             shared,
-            keep_awake: keep_displays_awake(),
+            keep_awake,
         });
         // Keep the keyboard on the control window.
         self.control.window.focus_window();
         Ok(())
     }
 
-    fn close_output(&mut self) {
-        if let Some(output) = self.output.take() {
-            self.engine.send(Command::RemoveOutput { id: output.id });
-            output.window.set_visible(false);
+    /// Closes the output on `screen`, if one is open there.
+    fn close_output(&mut self, screen: usize) {
+        let Some(index) = self
+            .outputs
+            .iter()
+            .position(|output| output.screen == screen)
+        else {
+            return;
+        };
+        let mut output = self.outputs.remove(index);
+        self.engine.send(Command::RemoveOutput { id: output.id });
+        output.window.set_visible(false);
+        // The process keeping the screens awake moves to an output left open.
+        if let Some(next) = self.outputs.first_mut()
+            && next.keep_awake.is_none()
+        {
+            next.keep_awake = output.keep_awake.take();
         }
+    }
+
+    fn close_outputs(&mut self) {
+        let screens: Vec<usize> = self.outputs.iter().map(|output| output.screen).collect();
+        for screen in screens {
+            self.close_output(screen);
+        }
+    }
+
+    /// Screens showing an output, in screen order.
+    fn output_screens(&self) -> Vec<usize> {
+        let mut screens: Vec<usize> = self.outputs.iter().map(|output| output.screen).collect();
+        screens.sort_unstable();
+        screens
     }
 }
 
@@ -581,20 +615,28 @@ impl App {
         };
         for action in actions {
             let result = match action {
-                Action::OpenOutput(screen) => running.open_output(event_loop, screen),
-                Action::ToggleOutput => {
-                    let preferred = self.panel.preferences().output_screen.as_deref();
-                    if running.output.is_some() {
-                        running.close_output();
+                Action::ToggleScreen(screen) => {
+                    if running.outputs.iter().any(|output| output.screen == screen) {
+                        running.close_output(screen);
                         Ok(())
-                    } else if let Some(screen) = running.default_screen(preferred) {
-                        running.open_output(event_loop, screen)
                     } else {
+                        running.open_output(event_loop, screen)
+                    }
+                }
+                Action::ToggleOutput => {
+                    if running.outputs.is_empty() {
+                        let preferred = &self.panel.preferences().output_screens;
+                        running
+                            .default_screens(preferred)
+                            .into_iter()
+                            .try_for_each(|screen| running.open_output(event_loop, screen))
+                    } else {
+                        running.close_outputs();
                         Ok(())
                     }
                 }
                 Action::CloseOutput => {
-                    running.close_output();
+                    running.close_outputs();
                     Ok(())
                 }
                 Action::Engine(command) => {
@@ -612,14 +654,15 @@ impl App {
         }
         running.follow_audio_preferences(self.panel.preferences());
         running.follow_syphon_preference(self.panel.preferences());
-        // Remember the screen of the output for next time.
-        if let Some(name) = running
-            .output
-            .as_ref()
-            .and_then(|output| running.screens.get(output.screen))
+        // Remember the screens of the outputs for next time.
+        let names: Vec<String> = running
+            .output_screens()
+            .into_iter()
+            .filter_map(|screen| running.screens.get(screen))
             .map(|screen| screen.name.clone())
-        {
-            self.panel.remember_output_screen(&name);
+            .collect();
+        if !names.is_empty() {
+            self.panel.remember_output_screens(&names);
         }
         // The engine plays the composition as edited.
         let document = self.panel.document();
@@ -645,7 +688,7 @@ impl App {
         }
         let status = running.engine.status();
         let program = running.engine.program();
-        let output_screen = running.output.as_ref().map(|output| output.screen);
+        let output_screens = running.output_screens();
         let screens = running.screens.clone();
         let audio = running.audio_status();
         let preferences_changed = (
@@ -668,7 +711,7 @@ impl App {
                 status: &status,
                 preview,
                 screens: &screens,
-                output_screen,
+                output_screens: &output_screens,
                 audio: audio.clone(),
                 midi: midi.clone(),
             };
@@ -749,7 +792,7 @@ impl ApplicationHandler<UserEvent> for App {
             Ok(running) => {
                 self.running = Some(running);
                 if let Some(screen) = self.output_screen {
-                    self.handle(event_loop, vec![Action::OpenOutput(screen - 1)]);
+                    self.handle(event_loop, vec![Action::ToggleScreen(screen - 1)]);
                 }
             }
             Err(error) => {
@@ -795,16 +838,19 @@ impl ApplicationHandler<UserEvent> for App {
         }
 
         let Some(output) = running
-            .output
-            .as_ref()
-            .filter(|output| output.window.id() == window_id)
+            .outputs
+            .iter()
+            .find(|output| output.window.id() == window_id)
         else {
             return;
         };
         match event {
             WindowEvent::Resized(size) => output.shared.set_size(size.width, size.height),
             WindowEvent::Occluded(occluded) => output.shared.set_visible(!occluded),
-            WindowEvent::CloseRequested => running.close_output(),
+            WindowEvent::CloseRequested => {
+                let screen = output.screen;
+                running.close_output(screen);
+            }
             WindowEvent::ModifiersChanged(modifiers) => self.output_modifiers = modifiers.state(),
             WindowEvent::KeyboardInput { event, .. }
                 if event.state == ElementState::Pressed && !event.repeat =>
@@ -821,11 +867,11 @@ impl ApplicationHandler<UserEvent> for App {
             let Running {
                 engine,
                 control,
-                output,
+                outputs,
                 ..
             } = running;
             drop(engine);
-            drop(output);
+            drop(outputs);
             drop(control);
         }
     }

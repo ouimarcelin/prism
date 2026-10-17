@@ -135,7 +135,7 @@ fn main() -> ExitCode {
         status: &status,
         preview: None,
         screens: &screens,
-        output_screen: None,
+        output_screens: &[],
         audio: prism_ui::AudioStatus {
             device: Some("Micro".into()),
             error: None,

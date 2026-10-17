@@ -53,7 +53,7 @@ Dans la fenêtre de contrôle :
 - cliquer une case lance son clip, cliquer l'en-tête d'une colonne lance toute la colonne ;
 - chaque couche a son opacité, son mode de fusion, B (bypass), S (solo) et son côté du crossfader ;
 - le panneau de droite montre l'aperçu, puis les réglages de la couche et du clip sélectionnés (sens, vitesse, boucle, scratch, points de repère) ;
-- le menu Sortie ouvre la sortie plein écran sur l'écran choisi ; `F` l'ouvre sur le premier écran libre, `Échap` la ferme ;
+- le menu Sortie ouvre une sortie plein écran sur chaque écran coché ; `F` rouvre les écrans de la dernière fois (sinon le premier écran libre), `Échap` ferme toutes les sorties ;
 - `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
 - le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`) ;
 - « Ajouter un effet… » ajoute un effet à la composition, à la couche ou au clip (18 effets, ou un shader ISF) ; « Préréglages… » enregistre et réutilise des chaînes d'effets et des réglages de couche ;
