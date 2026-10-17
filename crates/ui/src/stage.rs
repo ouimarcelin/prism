@@ -397,15 +397,25 @@ impl ControlPanel {
             let simulation = &mut stage.simulation;
             ui.checkbox(&mut simulation.enabled, "Simulation")
                 .on_hover_text("Les écrans côte à côte, leur lumière additionnée là où ils se recouvrent, comme des projecteurs sur un mur : pour régler le fondu des bords sans projecteur");
+            ui.label("recouvrement")
+                .on_hover_text("Largeur commune à deux écrans voisins, pour la simulation et « Répartir »");
+            ui.add(
+                egui::DragValue::new(&mut simulation.overlap)
+                    .range(0..=prism_core::MAX_SCREEN_SIZE)
+                    .suffix(" px"),
+            );
             if simulation.enabled {
-                ui.label("recouvrement");
-                ui.add(
-                    egui::DragValue::new(&mut simulation.overlap)
-                        .range(0..=prism_core::MAX_SCREEN_SIZE)
-                        .suffix(" px"),
-                );
                 ui.label("gamma");
                 ui.add(egui::DragValue::new(&mut simulation.gamma).range(1.0..=3.0).speed(0.01));
+            }
+            if stage.screens().len() > 1
+                && ui
+                    .button("Répartir")
+                    .on_hover_text("La composition étalée sur tous les écrans de gauche à droite, chacun recouvrant le précédent du recouvrement choisi, avec le fondu des bords réglé ; remplace les découpes (Cmd+Z pour revenir)")
+                    .clicked()
+            {
+                stage.spread();
+                self.stage.slice = None;
             }
         });
     }
