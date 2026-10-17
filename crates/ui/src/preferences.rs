@@ -37,6 +37,14 @@ pub struct Preferences {
     pub clip_sound_volume: f32,
     /// MIDI inputs not listened to; every other input is.
     pub midi_disabled: Vec<String>,
+    /// Whether Prism listens for OSC.
+    pub osc_input: bool,
+    /// UDP port Prism listens on for OSC.
+    pub osc_port: u16,
+    /// Whether Prism sends its values over OSC.
+    pub osc_output: bool,
+    /// Where values are sent, as `IP:port`.
+    pub osc_target: String,
 }
 
 impl Default for Preferences {
@@ -53,6 +61,10 @@ impl Default for Preferences {
             clip_sound: true,
             clip_sound_volume: 1.0,
             midi_disabled: Vec::new(),
+            osc_input: false,
+            osc_port: 7000,
+            osc_output: false,
+            osc_target: "127.0.0.1:7001".to_owned(),
         }
     }
 }

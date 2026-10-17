@@ -91,7 +91,14 @@ fn main() -> ExitCode {
     });
     let mut app = App {
         midi: Midi {
-            inputs: MidiInputs::new(control_sender, wake),
+            inputs: MidiInputs::new(control_sender.clone(), Arc::clone(&wake)),
+            sender: control_sender,
+            wake,
+            osc_input: None,
+            osc_wanted: None,
+            osc_input_error: None,
+            osc_output: None,
+            osc_output_error: None,
             messages: control_messages,
             status: MidiStatus::default(),
             checked: None,
@@ -136,9 +143,17 @@ enum UserEvent {
     Control,
 }
 
-/// MIDI inputs and the messages they sent.
+/// MIDI inputs, OSC input and output, and the messages they sent.
 struct Midi {
     inputs: MidiInputs,
+    sender: std::sync::mpsc::Sender<ControlMessage>,
+    wake: Arc<dyn Fn() + Send + Sync>,
+    osc_input: Option<prism_control::OscInput>,
+    /// Port asked for when the OSC input was last started or failed.
+    osc_wanted: Option<u16>,
+    osc_input_error: Option<String>,
+    osc_output: Option<(String, prism_control::OscOutput)>,
+    osc_output_error: Option<String>,
     messages: std::sync::mpsc::Receiver<ControlMessage>,
     status: MidiStatus,
     /// Last time the inputs present were looked at.
@@ -169,6 +184,63 @@ impl Midi {
             .connected()
             .into_iter()
             .map(str::to_owned)
+            .collect();
+    }
+
+    /// Starts, moves or stops the OSC input and output as the preferences
+    /// say, and sends the values of `composition` that changed.
+    fn follow_osc(&mut self, preferences: &Preferences, composition: &prism_core::Composition) {
+        let wanted = preferences.osc_input.then_some(preferences.osc_port);
+        if wanted != self.osc_wanted {
+            self.osc_wanted = wanted;
+            self.osc_input = None;
+            self.osc_input_error = None;
+            if let Some(port) = wanted {
+                match prism_control::OscInput::start(
+                    port,
+                    self.sender.clone(),
+                    Arc::clone(&self.wake),
+                ) {
+                    Ok(input) => self.osc_input = Some(input),
+                    Err(error) => {
+                        self.osc_input_error = Some(format!("Port OSC {port} : {error}"));
+                    }
+                }
+            }
+        }
+        if !preferences.osc_output {
+            self.osc_output = None;
+            self.osc_output_error = None;
+        } else if self
+            .osc_output
+            .as_ref()
+            .is_none_or(|(target, _)| *target != preferences.osc_target)
+        {
+            match prism_control::OscOutput::new(&preferences.osc_target) {
+                Ok(output) => {
+                    self.osc_output = Some((preferences.osc_target.clone(), output));
+                    self.osc_output_error = None;
+                }
+                Err(error) => {
+                    self.osc_output = None;
+                    self.osc_output_error = Some(format!(
+                        "Envoi OSC vers {} : {error}",
+                        preferences.osc_target
+                    ));
+                }
+            }
+        }
+        if let Some((_, output)) = &mut self.osc_output
+            && let Err(error) = output.send_changes(&prism_control::osc_feedback(composition))
+        {
+            self.osc_output_error = Some(format!("Envoi OSC : {error}"));
+        }
+        self.status.osc_port = self.osc_input.as_ref().map(prism_control::OscInput::port);
+        self.status.osc_errors = self
+            .osc_input_error
+            .iter()
+            .chain(&self.osc_output_error)
+            .cloned()
             .collect();
     }
 }
@@ -521,6 +593,10 @@ impl App {
         let preferences_changed = self.panel.preferences().midi_disabled != self.midi_disabled_seen;
         self.midi
             .refresh(self.panel.preferences(), preferences_changed);
+        self.midi.follow_osc(
+            self.panel.preferences(),
+            self.panel.document().composition(),
+        );
         self.midi_disabled_seen = self.panel.preferences().midi_disabled.clone();
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;

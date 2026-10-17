@@ -23,6 +23,11 @@ pub enum ControlSource {
         /// Controller number, 0 to 127.
         number: u8,
     },
+    /// An OSC address, such as `/fader/1`.
+    Osc {
+        /// The address of the messages.
+        address: String,
+    },
 }
 
 /// Whose effect a mapping drives.
