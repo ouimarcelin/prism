@@ -11,6 +11,7 @@
 //! in time leaves the previous one on screen.
 
 mod engine;
+mod live;
 mod playhead;
 mod priority;
 mod random;
@@ -20,4 +21,5 @@ mod stream;
 mod worker;
 
 pub use engine::{Command, Engine, EngineState, Output, ProgramOutput};
+pub use live::cameras;
 pub use status::{ClipState, EngineStatus, FrameSteps, Hitch, LayerStatus};

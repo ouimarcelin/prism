@@ -279,7 +279,7 @@ fn copy_pixels(buffer: &CVPixelBuffer, image: &mut RgbaImage) -> Result<(), Deco
 
 /// Copies a locked 4:2:0 video-range pixel buffer (luma plane, then
 /// interleaved chroma plane) into `image`.
-fn copy_planes(buffer: &CVPixelBuffer, image: &mut YuvImage) -> Result<(), DecodeError> {
+pub(crate) fn copy_planes(buffer: &CVPixelBuffer, image: &mut YuvImage) -> Result<(), DecodeError> {
     if CVPixelBufferGetPixelFormatType(buffer) != kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange {
         return Err(DecodeError::Platform("format de pixels inattendu".into()));
     }
