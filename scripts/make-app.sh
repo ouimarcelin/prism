@@ -25,6 +25,19 @@ bundle="$target_dir/Prism.app"
 rm -rf "$bundle"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
 cp "$target_dir/release/prism" "$bundle/Contents/MacOS/prism"
+
+# Icon: every size macOS asks for, from assets/icon-1024.png (drawn by
+# scripts/make-icon.swift).
+iconset="$target_dir/Prism.iconset"
+rm -rf "$iconset"
+mkdir -p "$iconset"
+for size in 16 32 128 256 512; do
+    sips -z $size $size assets/icon-1024.png --out "$iconset/icon_${size}x${size}.png" >/dev/null
+    double=$((size * 2))
+    sips -z $double $double assets/icon-1024.png --out "$iconset/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$iconset" -o "$bundle/Contents/Resources/Prism.icns"
+rm -rf "$iconset"
 cat > "$bundle/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -34,6 +47,7 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key><string>Prism</string>
     <key>CFBundleIdentifier</key><string>org.prism-vj.prism</string>
     <key>CFBundleExecutable</key><string>prism</string>
+    <key>CFBundleIconFile</key><string>Prism</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleVersion</key><string>$version</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
