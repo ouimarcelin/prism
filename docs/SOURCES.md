@@ -49,3 +49,4 @@ Rôle : **O** = observateur, **I** = implémenteur (voir `docs/CLEAN_ROOM.md`, s
 | 2026-10-17 | Documentation de la crate `libloading` 0.8 | ISC | Chargement de la bibliothèque NDI (ADR 0026) | Claude Code (I) |
 | 2026-10-17 | Format des paquets ArtDmx d'Art-Net 4 (Artistic Licence, spécification publique) et des paquets de données sACN, norme ANSI E1.31 (ESTA, publique), connus de mémoire | Spécifications publiques | Crate `prism-dmx` (ADR 0033) | Claude Code (I) |
 | 2026-10-18 | Documentation de la crate `softbuffer` 0.4 | MIT OR Apache-2.0 | Fenêtre de démarrage dessinée sur le processeur (ticket 65), abandonnée : pas de transparence sur macOS | Claude Code (I) |
+| 2026-10-18 | Documentation des crates `axum` 0.8 et `tokio` 1 | MIT | Serveur de l'API réseau (ADR 0035) | Claude Code (I) |

@@ -62,6 +62,7 @@ Dans la fenêtre de contrôle :
 - à côté de chaque réglage : `~` l'anime (onde au tempo ou en secondes, ou « une fois » au lancement du clip), le menu `—` le relie à un curseur du tableau de bord du clip ou à une bande du son ;
 - le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau) ;
 - le menu Contrôle relie un contrôleur MIDI ou des messages OSC : « Apprentissage MIDI », cliquer une commande, puis bouger le bouton ou le fader. En OSC, sans rien apprendre : `/prism/layer/1/opacity` (0 à 1), `/prism/layer/1/clip/2`, `/prism/column/3`, `/prism/crossfader`, `/prism/tap`, `/prism/stop`…
+- Contrôle > API réseau : télécommande depuis une tablette ou un autre ordinateur. Cocher la case, ouvrir l'adresse affichée (`http://IP:8080`) dans un navigateur, entrer le code d'accès. Pour les scripts : `GET /api/state`, `POST /api/control` avec `{"address": "/prism/column/2"}`, WebSocket `/api/ws` (ADR 0035).
 
 Sans terminal : `scripts/make-app.sh` (ou `scripts/make-app.sh --ndi`) construit l'application `Prism.app` et l'installe dans le dossier Applications de l'utilisateur (`~/Applications`) ; elle s'ouvre ensuite depuis le Finder, le Dock ou Spotlight. Relancer le script après chaque mise à jour du code.
 
