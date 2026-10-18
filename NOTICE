@@ -55,5 +55,10 @@ it is installed by the user and used under the NDI SDK license terms
 (https://ndi.video). NDI® is a registered trademark of Vizrt NDI AB. Prism
 is not a product of, nor endorsed by, Vizrt NDI AB.
 
-Application icon (assets/icon-1024.png): an original drawing made for
-Prism by scripts/make-icon.swift, under the licence of Prism.
+Spout (Windows): the names and layouts of the shared memories, mutexes and
+texture description used to exchange images follow the Spout 2 SDK
+(https://github.com/leadedge/Spout2, BSD 2-clause licence, Copyright (c)
+Lynn Jarvis). No code of the SDK is included.
+
+Application icon (assets/icon-1024.png): the logo of Prism, drawn by its
+author (@ouimarcelin), under the licence of Prism.
