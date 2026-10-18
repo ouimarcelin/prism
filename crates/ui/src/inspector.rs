@@ -24,6 +24,7 @@ use crate::effects::{
 };
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
+use crate::slider::Slider;
 use crate::theme::{Emphasis, color};
 
 impl ControlPanel {
@@ -83,7 +84,7 @@ impl ControlPanel {
                     let animated = layer.opacity_animation.is_some();
                     let driven = animated || layer.opacity_audio.is_some();
                     let slider =
-                        ui.add_enabled(!driven, egui::Slider::new(&mut opacity, 0.0..=1.0));
+                        ui.add_enabled(!driven, Slider::new(&mut opacity, 0.0..=1.0).quarters());
                     self.learn.cover(
                         ui,
                         slider.rect,
@@ -430,15 +431,16 @@ impl ControlPanel {
 
                 ui.label("Vitesse");
                 ui.add(
-                    egui::Slider::new(&mut playback.speed, 0.0..=MAX_SPEED)
+                    Slider::new(&mut playback.speed, 0.0..=MAX_SPEED)
                         .logarithmic(true)
-                        .suffix(" ×"),
+                        .suffix(" ×")
+                        .snaps([1.0]),
                 );
                 ui.end_row();
 
                 ui.label("Volume");
                 let mut volume = playback.volume.get();
-                ui.add(egui::Slider::new(&mut volume, 0.0..=1.0))
+                ui.add(Slider::new(&mut volume, 0.0..=1.0).quarters())
                     .on_hover_text("Volume du son du clip ; l'opacité de la couche le règle aussi");
                 playback.volume = Unit::new(volume);
                 ui.end_row();
@@ -566,7 +568,7 @@ impl ControlPanel {
         });
         let mut position = status.position;
         let response = ui.add(
-            egui::Slider::new(&mut position, 0.0..=status.duration.max(0.001))
+            Slider::new(&mut position, 0.0..=status.duration.max(0.001))
                 .show_value(false)
                 .text("scratch"),
         );

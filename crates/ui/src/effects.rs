@@ -13,6 +13,7 @@ use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, s
 
 use crate::learn::Learn;
 use crate::presets::PresetStore;
+use crate::slider::Slider;
 use crate::theme::Emphasis;
 
 /// What effect editors share with the rest of the window: presets, and the
@@ -439,7 +440,7 @@ pub(crate) fn dashboard_section(
                     for (index, slider) in dashboard.iter_mut().enumerate() {
                         ui.label(format!("Curseur {}", index + 1));
                         let mut value = slider.get();
-                        let response = ui.add(egui::Slider::new(&mut value, 0.0..=1.0));
+                        let response = ui.add(Slider::new(&mut value, 0.0..=1.0).quarters());
                         *slider = Unit::new(value);
                         learn.cover(
                             ui,
@@ -535,12 +536,15 @@ pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation
         ui.horizontal(|ui| {
             ui.spacing_mut().slider_width = 70.0;
             ui.label("de");
-            ui.add(egui::Slider::new(
-                &mut animation.from,
-                param.min..=param.max,
-            ));
+            ui.add(
+                Slider::new(&mut animation.from, param.min..=param.max)
+                    .snaps([f64::from(param.default)]),
+            );
             ui.label("à");
-            ui.add(egui::Slider::new(&mut animation.to, param.min..=param.max));
+            ui.add(
+                Slider::new(&mut animation.to, param.min..=param.max)
+                    .snaps([f64::from(param.default)]),
+            );
         });
     });
 }
@@ -549,7 +553,7 @@ pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation
 fn setting(ui: &mut egui::Ui, param: &ParamInfo, effect: &mut Effect) -> egui::Rect {
     let mut value = param.clamp(effect.param(param.id).unwrap_or(param.default));
     let response = if param.choices.is_empty() {
-        ui.add(egui::Slider::new(&mut value, param.min..=param.max))
+        ui.add(Slider::new(&mut value, param.min..=param.max).snaps([f64::from(param.default)]))
     } else {
         let selected = param.choices.get(value as usize).copied().unwrap_or("");
         egui::ComboBox::from_id_salt(param.id)

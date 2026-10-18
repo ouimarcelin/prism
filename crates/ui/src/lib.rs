@@ -25,6 +25,7 @@ mod plugins;
 mod preferences;
 mod presets;
 mod shortcuts;
+mod slider;
 mod stage;
 mod theme;
 mod timecode;

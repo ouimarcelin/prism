@@ -5,6 +5,7 @@ use egui::{Color32, Pos2, Rect, RichText, Sense, Stroke, Vec2};
 use prism_core::{ColorOrder, DmxProtocol, FixtureId, MAX_FIXTURE_PIXELS, Point};
 
 use crate::panel::ControlPanel;
+use crate::slider::Slider;
 use crate::stage::StageFrame;
 use crate::theme::{self, Emphasis, color};
 
@@ -62,7 +63,7 @@ impl ControlPanel {
                 )
                 .on_hover_text("Adresse IP du contrôleur de LED ou du nœud DMX (« IP » ou « IP:port ») ; vide : diffusion (Art-Net) ou multicast (sACN)");
                 ui.label("cadence");
-                ui.add(egui::Slider::new(&mut lighting.rate, 1.0..=60.0).suffix(" /s"));
+                ui.add(Slider::new(&mut lighting.rate, 1.0..=60.0).suffix(" /s"));
                 match &frame.dmx.0 {
                     Some(error) => {
                         ui.colored_label(ui.visuals().error_fg_color, error);
@@ -159,10 +160,10 @@ impl ControlPanel {
                 .on_hover_text("Canal du premier pixel ; les pixels qui ne tiennent plus passent à l'univers suivant");
             ui.end_row();
             ui.label("Luminosité");
-            ui.add(egui::Slider::new(&mut fixture.brightness, 0.0..=1.0));
+            ui.add(Slider::new(&mut fixture.brightness, 0.0..=1.0).quarters());
             ui.end_row();
             ui.label("Gamma");
-            ui.add(egui::Slider::new(&mut fixture.gamma, 1.0..=3.0))
+            ui.add(Slider::new(&mut fixture.gamma, 1.0..=3.0).snaps([2.2]))
                 .on_hover_text("1 : valeurs de l'image telles quelles ; 2,2 environ pour des LED dont le contrôleur ne corrige pas (tons moyens trop clairs sinon)");
             ui.end_row();
         });

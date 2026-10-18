@@ -41,6 +41,8 @@ pub(crate) mod color {
 
     /// Accent: selection, toggles on, slider fill, primary buttons.
     pub(crate) const BRAND: Color32 = Color32::from_rgb(0x0c, 0x8c, 0xe9);
+    /// Accent, pressed; marks over the accent.
+    pub(crate) const BRAND_DARK: Color32 = Color32::from_rgb(0x0a, 0x6d, 0xc2);
     /// Accent for text and thin lines over dark surfaces.
     pub(crate) const BRAND_TEXT: Color32 = Color32::from_rgb(0x7c, 0xc4, 0xf8);
 
@@ -212,8 +214,6 @@ fn visuals() -> Visuals {
         color: Color32::from_black_alpha(90),
     };
 
-    visuals.slider_trailing_fill = true;
-    visuals.handle_shape = egui::style::HandleShape::Circle;
     visuals.indent_has_left_vline = false;
     visuals.striped = false;
     visuals
@@ -237,7 +237,6 @@ fn style(style: &mut Style) {
     spacing.window_margin = Margin::same(SPACE_3 as i8);
     spacing.menu_margin = Margin::same(SPACE_2 as i8);
     spacing.indent = SPACE_3;
-    spacing.slider_rail_height = SPACE_1;
     spacing.icon_width = 14.0;
     spacing.icon_width_inner = 8.0;
     spacing.icon_spacing = 6.0;

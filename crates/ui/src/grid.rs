@@ -7,6 +7,7 @@ use prism_engine::{ClipState, EngineStatus};
 
 use crate::labels;
 use crate::panel::ControlPanel;
+use crate::slider::Slider;
 use crate::theme::{self, Emphasis, color};
 
 const HEADER_WIDTH: f32 = 210.0;
@@ -213,7 +214,11 @@ impl ControlPanel {
             });
             let mut opacity = entry.opacity.get();
             let slider = ui
-                .add(egui::Slider::new(&mut opacity, 0.0..=1.0).show_value(false))
+                .add(
+                    Slider::new(&mut opacity, 0.0..=1.0)
+                        .show_value(false)
+                        .quarters(),
+                )
                 .on_hover_text(format!("Opacité {:.0} %", opacity * 100.0));
             covers.push((slider.rect, ControlTarget::LayerOpacity { layer }));
             entry.opacity = Unit::new(opacity);

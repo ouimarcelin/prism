@@ -12,6 +12,7 @@ use prism_core::{
 };
 
 use crate::panel::{Action, ControlPanel, Screen as Display};
+use crate::slider::Slider;
 use crate::theme::{self, Emphasis, color};
 
 /// Radius of a corner handle, in points.
@@ -614,9 +615,10 @@ impl ControlPanel {
         ui.horizontal(|ui| {
             ui.label("Rotation");
             ui.add(
-                egui::Slider::new(&mut slice.rotation, -180.0..=180.0)
+                Slider::new(&mut slice.rotation, -180.0..=180.0)
                     .suffix("°")
-                    .max_decimals(1),
+                    .max_decimals(1)
+                    .snaps([-90.0, 90.0]),
             );
         });
         ui.horizontal(|ui| {
@@ -751,7 +753,7 @@ impl ControlPanel {
                 ui.label(name);
                 let mut percent = *value * 100.0;
                 if ui
-                    .add(egui::Slider::new(&mut percent, 0.0..=50.0).suffix(" %"))
+                    .add(Slider::new(&mut percent, 0.0..=50.0).suffix(" %"))
                     .changed()
                 {
                     *value = percent / 100.0;
@@ -759,15 +761,15 @@ impl ControlPanel {
                 ui.end_row();
             }
             ui.label("Courbe");
-            ui.add(egui::Slider::new(&mut blend.power, 1.0..=4.0))
+            ui.add(Slider::new(&mut blend.power, 1.0..=4.0).snaps([2.0]))
                 .on_hover_text("1 : rampe droite ; plus haut : plus de lumière au milieu du recouvrement");
             ui.end_row();
             ui.label("Gamma");
-            ui.add(egui::Slider::new(&mut blend.gamma, 1.0..=3.0))
+            ui.add(Slider::new(&mut blend.gamma, 1.0..=3.0).snaps([2.2]))
                 .on_hover_text("Gamma des projecteurs (2,2 en général) : corrige la zone de recouvrement trop sombre ou trop claire");
             ui.end_row();
             ui.label("Noir");
-            ui.add(egui::Slider::new(&mut blend.black, 0.0..=0.2).max_decimals(3))
+            ui.add(Slider::new(&mut blend.black, 0.0..=0.2).max_decimals(3))
                 .on_hover_text("Relève le noir hors des zones de fondu, pour qu'il égale le noir plus clair du recouvrement (deux projecteurs) ; régler sur une image noire");
             ui.end_row();
         });
@@ -785,7 +787,7 @@ impl ControlPanel {
                 .on_hover_text("La découpe se montre à l'extérieur du polygone");
             ui.horizontal(|ui| {
                 ui.label("Bord adouci");
-                ui.add(egui::Slider::new(&mut mask.feather, 0.0..=200.0).suffix(" px"));
+                ui.add(Slider::new(&mut mask.feather, 0.0..=200.0).suffix(" px"));
             });
             ui.horizontal(|ui| {
                 if ui
