@@ -58,6 +58,7 @@ Dans la fenêtre de contrôle :
 - `1` à `9` lancent les colonnes, `Espace` arrête tout ; la liste complète est dans Aide > Raccourcis clavier.
 - le tempo se règle en bas à gauche (BPM, Tap ou `T`, Resync ou `R`), ou suit l'horloge MIDI d'un logiciel de musique (menu Contrôle) ;
 - « Ajouter un effet… » ajoute un effet à la composition, à la couche ou au clip (18 effets, ou un shader ISF) ; « Préréglages… » enregistre et réutilise des chaînes d'effets et des réglages de couche ;
+- plugins : déposer des shaders ISF (`.fs`) dans le dossier des plugins (« Ouvrir le dossier des plugins » dans « Ajouter un effet… ») ; ils apparaissent dans les menus d'effets ou de générateurs, sans les choisir un par un ;
 - une case vide propose « Générateur… » : couleur, dégradé, lignes, cercles, damier, bruit, texte ou shader ISF (exemples dans `examples/isf/`) ;
 - à côté de chaque réglage : `~` l'anime (onde au tempo ou en secondes, ou « une fois » au lancement du clip), le menu `—` le relie à un curseur du tableau de bord du clip ou à une bande du son ;
 - le menu Audio règle le son des clips et l'écoute d'une entrée audio (graves, médiums, aigus, niveau) ;
