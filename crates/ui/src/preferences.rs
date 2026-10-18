@@ -60,6 +60,13 @@ pub struct Preferences {
     pub osc_output: bool,
     /// Where values are sent, as `IP:port`.
     pub osc_target: String,
+    /// Whether the network API (HTTP and WebSocket) is on.
+    pub api_enabled: bool,
+    /// TCP port of the network API.
+    pub api_port: u16,
+    /// Code clients give to use the network API; made when the API is
+    /// first turned on.
+    pub api_code: String,
 }
 
 impl Default for Preferences {
@@ -86,6 +93,9 @@ impl Default for Preferences {
             osc_port: 7000,
             osc_output: false,
             osc_target: "127.0.0.1:7001".to_owned(),
+            api_enabled: false,
+            api_port: prism_control::DEFAULT_API_PORT,
+            api_code: String::new(),
         }
     }
 }

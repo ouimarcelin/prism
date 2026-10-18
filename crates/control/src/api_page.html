@@ -20,7 +20,7 @@
   td.clip button.active { background: var(--on); border-color: #49b07a; }
   td.clip button:disabled { opacity: .3; }
   .layer { min-width: 150px; }
-  .layer input { width: 100%; }
+  .layer input { display: block; width: 100%; margin-top: 4px; }
   .toggles { display: flex; gap: 4px; margin-top: 4px; }
   .toggles button { padding: 4px 8px; min-height: 32px; font-size: 13px; }
   .toggles button.on { border-color: var(--accent); color: var(--accent); }
@@ -68,6 +68,7 @@ document.addEventListener("click", (event) => {
 });
 crossfader.addEventListener("input", () => send("/prism/crossfader", Number(crossfader.value)));
 let dragging = false;
+let shown = "";
 grid.addEventListener("pointerdown", (event) => { if (event.target.dataset.fader) dragging = true; });
 document.addEventListener("pointerup", () => { dragging = false; });
 grid.addEventListener("input", (event) => {
@@ -75,7 +76,9 @@ grid.addEventListener("input", (event) => {
 });
 
 function el(tag, props, children) {
-  const node = Object.assign(document.createElement(tag), props || {});
+  const { dataset, ...rest } = props || {};
+  const node = Object.assign(document.createElement(tag), rest);
+  Object.assign(node.dataset, dataset || {});
   for (const child of children || []) node.append(child);
   return node;
 }
@@ -83,6 +86,10 @@ function el(tag, props, children) {
 function render(state) {
   if (document.activeElement !== crossfader) crossfader.value = state.crossfader;
   status.textContent = `${Math.round(state.tempo * 10) / 10} BPM`;
+  // Rebuilt only when it changed, so a button is not replaced under a tap.
+  const key = JSON.stringify([state.columns, state.layers]);
+  if (key === shown || dragging) return;
+  shown = key;
   const head = el("tr", {}, [el("th")]);
   state.columns.forEach((column, c) => {
     head.append(el("th", {}, [el("button", { textContent: column.name || `Colonne ${c + 1}`, dataset: { address: `/prism/column/${c + 1}` } })]));
@@ -109,8 +116,6 @@ function render(state) {
     });
     rows.push(row);
   });
-  // Keep a fader being dragged.
-  if (dragging) return;
   grid.replaceChildren(...rows);
 }
 

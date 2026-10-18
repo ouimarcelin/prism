@@ -108,6 +108,8 @@ fn main() -> ExitCode {
             osc_output_error: None,
             dmx_input: None,
             dmx_wanted: None,
+            api: None,
+            api_wanted: None,
             messages: control_messages,
             status: MidiStatus::default(),
             checked: None,
@@ -217,6 +219,9 @@ struct Midi {
     dmx_input: Option<prism_control::DmxInput>,
     /// Protocol asked for when the DMX input was last started or failed.
     dmx_wanted: Option<prism_core::DmxProtocol>,
+    api: Option<prism_control::ApiServer>,
+    /// Port and code asked for when the API was last started or failed.
+    api_wanted: Option<(u16, String)>,
     messages: std::sync::mpsc::Receiver<ControlMessage>,
     status: MidiStatus,
     /// Last time the inputs present were looked at.
@@ -299,6 +304,30 @@ impl Midi {
             }
         }
         self.status.dmx_listening = self.dmx_input.is_some();
+        let api = (preferences.api_enabled && !preferences.api_code.is_empty())
+            .then(|| (preferences.api_port, preferences.api_code.clone()));
+        if api != self.api_wanted {
+            self.api_wanted = api.clone();
+            self.api = None;
+            self.status.api_error = None;
+            if let Some((port, code)) = api {
+                match prism_control::ApiServer::start(
+                    port,
+                    code,
+                    self.sender.clone(),
+                    Arc::clone(&self.wake),
+                ) {
+                    Ok(server) => self.api = Some(server),
+                    Err(error) => {
+                        self.status.api_error = Some(format!("API réseau, port {port} : {error}"));
+                    }
+                }
+            }
+        }
+        if let Some(server) = &self.api {
+            server.publish(&prism_control::api_state(composition));
+        }
+        self.status.api_port = self.api.as_ref().map(prism_control::ApiServer::port);
         if !preferences.osc_output {
             self.osc_output = None;
             self.osc_output_error = None;

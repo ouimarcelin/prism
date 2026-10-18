@@ -85,6 +85,10 @@ pub struct MidiStatus {
     pub dmx_listening: bool,
     /// Why DMX cannot be listened to.
     pub dmx_error: Option<String>,
+    /// Port the network API listens on, while it does.
+    pub api_port: Option<u16>,
+    /// Why the network API cannot listen.
+    pub api_error: Option<String>,
 }
 
 /// State of the audio input, for the interface.
@@ -851,6 +855,43 @@ impl ControlPanel {
         }
         for error in &midi.osc_errors {
             ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+        ui.separator();
+        ui.label(egui::RichText::new("API réseau").strong());
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut preferences.api_enabled, "Activer sur le port");
+            ui.add(egui::DragValue::new(&mut preferences.api_port).range(1024..=65535));
+        })
+        .response
+        .on_hover_text("Télécommande depuis une tablette ou un autre ordinateur du réseau");
+        if preferences.api_enabled && preferences.api_code.is_empty() {
+            preferences.api_code = prism_control::access_code();
+        }
+        if preferences.api_enabled {
+            ui.horizontal(|ui| {
+                ui.label("Code d'accès :");
+                ui.label(
+                    egui::RichText::new(&preferences.api_code)
+                        .monospace()
+                        .strong(),
+                );
+                if ui
+                    .small_button("Nouveau code")
+                    .on_hover_text("Les appareils connectés devront entrer le nouveau code")
+                    .clicked()
+                {
+                    preferences.api_code = prism_control::access_code();
+                }
+            });
+        }
+        if let Some(error) = &midi.api_error {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        } else if let Some(port) = midi.api_port {
+            let address = format!("http://{}:{port}", local_addresses());
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new("Ouvrir sur la tablette :").weak());
+                ui.hyperlink_to(&address, &address);
+            });
         }
         if preferences != self.preferences {
             self.preferences = preferences;
