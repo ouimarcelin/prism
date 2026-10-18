@@ -13,12 +13,13 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowLevel};
 
-/// The splash image, 1024 × 1024 RGBA, rendered from `assets/splash.svg`.
-const LOGO: &[u8] = include_bytes!("../../../assets/splash-1024.png");
+/// The splash image, 2048 × 2048 RGBA, rendered from `assets/splash.svg`:
+/// sharp on a Retina screen.
+const LOGO: &[u8] = include_bytes!("../../../assets/splash-2048.png");
 
 /// Side of the window, in logical pixels: large enough for the thin lines
 /// of the image.
-const SIDE: f64 = 440.0;
+const SIDE: f64 = 640.0;
 
 /// Time left to the window server to show the painted window before the
 /// start blocks the event loop.
