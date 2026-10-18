@@ -141,6 +141,7 @@ pub struct ControlPanel {
     /// Input devices, read when the audio menu opens.
     audio_devices: Option<Vec<String>>,
     pub(crate) presets: PresetStore,
+    pub(crate) plugins: crate::plugins::PluginShelf,
     pub(crate) learn: Learn,
     controls: Controls,
     pub(crate) stage: crate::stage::StageEditor,
@@ -174,6 +175,7 @@ impl ControlPanel {
             tap: TapTempo::default(),
             audio_devices: None,
             presets: PresetStore::default(),
+            plugins: crate::plugins::PluginShelf::default(),
             learn: Learn::default(),
             controls: Controls::default(),
             stage: crate::stage::StageEditor::default(),
@@ -192,6 +194,11 @@ impl ControlPanel {
             path.as_ref()
                 .and_then(|path| path.parent())
                 .map(|folder| folder.join("Préréglages")),
+        );
+        self.plugins = crate::plugins::PluginShelf::new(
+            path.as_ref()
+                .and_then(|path| path.parent())
+                .map(|folder| folder.join("Plugins")),
         );
         self.preferences_path = path;
         self

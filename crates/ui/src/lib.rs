@@ -18,6 +18,7 @@ mod labels;
 mod learn;
 mod lighting;
 mod panel;
+mod plugins;
 mod preferences;
 mod presets;
 mod shortcuts;

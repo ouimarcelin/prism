@@ -39,6 +39,7 @@ impl ControlPanel {
                     false,
                     Tools {
                         presets: &mut self.presets,
+                        plugins: &mut self.plugins,
                         learn: &mut self.learn,
                     },
                 );
@@ -158,6 +159,7 @@ impl ControlPanel {
             true,
             Tools {
                 presets: &mut self.presets,
+                plugins: &mut self.plugins,
                 learn: &mut self.learn,
             },
         );
@@ -185,11 +187,14 @@ impl ControlPanel {
                             }
                         }
                         ui.separator();
-                        if ui
+                        let plugin = self.plugins.menu_items(ui, false);
+                        ui.separator();
+                        let picked = ui
                             .selectable_label(false, "Shader ISF…")
                             .on_hover_text("Une image dessinée par un fichier ISF (.fs)")
-                            .clicked()
-                            && let Some(path) = crate::effects::pick_isf_file()
+                            .clicked();
+                        if let Some(path) =
+                            plugin.or_else(|| picked.then(crate::effects::pick_isf_file).flatten())
                         {
                             let name = path.file_stem().map_or_else(
                                 || "Shader".into(),
@@ -300,6 +305,7 @@ impl ControlPanel {
                 true,
                 Tools {
                     presets: &mut self.presets,
+                    plugins: &mut self.plugins,
                     learn: &mut self.learn,
                 },
             );
@@ -328,6 +334,7 @@ impl ControlPanel {
                 true,
                 Tools {
                     presets: &mut self.presets,
+                    plugins: &mut self.plugins,
                     learn: &mut self.learn,
                 },
             );
@@ -506,6 +513,7 @@ impl ControlPanel {
             true,
             Tools {
                 presets: &mut self.presets,
+                plugins: &mut self.plugins,
                 learn: &mut self.learn,
             },
         );

@@ -488,6 +488,14 @@ fn translate(glsl: &str, first_line: usize, lines_before: usize) -> Result<Strin
         .map_err(|error| IsfError::Compile(error.to_string()))
 }
 
+/// Whether ISF source text is a filter, and its description, from its
+/// header alone.
+pub(crate) fn summary(source: &str) -> Result<(bool, Option<String>), IsfError> {
+    let (json, _, _) = split(source)?;
+    let header = parse_header(json)?;
+    Ok((header.filter, header.description))
+}
+
 /// Reads ISF source text into a shader for the effect chain.
 pub fn compile(source: &str, label: &str) -> Result<IsfShader, IsfError> {
     let (json, code, lines_before) = split(source)?;
