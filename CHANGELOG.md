@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- API réseau (Contrôle > API réseau, désactivée par défaut, port 8080, code d'accès) : état en JSON, commandes HTTP et WebSocket avec les adresses `/prism/…` de l'OSC, page de télécommande pour tablette (ADR 0035).
 - Fenêtre de démarrage : le logo s'affiche sur fond transparent au centre de l'écran pendant que le moteur démarre ; le GPU ouvert pour elle sert ensuite à l'application. Nouveau logo.
 
 ### Modifié
