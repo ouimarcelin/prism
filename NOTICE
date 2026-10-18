@@ -60,7 +60,8 @@ texture description used to exchange images follow the Spout 2 SDK
 (https://github.com/leadedge/Spout2, BSD 2-clause licence, Copyright (c)
 Lynn Jarvis). No code of the SDK is included.
 
-Application icon (assets/icon-1024.png): the logo of Prism, drawn by its
+Splash image (assets/splash.svg, rendered as assets/splash-1024.png) and
+application icon (assets/icon-1024.png): the logo of Prism, drawn by its
 author (@ouimarcelin), under the licence of Prism.
 
 Inter (assets/fonts/Inter-Medium.ttf, assets/fonts/Inter-SemiBold.ttf):
