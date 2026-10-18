@@ -1,5 +1,5 @@
 //! The splash image in motion: a square grid that unfolds, in
-//! [`DURATION`], into `assets/splash.svg`, rendered on the processor for
+//! [`DURATION`] seconds, into `assets/splash.svg`, rendered on the processor for
 //! each frame.
 //!
 //! At the start, the vertices of the frame's facets sit on a regular grid
@@ -13,8 +13,13 @@ use resvg::{tiny_skia, usvg};
 /// The image, drawn by the author of Prism.
 const SVG: &str = include_str!("../../../assets/splash.svg");
 
-/// Length of the animation, in seconds.
-pub const DURATION: f32 = 3.0;
+/// Length of the easing curve, in seconds.
+const CURVE: f32 = 3.0;
+/// Part of the curve skipped at the start, where the cubic ease-in barely
+/// moves, in seconds.
+const SKIPPED: f32 = 0.5;
+/// Length of the animation on screen, in seconds.
+pub const DURATION: f32 = CURVE - SKIPPED;
 
 /// Start of the outer outline in the image: a path with rounded corners,
 /// replaced by a polygon whose corners can move.
@@ -194,7 +199,7 @@ impl Art {
 
     /// The image with every vertex at its place at `seconds`.
     fn svg(&self, seconds: f32, opacity: f32) -> String {
-        let t = ease_in_out((seconds / DURATION).clamp(0.0, 1.0));
+        let t = ease_in_out(((seconds + SKIPPED) / CURVE).clamp(0.0, 1.0));
         let mut svg = String::with_capacity(8192);
         for piece in &self.pieces {
             match piece {
