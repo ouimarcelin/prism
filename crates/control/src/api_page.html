@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Prism – télécommande</title>
+<style>
+  :root { color-scheme: dark; --bg: #121316; --panel: #1d1f24; --line: #2c2f36; --text: #e8e9ec; --weak: #8b8f99; --accent: #5aa9ff; --on: #2f7d4f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.3 -apple-system, system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
+  header { display: flex; gap: 8px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0 auto 0 0; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font: inherit; min-height: 44px; touch-action: manipulation; }
+  button:active { background: var(--line); }
+  #status { color: var(--weak); font-size: 13px; }
+  main { padding: 12px 16px 24px; overflow-x: auto; }
+  table { border-collapse: separate; border-spacing: 6px; }
+  th { font-weight: 500; color: var(--weak); text-align: left; white-space: nowrap; }
+  td.clip button { width: 120px; height: 64px; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.clip button.active { background: var(--on); border-color: #49b07a; }
+  td.clip button:disabled { opacity: .3; }
+  .layer { min-width: 150px; }
+  .layer input { width: 100%; }
+  .toggles { display: flex; gap: 4px; margin-top: 4px; }
+  .toggles button { padding: 4px 8px; min-height: 32px; font-size: 13px; }
+  .toggles button.on { border-color: var(--accent); color: var(--accent); }
+  .fader { display: flex; gap: 12px; align-items: center; padding: 8px 16px 0; }
+  .fader input { flex: 1; height: 44px; }
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; }
+  dialog input { font: inherit; font-size: 22px; letter-spacing: 4px; width: 9ch; text-transform: uppercase; padding: 8px; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Prism</h1>
+  <span id="status">Connexion…</span>
+  <button data-address="/prism/tap">Tap</button>
+  <button data-address="/prism/resync">Resync</button>
+  <button data-address="/prism/stop">Tout arrêter</button>
+</header>
+<div class="fader"><span>A</span><input id="crossfader" type="range" min="0" max="1" step="0.001"><span>B</span></div>
+<main><table id="grid"></table></main>
+<dialog id="ask">
+  <form method="dialog">
+    <p>Code d'accès affiché dans Prism<br>(Contrôle &gt; API réseau)</p>
+    <input id="code" autocomplete="off" autocapitalize="characters" maxlength="6">
+    <p><button>Valider</button></p>
+  </form>
+</dialog>
+<script>
+"use strict";
+const grid = document.getElementById("grid");
+const status = document.getElementById("status");
+const crossfader = document.getElementById("crossfader");
+let socket = null;
+let code = "";
+try { code = localStorage.getItem("prism-code") || ""; } catch (e) {}
+
+function send(address, value) {
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(value === undefined ? { address } : { address, value }));
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest("button[data-address]");
+  if (button) send(button.dataset.address);
+});
+crossfader.addEventListener("input", () => send("/prism/crossfader", Number(crossfader.value)));
+let dragging = false;
+grid.addEventListener("pointerdown", (event) => { if (event.target.dataset.fader) dragging = true; });
+document.addEventListener("pointerup", () => { dragging = false; });
+grid.addEventListener("input", (event) => {
+  if (event.target.dataset.fader) send(event.target.dataset.fader, Number(event.target.value));
+});
+
+function el(tag, props, children) {
+  const node = Object.assign(document.createElement(tag), props || {});
+  for (const child of children || []) node.append(child);
+  return node;
+}
+
+function render(state) {
+  if (document.activeElement !== crossfader) crossfader.value = state.crossfader;
+  status.textContent = `${Math.round(state.tempo * 10) / 10} BPM`;
+  const head = el("tr", {}, [el("th")]);
+  state.columns.forEach((column, c) => {
+    head.append(el("th", {}, [el("button", { textContent: column.name || `Colonne ${c + 1}`, dataset: { address: `/prism/column/${c + 1}` } })]));
+  });
+  const rows = [head];
+  state.layers.forEach((layer, l) => {
+    const n = l + 1;
+    const opacity = el("input", { type: "range", min: 0, max: 1, step: 0.001, value: layer.opacity, dataset: { fader: `/prism/layer/${n}/opacity` } });
+    const toggles = el("div", { className: "toggles" }, [
+      el("button", { textContent: "B", title: "Bypass", className: layer.bypass ? "on" : "", dataset: { address: `/prism/layer/${n}/bypass` } }),
+      el("button", { textContent: "S", title: "Solo", className: layer.solo ? "on" : "", dataset: { address: `/prism/layer/${n}/solo` } }),
+      el("button", { textContent: "■", title: "Arrêter", dataset: { address: `/prism/layer/${n}/stop` } }),
+    ]);
+    const row = el("tr", {}, [el("th", { className: "layer" }, [layer.name || `Couche ${n}`, opacity, toggles])]);
+    state.columns.forEach((_, c) => {
+      const name = layer.clips[c];
+      const button = el("button", {
+        textContent: name || "",
+        disabled: name == null,
+        className: layer.active === c ? "active" : "",
+        dataset: { address: `/prism/layer/${n}/clip/${c + 1}` },
+      });
+      row.append(el("td", { className: "clip" }, [button]));
+    });
+    rows.push(row);
+  });
+  // Keep a fader being dragged.
+  if (dragging) return;
+  grid.replaceChildren(...rows);
+}
+
+function askCode() {
+  const dialog = document.getElementById("ask");
+  const input = document.getElementById("code");
+  input.value = code;
+  dialog.showModal();
+  dialog.addEventListener("close", () => {
+    code = input.value.trim().toUpperCase();
+    try { localStorage.setItem("prism-code", code); } catch (e) {}
+    connect();
+  }, { once: true });
+}
+
+async function connect() {
+  if (!code) return askCode();
+  const check = await fetch(`/api/state?code=${encodeURIComponent(code)}`).catch(() => null);
+  if (check && check.status === 401) {
+    status.textContent = "Code refusé";
+    return askCode();
+  }
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  socket = new WebSocket(`${scheme}://${location.host}/api/ws?code=${encodeURIComponent(code)}`);
+  socket.onmessage = (event) => render(JSON.parse(event.data));
+  socket.onclose = () => {
+    status.textContent = "Déconnecté, nouvel essai…";
+    setTimeout(connect, 2000);
+  };
+}
+
+connect();
+</script>
+</body>
+</html>
