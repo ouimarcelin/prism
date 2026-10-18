@@ -1,0 +1,76 @@
+name: Release
+
+# Builds the macOS disk image and the Windows installer for a version tag
+# (v0.6.0…) and attaches them to a draft release, published by hand after
+# a check (ADR 0039). Signing runs only when its secrets exist.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS (DMG)
+    runs-on: macos-latest
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - name: Import the Developer ID certificate
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          rm certificate.p12
+      - name: Store the notarization credentials
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: xcrun notarytool store-credentials prism --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+      - name: Build the disk image
+        env:
+          PRISM_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          PRISM_NOTARY_PROFILE: ${{ env.MACOS_CERTIFICATE != '' && 'prism' || '' }}
+        run: scripts/make-dmg.sh --ndi --universal
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: target/dist/*.dmg
+
+  windows:
+    name: Windows (installer)
+    runs-on: windows-latest
+    env:
+      WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Write the signing certificate
+        if: env.WINDOWS_CERTIFICATE != ''
+        shell: pwsh
+        run: '[IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))'
+      - name: Build the installer
+        shell: pwsh
+        env:
+          PRISM_SIGN_CERT: ${{ env.WINDOWS_CERTIFICATE != '' && format('{0}\cert.pfx', runner.temp) || '' }}
+          PRISM_SIGN_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: scripts\make-installer.ps1 -Ndi
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: target/dist/*-setup.exe
