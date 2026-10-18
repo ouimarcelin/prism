@@ -1,24 +1,25 @@
-//! Transparent window showing the application logo while the engine and
-//! the control window start.
+//! Transparent window showing the splash image, in motion, while the
+//! engine and the control window start.
 //!
-//! The GPU opened for this window is handed over to the application.
+//! The first frame is painted on the main thread; the next ones on a
+//! thread of their own, since the start blocks the event loop. The GPU
+//! opened for this window is handed over to the application.
 
 use std::error::Error;
-use std::io::Cursor;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use prism_render::{Gpu, wgpu};
+use resvg::tiny_skia::Pixmap;
 use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowLevel};
 
-/// The splash image, 2048 × 2048 RGBA, rendered from `assets/splash.svg`:
-/// sharp on a Retina screen.
-const LOGO: &[u8] = include_bytes!("../../../assets/splash-2048.png");
+use crate::splash_art::Art;
 
-/// Side of the window, in logical pixels: large enough for the thin lines
-/// of the image.
+/// Side of the window, in logical pixels.
 const SIDE: f64 = 640.0;
 
 /// Time left to the window server to show the painted window before the
@@ -28,12 +29,35 @@ const SETTLE: Duration = Duration::from_millis(50);
 /// Longest wait for the first paint, after which the start goes on anyway.
 const PAINT_TIMEOUT: Duration = Duration::from_secs(1);
 
+/// Shortest time the image shows, from its first frame, so that its motion
+/// is seen even when the start is quick.
+const SHORTEST: Duration = Duration::from_millis(1600);
+
+/// Fade in and fade out, in seconds.
+const FADE: f32 = 0.3;
+
 pub struct Splash {
     window: Arc<Window>,
     gpu: Arc<Gpu>,
-    surface: wgpu::Surface<'static>,
+    /// Handed to the animation thread after the first frame.
+    surface: Option<wgpu::Surface<'static>>,
     opened: Instant,
     painted: Option<Instant>,
+    animation: Option<Animation>,
+}
+
+/// The thread drawing the frames after the first.
+struct Animation {
+    stop: Arc<AtomicBool>,
+    thread: JoinHandle<()>,
+}
+
+/// How frames reach the window surface.
+#[derive(Clone, Copy)]
+struct Target {
+    side: u32,
+    bgra: bool,
+    premultiplied: bool,
 }
 
 impl Splash {
@@ -70,9 +94,10 @@ impl Splash {
         Ok(Self {
             window,
             gpu,
-            surface,
             opened: Instant::now(),
             painted: None,
+            surface: Some(surface),
+            animation: None,
         })
     }
 
@@ -85,14 +110,21 @@ impl Splash {
         Arc::clone(&self.gpu)
     }
 
-    /// Copies the logo, scaled to the window, into the window surface.
+    /// Paints the first frame, then starts the animation thread; later
+    /// calls do nothing.
     pub fn paint(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.painted.is_some() {
+            return Ok(());
+        }
+        let Some(surface) = &self.surface else {
+            return Ok(());
+        };
         let size = self.window.inner_size();
         let side = size.width.min(size.height);
         if side == 0 {
             return Ok(());
         }
-        let capabilities = self.surface.get_capabilities(&self.gpu.adapter);
+        let capabilities = surface.get_capabilities(&self.gpu.adapter);
         if !capabilities.usages.contains(wgpu::TextureUsages::COPY_DST) {
             return Err("la fenêtre de démarrage n'accepte pas de copie".into());
         }
@@ -110,51 +142,37 @@ impl Splash {
         .into_iter()
         .find(|mode| capabilities.alpha_modes.contains(mode))
         .ok_or("transparence non prise en charge")?;
-        let mut config = self
-            .surface
+        let mut config = surface
             .get_default_config(&self.gpu.adapter, side, side)
             .ok_or("le GPU ne peut pas afficher dans la fenêtre de démarrage")?;
         config.usage = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST;
         config.format = format;
         config.alpha_mode = alpha_mode;
         config.view_formats.clear();
-        self.surface.configure(&self.gpu.device, &config);
-        let logo = decode_logo()?;
-        let premultiplied = alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied;
-        let mut bytes = Vec::with_capacity((side * side * 4) as usize);
-        for [r, g, b, a] in scale(&logo, side) {
-            let [r, g, b] = if premultiplied {
-                [r, g, b].map(|channel| ((channel as u32 * a as u32 + 127) / 255) as u8)
-            } else {
-                [r, g, b]
-            };
-            match format {
-                wgpu::TextureFormat::Bgra8Unorm => bytes.extend_from_slice(&[b, g, r, a]),
-                _ => bytes.extend_from_slice(&[r, g, b, a]),
-            }
-        }
-        let frame = match self.surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(frame)
-            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            // Not shown yet: next redraw.
-            _ => {
-                self.window.request_redraw();
-                return Ok(());
-            }
+        surface.configure(&self.gpu.device, &config);
+
+        let target = Target {
+            side,
+            bgra: format == wgpu::TextureFormat::Bgra8Unorm,
+            premultiplied: alpha_mode == wgpu::CompositeAlphaMode::PreMultiplied,
         };
-        self.gpu.queue.write_texture(
-            frame.texture.as_image_copy(),
-            &bytes,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(side * 4),
-                rows_per_image: Some(side),
-            },
-            frame.texture.size(),
-        );
-        self.gpu.queue.submit([]);
-        self.gpu.queue.present(frame);
-        self.painted.get_or_insert_with(Instant::now);
+        let art = Art::new()?;
+        let first = art.render(0.0, 0.0, side).ok_or("image de démarrage")?;
+        if !present(&self.gpu, surface, &first, target) {
+            // Not shown yet: next redraw.
+            self.window.request_redraw();
+            return Ok(());
+        }
+        let painted = Instant::now();
+        self.painted = Some(painted);
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let (gpu, flag) = (Arc::clone(&self.gpu), Arc::clone(&stop));
+        let surface = self.surface.take().ok_or("surface")?;
+        let thread = std::thread::Builder::new()
+            .name("prism-splash".into())
+            .spawn(move || animate(&art, &gpu, &surface, target, painted, &flag))?;
+        self.animation = Some(Animation { stop, thread });
         Ok(())
     }
 
@@ -167,59 +185,89 @@ impl Splash {
     }
 }
 
-/// The logo as RGBA pixels, row by row.
-struct Logo {
-    side: u32,
-    pixels: Vec<u8>,
-}
-
-fn decode_logo() -> Result<Logo, Box<dyn Error>> {
-    let mut decoder = png::Decoder::new(Cursor::new(LOGO));
-    decoder.set_transformations(png::Transformations::normalize_to_color8());
-    let mut reader = decoder.read_info()?;
-    let size = reader.output_buffer_size().ok_or("logo trop grand")?;
-    let mut pixels = vec![0; size];
-    let info = reader.next_frame(&mut pixels)?;
-    if info.color_type != png::ColorType::Rgba || info.width != info.height {
-        return Err("logo : image RGBA carrée attendue".into());
+impl Drop for Splash {
+    /// Leaves the image its shortest time on screen, then fades it out.
+    fn drop(&mut self) {
+        let Some(animation) = self.animation.take() else {
+            return;
+        };
+        if let Some(painted) = self.painted {
+            std::thread::sleep((painted + SHORTEST).saturating_duration_since(Instant::now()));
+        }
+        animation.stop.store(true, Ordering::Relaxed);
+        let _ = animation.thread.join();
     }
-    Ok(Logo {
-        side: info.width,
-        pixels,
-    })
 }
 
-/// The logo averaged down (or sampled up) to `side` × `side` pixels, with
-/// colors weighted by their alpha.
-fn scale(logo: &Logo, side: u32) -> Vec<[u8; 4]> {
-    let ratio = logo.side as f64 / side as f64;
-    let span = |index: u32| {
-        let start = (index as f64 * ratio) as u32;
-        let end = (((index + 1) as f64 * ratio) as u32).clamp(start + 1, logo.side);
-        start..end
-    };
-    let mut result = Vec::with_capacity((side * side) as usize);
-    for y in 0..side {
-        let rows = span(y);
-        for x in 0..side {
-            let mut sum = [0u64; 4];
-            let mut count = 0u64;
-            for sy in rows.clone() {
-                for sx in span(x) {
-                    let i = ((sy * logo.side + sx) * 4) as usize;
-                    let alpha = logo.pixels[i + 3] as u64;
-                    for (total, value) in sum.iter_mut().zip(&logo.pixels[i..i + 3]) {
-                        *total += *value as u64 * alpha;
-                    }
-                    sum[3] += alpha;
-                    count += 1;
-                }
-            }
-            let color = |channel: usize| sum[channel].checked_div(sum[3]).unwrap_or(0) as u8;
-            result.push([color(0), color(1), color(2), (sum[3] / count) as u8]);
+/// Draws frames until `stop`, then fades the image out.
+fn animate(
+    art: &Art,
+    gpu: &Gpu,
+    surface: &wgpu::Surface<'static>,
+    target: Target,
+    start: Instant,
+    stop: &AtomicBool,
+) {
+    let mut stopped: Option<Instant> = None;
+    loop {
+        let seconds = start.elapsed().as_secs_f32();
+        let fade_in = (seconds / FADE).min(1.0);
+        if stopped.is_none() && stop.load(Ordering::Relaxed) {
+            stopped = Some(Instant::now());
+        }
+        let fade_out = stopped.map_or(1.0, |at| 1.0 - at.elapsed().as_secs_f32() / FADE);
+        let opacity = fade_in.min(fade_out).max(0.0);
+        let shown = art
+            .render(seconds, opacity, target.side)
+            .is_some_and(|frame| present(gpu, surface, &frame, target));
+        if opacity <= 0.0 && stopped.is_some() {
+            return;
+        }
+        if !shown {
+            std::thread::sleep(Duration::from_millis(16));
         }
     }
-    result
+}
+
+/// Copies `frame` into the window; false when the window takes no frame now.
+fn present(gpu: &Gpu, surface: &wgpu::Surface<'static>, frame: &Pixmap, target: Target) -> bool {
+    let texture = match surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(texture)
+        | wgpu::CurrentSurfaceTexture::Suboptimal(texture) => texture,
+        _ => return false,
+    };
+    let bytes = surface_bytes(frame.data(), target);
+    gpu.queue.write_texture(
+        texture.texture.as_image_copy(),
+        &bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(target.side * 4),
+            rows_per_image: Some(target.side),
+        },
+        texture.texture.size(),
+    );
+    gpu.queue.submit([]);
+    gpu.queue.present(texture);
+    true
+}
+
+/// Premultiplied RGBA pixels in the order and alpha mode of the window.
+fn surface_bytes(rgba: &[u8], target: Target) -> Vec<u8> {
+    let mut bytes = Vec::with_capacity(rgba.len());
+    for &[mut r, mut g, mut b, a] in rgba.as_chunks::<4>().0 {
+        if !target.premultiplied && a > 0 {
+            let unmultiply =
+                |channel: u8| ((channel as u32 * 255 + a as u32 / 2) / a as u32).min(255) as u8;
+            [r, g, b] = [unmultiply(r), unmultiply(g), unmultiply(b)];
+        }
+        if target.bgra {
+            bytes.extend_from_slice(&[b, g, r, a]);
+        } else {
+            bytes.extend_from_slice(&[r, g, b, a]);
+        }
+    }
+    bytes
 }
 
 #[cfg(test)]
@@ -227,19 +275,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_logo_decodes_as_a_square() {
-        let logo = decode_logo().unwrap();
-        assert_eq!(logo.pixels.len(), (logo.side * logo.side * 4) as usize);
-    }
-
-    #[test]
-    fn scaling_averages_by_alpha() {
-        // Opaque red next to transparent green: the color stays red.
-        let logo = Logo {
-            side: 2,
-            pixels: vec![255, 0, 0, 255, 0, 255, 0, 0, 255, 0, 0, 255, 0, 255, 0, 0],
+    fn pixels_follow_the_window_format() {
+        let pixel = [100, 50, 0, 128];
+        let target = Target {
+            side: 1,
+            bgra: true,
+            premultiplied: true,
         };
-        assert_eq!(scale(&logo, 1), vec![[255, 0, 0, 127]]);
-        assert_eq!(scale(&logo, 4)[1], [255, 0, 0, 255]);
+        assert_eq!(surface_bytes(&pixel, target), vec![0, 50, 100, 128]);
+        let target = Target {
+            bgra: false,
+            premultiplied: false,
+            ..target
+        };
+        assert_eq!(surface_bytes(&pixel, target), vec![199, 100, 0, 128]);
     }
 }

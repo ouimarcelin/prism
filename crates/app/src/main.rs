@@ -8,6 +8,7 @@
 mod control;
 mod options;
 mod splash;
+mod splash_art;
 
 use std::error::Error;
 use std::path::PathBuf;
