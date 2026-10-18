@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -70,6 +71,23 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       # NDI is optional (ADR 0026): it must build too; its tests skip without the NDI library.
       - run: cargo clippy --workspace --all-targets --features prism-app/ndi -- -D warnings
+      - run: cargo test --workspace
+      - run: cargo build --workspace --release
+
+  # Windows port (phase 6): not blocking until the port builds and passes.
+  rust-windows:
+    name: rust (Windows)
+    needs: detect
+    if: needs.detect.outputs.workspace == 'true'
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
       - run: cargo build --workspace --release
 
