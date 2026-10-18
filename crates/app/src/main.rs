@@ -496,6 +496,8 @@ impl Running {
             event_loop.create_window(
                 Window::default_attributes()
                     .with_title(panel.title())
+                    // Shown once the splash window is gone.
+                    .with_visible(false)
                     .with_inner_size(LogicalSize::new(1440.0, 900.0))
                     .with_min_inner_size(LogicalSize::new(960.0, 600.0)),
             )?,
@@ -858,7 +860,12 @@ impl App {
                 event_loop.exit();
             }
         }
+        // Waits for the end of the splash animation.
         self.splash = None;
+        if let Some(running) = &self.running {
+            running.control.window.set_visible(true);
+            running.control.window.focus_window();
+        }
     }
 
     fn handle(&mut self, event_loop: &ActiveEventLoop, actions: Vec<Action>) {
