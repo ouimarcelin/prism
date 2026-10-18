@@ -695,7 +695,7 @@ impl ControlPanel {
                     self.document.composition_mut().stop_all();
                 }
             });
-            ui.menu_button("Sortie", |ui| {
+            settings_menu("Sortie").ui(ui, |ui| {
                 if frame.screens.is_empty() {
                     ui.label("Aucun écran détecté");
                 }
@@ -727,6 +727,7 @@ impl ControlPanel {
                     .clicked()
                 {
                     self.actions.push(Action::CloseOutput);
+                    ui.close();
                 }
                 ui.separator();
                 if ui
@@ -773,9 +774,9 @@ impl ControlPanel {
                     self.save_preferences();
                 }
             });
-            ui.menu_button("Contrôle", |ui| self.control_menu(ui, &frame.midi));
-            let audio = ui.menu_button("Audio", |ui| self.audio_menu(ui, &frame.audio));
-            if audio.inner.is_none() {
+            settings_menu("Contrôle").ui(ui, |ui| self.control_menu(ui, &frame.midi));
+            let (_, audio) = settings_menu("Audio").ui(ui, |ui| self.audio_menu(ui, &frame.audio));
+            if audio.is_none() {
                 // Read the devices again next time the menu opens.
                 self.audio_devices = None;
             }
@@ -1456,6 +1457,15 @@ fn beat_lights(ui: &mut egui::Ui, beat: f64) {
         ui.painter().circle_filled(center, 3.5, color);
     }
     response.on_hover_text("Temps de la mesure");
+}
+
+/// A menu of settings: clicking a checkbox or an option inside leaves it
+/// open; its actions close it themselves.
+fn settings_menu(title: &str) -> egui::containers::menu::MenuButton<'_> {
+    egui::containers::menu::MenuButton::new(title).config(
+        egui::containers::menu::MenuConfig::new()
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
+    )
 }
 
 #[cfg(test)]
