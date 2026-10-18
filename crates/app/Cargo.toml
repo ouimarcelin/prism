@@ -33,6 +33,9 @@ prism-render = { path = "../render" }
 prism-ui = { path = "../ui" }
 winit = "0.30.13"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Power"] }
+
 [lints]
 workspace = true
 

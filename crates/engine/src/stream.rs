@@ -34,8 +34,14 @@ enum Phase {
     /// Read live from another application over Syphon.
     #[cfg(target_os = "macos")]
     Syphon(SyphonInput),
+    /// Read live from another application over Spout.
+    #[cfg(target_os = "windows")]
+    Spout {
+        name: String,
+        receiver: prism_io_video::SpoutReceiver,
+    },
     /// Read live from a source of the network over NDI.
-    #[cfg(all(target_os = "macos", feature = "ndi"))]
+    #[cfg(feature = "ndi")]
     Ndi {
         name: String,
         receiver: prism_io_video::NdiReceiver,
@@ -104,8 +110,17 @@ impl ClipStream {
             #[cfg(not(target_os = "macos"))]
             let phase = Phase::Failed(format!("Syphon ({app} – {name}) : macOS seulement"));
             (None, phase)
+        } else if let MediaSource::Spout { name } = &source {
+            #[cfg(target_os = "windows")]
+            let phase = Phase::Spout {
+                name: name.clone(),
+                receiver: prism_io_video::SpoutReceiver::connect(name),
+            };
+            #[cfg(not(target_os = "windows"))]
+            let phase = Phase::Failed(format!("Spout ({name}) : Windows seulement"));
+            (None, phase)
         } else if let MediaSource::Ndi { name } = &source {
-            #[cfg(all(target_os = "macos", feature = "ndi"))]
+            #[cfg(feature = "ndi")]
             let phase = match prism_io_video::NdiReceiver::connect(name) {
                 Ok(receiver) => Phase::Ndi {
                     name: name.clone(),
@@ -113,7 +128,7 @@ impl ClipStream {
                 },
                 Err(error) => Phase::Failed(format!("NDI ({name}) : {error}")),
             };
-            #[cfg(not(all(target_os = "macos", feature = "ndi")))]
+            #[cfg(not(feature = "ndi"))]
             let phase = Phase::Failed(format!(
                 "NDI ({name}) : Prism compilé sans NDI (option « ndi »)"
             ));
@@ -493,7 +508,7 @@ impl ClipStream {
             }
             return;
         }
-        #[cfg(all(target_os = "macos", feature = "ndi"))]
+        #[cfg(feature = "ndi")]
         if let Phase::Ndi { receiver, .. } = &self.phase {
             let Some(received) = receiver.take_frame() else {
                 return;
@@ -529,6 +544,37 @@ impl ClipStream {
                     height,
                     pixels: image.pixels,
                 });
+            }
+            return;
+        }
+        #[cfg(target_os = "windows")]
+        if let Phase::Spout { receiver, .. } = &self.phase {
+            let Some(received) = receiver.take_frame() else {
+                return;
+            };
+            let (width, height) = (received.width, received.height);
+            if width == 0 || height == 0 {
+                return;
+            }
+            let frame = Frame::Rgba(prism_media::RgbaImage {
+                width,
+                height,
+                order: prism_media::ChannelOrder::Bgra,
+                pixels: received.pixels,
+            });
+            if self
+                .texture
+                .as_ref()
+                .is_none_or(|texture| (texture.width(), texture.height()) != (width, height))
+            {
+                self.texture = Some(VideoTexture::new(&gpu.device, width, height));
+            }
+            if let Some(texture) = &mut self.texture
+                && uploader
+                    .upload(&gpu.device, &gpu.queue, encoder, texture, &frame)
+                    .is_ok()
+            {
+                self.shown = Some(self.shown.map_or(0, |count| count.wrapping_add(1)));
             }
             return;
         }
@@ -604,13 +650,21 @@ impl ClipStream {
             Phase::Syphon(_) if self.shown.is_some() => ClipState::Playing,
             #[cfg(target_os = "macos")]
             Phase::Syphon(_) => ClipState::Loading,
-            #[cfg(all(target_os = "macos", feature = "ndi"))]
+            #[cfg(feature = "ndi")]
             Phase::Ndi { receiver, .. } if self.shown.is_some() && receiver.is_connected() => {
                 ClipState::Playing
             }
-            #[cfg(all(target_os = "macos", feature = "ndi"))]
+            #[cfg(feature = "ndi")]
             Phase::Ndi { name, .. } => {
                 ClipState::Error(format!("source NDI « {name} » absente : en attente"))
+            }
+            #[cfg(target_os = "windows")]
+            Phase::Spout { receiver, .. } if self.shown.is_some() && receiver.is_connected() => {
+                ClipState::Playing
+            }
+            #[cfg(target_os = "windows")]
+            Phase::Spout { name, .. } => {
+                ClipState::Error(format!("émetteur Spout « {name} » absent : en attente"))
             }
         }
     }

@@ -5,6 +5,10 @@
 //! period, and the scheduler wakes it on time even when other processes keep
 //! every core busy. Should the system refuse, it keeps the quality-of-service
 //! class of user interfaces. Decoding threads ask for the class just below.
+//!
+//! On Windows, the render thread gets the time-critical priority and the
+//! system timer a 1 ms resolution, without which sleeps last up to 15.6 ms;
+//! decoding threads get the priority above normal.
 
 // A few system calls. Each block states why it is sound.
 #![allow(unsafe_code)]
@@ -23,7 +27,24 @@ pub(crate) fn render_thread(period: Duration) -> bool {
         }
         real_time(period)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        let _ = period;
+        use windows_sys::Win32::Media::{TIMERR_NOERROR, timeBeginPeriod};
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_TIME_CRITICAL,
+        };
+        // SAFETY: plain calls with constant arguments; the pseudo handle of
+        // the current thread needs no closing. The timer resolution holds
+        // until the process ends.
+        unsafe {
+            let timer = timeBeginPeriod(1) == TIMERR_NOERROR;
+            let priority =
+                SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL) != 0;
+            timer && priority
+        }
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = period;
         false
@@ -86,5 +107,13 @@ pub(crate) fn decode_thread() {
     // SAFETY: as above.
     unsafe {
         libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INITIATED, 0);
+    }
+    #[cfg(target_os = "windows")]
+    // SAFETY: as above.
+    unsafe {
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_ABOVE_NORMAL,
+        };
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     }
 }

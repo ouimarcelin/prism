@@ -51,14 +51,26 @@ pub fn syphon_servers() -> Vec<(String, String)> {
     }
 }
 
+/// The Spout senders of the computer, by name (Windows).
+pub fn spout_senders() -> Vec<String> {
+    #[cfg(target_os = "windows")]
+    {
+        prism_io_video::spout_senders()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Vec::new()
+    }
+}
+
 /// The NDI® sources of the network, by full name; empty when Prism is
 /// built without NDI or the NDI library is missing.
 pub fn ndi_sources() -> Vec<String> {
-    #[cfg(all(target_os = "macos", feature = "ndi"))]
+    #[cfg(feature = "ndi")]
     {
         prism_io_video::ndi_sources()
     }
-    #[cfg(not(all(target_os = "macos", feature = "ndi")))]
+    #[cfg(not(feature = "ndi"))]
     {
         Vec::new()
     }
@@ -66,11 +78,11 @@ pub fn ndi_sources() -> Vec<String> {
 
 /// The version of the NDI library in use, or why NDI cannot be used.
 pub fn ndi_status() -> Result<String, String> {
-    #[cfg(all(target_os = "macos", feature = "ndi"))]
+    #[cfg(feature = "ndi")]
     {
         prism_io_video::ndi_version()
     }
-    #[cfg(not(all(target_os = "macos", feature = "ndi")))]
+    #[cfg(not(feature = "ndi"))]
     {
         Err("Prism compilé sans NDI (option « ndi »)".into())
     }

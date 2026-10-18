@@ -249,6 +249,25 @@ impl ControlPanel {
                         .response
                         .on_hover_text("L'image qu'une autre application publie sur Syphon");
                 }
+                if cfg!(target_os = "windows") {
+                    egui::ComboBox::from_id_salt("new spout")
+                        .selected_text("Spout…")
+                        .show_ui(ui, |ui| {
+                            let senders = prism_engine::spout_senders();
+                            if senders.is_empty() {
+                                ui.label(RichText::new("Aucune application ne publie").weak());
+                            }
+                            for name in senders {
+                                if ui.selectable_label(false, &name).clicked() {
+                                    let clip = Clip::from_spout(name);
+                                    let _ =
+                                        self.document.composition_mut().set_clip(slot, Some(clip));
+                                }
+                            }
+                        })
+                        .response
+                        .on_hover_text("L'image qu'une autre application publie sur Spout");
+                }
                 egui::ComboBox::from_id_salt("new ndi")
                     .selected_text("NDI®…")
                     .show_ui(ui, |ui| match prism_engine::ndi_status() {
@@ -283,6 +302,7 @@ impl ControlPanel {
                 prism_core::MediaSource::Camera { name, .. } => format!("Caméra : {name}"),
                 prism_core::MediaSource::Syphon { app, name } => format!("Syphon : {app} – {name}"),
                 prism_core::MediaSource::Ndi { name } => format!("NDI® : {name}"),
+                prism_core::MediaSource::Spout { name } => format!("Spout : {name}"),
                 _ => String::new(),
             };
             egui::Grid::new("camera clip")

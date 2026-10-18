@@ -61,6 +61,11 @@ pub enum MediaSource {
         /// Full name of the source: `MACHINE (SOURCE)`.
         name: String,
     },
+    /// The image another application publishes over Spout (Windows), live.
+    Spout {
+        /// Name of the sender.
+        name: String,
+    },
 }
 
 impl MediaSource {
@@ -71,7 +76,8 @@ impl MediaSource {
             Self::Generator { .. }
             | Self::Camera { .. }
             | Self::Syphon { .. }
-            | Self::Ndi { .. } => None,
+            | Self::Ndi { .. }
+            | Self::Spout { .. } => None,
         }
     }
 
@@ -82,7 +88,8 @@ impl MediaSource {
             Self::Generator { .. }
             | Self::Camera { .. }
             | Self::Syphon { .. }
-            | Self::Ndi { .. } => None,
+            | Self::Ndi { .. }
+            | Self::Spout { .. } => None,
         }
     }
 
@@ -91,7 +98,7 @@ impl MediaSource {
     pub fn is_live(&self) -> bool {
         matches!(
             self,
-            Self::Camera { .. } | Self::Syphon { .. } | Self::Ndi { .. }
+            Self::Camera { .. } | Self::Syphon { .. } | Self::Ndi { .. } | Self::Spout { .. }
         )
     }
 
@@ -262,6 +269,18 @@ impl Clip {
                 format!("{app} – {name}")
             },
             source: MediaSource::Syphon { app, name },
+            playback: Playback::default(),
+            effects: Vec::new(),
+            dashboard: [Unit::ZERO; DASHBOARD_SIZE],
+        }
+    }
+
+    /// Creates a clip showing the Spout sender `name`.
+    pub fn from_spout(name: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            name: name.clone(),
+            source: MediaSource::Spout { name },
             playback: Playback::default(),
             effects: Vec::new(),
             dashboard: [Unit::ZERO; DASHBOARD_SIZE],

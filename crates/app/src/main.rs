@@ -149,11 +149,19 @@ fn describe(error: &dyn Error) -> String {
     message
 }
 
-/// The program image published over Syphon, as an output of the engine.
+/// Image sharing with other applications of the computer: Syphon on macOS,
+/// Spout on Windows. Both publish under a name.
 #[cfg(target_os = "macos")]
-struct SyphonOutput(prism_io_video::SyphonServer);
+type ShareServer = prism_io_video::SyphonServer;
+#[cfg(target_os = "windows")]
+type ShareServer = prism_io_video::SpoutSender;
 
-#[cfg(target_os = "macos")]
+/// The program image published over Syphon or Spout, as an output of the
+/// engine.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+struct SyphonOutput(ShareServer);
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl prism_engine::Output for SyphonOutput {
     fn present(&mut self, gpu: &prism_render::Gpu, program: &prism_engine::ProgramOutput) {
         let size = program.resolution();
@@ -164,13 +172,13 @@ impl prism_engine::Output for SyphonOutput {
 
 /// The image of a screen of the stage published over Syphon, as an output
 /// of the engine.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 struct ScreenSyphonOutput {
     screen: prism_core::ScreenId,
-    server: prism_io_video::SyphonServer,
+    server: ShareServer,
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 impl prism_engine::Output for ScreenSyphonOutput {
     fn present(&mut self, _gpu: &prism_render::Gpu, _program: &prism_engine::ProgramOutput) {}
 
@@ -414,7 +422,22 @@ fn keep_displays_awake() -> Option<std::process::Child> {
         .ok()
 }
 
-#[cfg(not(target_os = "macos"))]
+/// Keeps the displays awake while the main thread lives, which is as long as
+/// Prism runs.
+#[cfg(target_os = "windows")]
+#[allow(unsafe_code)]
+fn keep_displays_awake() -> Option<std::process::Child> {
+    use windows_sys::Win32::System::Power::{
+        ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED, SetThreadExecutionState,
+    };
+    // SAFETY: sets flags of the calling thread; no pointer involved.
+    unsafe {
+        SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+    }
+    None
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn keep_displays_awake() -> Option<std::process::Child> {
     None
 }
@@ -569,7 +592,7 @@ impl Running {
             }
             keep
         });
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         for (screen, name) in wanted {
             if self
                 .audio
@@ -585,7 +608,7 @@ impl Running {
                 id: output,
                 output: Box::new(ScreenSyphonOutput {
                     screen,
-                    server: prism_io_video::SyphonServer::new(name.clone()),
+                    server: ShareServer::new(name.clone()),
                 }),
             });
             self.audio.screen_syphon.push((screen, name, output));
@@ -594,14 +617,14 @@ impl Running {
 
     /// Publishes over Syphon, or stops, as the preferences say.
     fn follow_syphon_preference(&mut self, preferences: &Preferences) {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "windows"))]
         match (preferences.syphon_output, self.audio.syphon) {
             (true, None) => {
                 let id = self.next_output;
                 self.next_output += 1;
                 self.engine.send(Command::AddOutput {
                     id,
-                    output: Box::new(SyphonOutput(prism_io_video::SyphonServer::new("Prism"))),
+                    output: Box::new(SyphonOutput(ShareServer::new("Prism"))),
                 });
                 self.audio.syphon = Some(id);
             }
@@ -611,7 +634,7 @@ impl Running {
             }
             _ => {}
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
         let _ = preferences;
     }
 
