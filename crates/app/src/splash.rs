@@ -1,5 +1,6 @@
-//! Transparent window showing the splash image, in motion, while the
-//! engine and the control window start.
+//! Transparent window showing the splash image unfolding, for
+//! [`splash_art::DURATION`], while the engine and the hidden control window
+//! start.
 //!
 //! The first frame is painted on the main thread; the next ones on a
 //! thread of their own, since the start blocks the event loop. The GPU
@@ -17,7 +18,7 @@ use winit::dpi::{LogicalSize, PhysicalPosition};
 use winit::event_loop::ActiveEventLoop;
 use winit::window::{Window, WindowId, WindowLevel};
 
-use crate::splash_art::Art;
+use crate::splash_art::{self, Art};
 
 /// Side of the window, in logical pixels.
 const SIDE: f64 = 640.0;
@@ -29,12 +30,8 @@ const SETTLE: Duration = Duration::from_millis(50);
 /// Longest wait for the first paint, after which the start goes on anyway.
 const PAINT_TIMEOUT: Duration = Duration::from_secs(1);
 
-/// Shortest time the image shows, from its first frame, so that its motion
-/// is seen even when the start is quick.
-const SHORTEST: Duration = Duration::from_millis(1600);
-
 /// Fade in and fade out, in seconds.
-const FADE: f32 = 0.3;
+const FADE: f32 = 0.25;
 
 pub struct Splash {
     window: Arc<Window>,
@@ -186,13 +183,14 @@ impl Splash {
 }
 
 impl Drop for Splash {
-    /// Leaves the image its shortest time on screen, then fades it out.
+    /// Lets the animation run to its end, then fades the image out.
     fn drop(&mut self) {
         let Some(animation) = self.animation.take() else {
             return;
         };
         if let Some(painted) = self.painted {
-            std::thread::sleep((painted + SHORTEST).saturating_duration_since(Instant::now()));
+            let length = Duration::from_secs_f32(splash_art::DURATION);
+            std::thread::sleep((painted + length).saturating_duration_since(Instant::now()));
         }
         animation.stop.store(true, Ordering::Relaxed);
         let _ = animation.thread.join();
