@@ -7,10 +7,10 @@ use prism_core::{ColorOrder, DmxProtocol, FixtureId, MAX_FIXTURE_PIXELS, Point};
 use crate::panel::ControlPanel;
 use crate::slider::Slider;
 use crate::stage::StageFrame;
-use crate::theme::{self, Emphasis, color};
+use crate::theme::{self, Emphasis};
 
-const SELECTED: Color32 = color::BRAND;
-const OTHER: Color32 = color::SUCCESS_TEXT;
+const SELECTED: Color32 = theme::DARK.brand;
+const OTHER: Color32 = theme::DARK.success_text;
 
 fn to_screen(rect: Rect, point: Point) -> Pos2 {
     rect.min + Vec2::new(point.x * rect.width(), point.y * rect.height())

@@ -67,6 +67,8 @@ pub struct Preferences {
     /// Code clients give to use the network API; made when the API is
     /// first turned on.
     pub api_code: String,
+    /// Whether the interface is light rather than dark.
+    pub light_theme: bool,
 }
 
 impl Default for Preferences {
@@ -96,6 +98,7 @@ impl Default for Preferences {
             api_enabled: false,
             api_port: prism_control::DEFAULT_API_PORT,
             api_code: String::new(),
+            light_theme: false,
         }
     }
 }

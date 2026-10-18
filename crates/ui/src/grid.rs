@@ -8,7 +8,7 @@ use prism_engine::{ClipState, EngineStatus};
 use crate::labels;
 use crate::panel::ControlPanel;
 use crate::slider::Slider;
-use crate::theme::{self, Emphasis, color};
+use crate::theme::{self, Emphasis};
 
 const HEADER_WIDTH: f32 = 210.0;
 const CELL_SIZE: Vec2 = Vec2::new(116.0, 64.0);
@@ -62,7 +62,7 @@ impl ControlPanel {
                 } else {
                     name
                 };
-                let label = RichText::new(label).color(color::TEXT_SECONDARY);
+                let label = RichText::new(label).color(theme::palette(ui).text_secondary);
                 let response = ui
                     .add_sized(
                         [CELL_SIZE.x, theme::CONTROL_HEIGHT],
@@ -149,7 +149,7 @@ impl ControlPanel {
             ui.horizontal(|ui| {
                 let name = RichText::new(entry.name.clone()).semibold();
                 let name = if selected_layer {
-                    name.color(color::BRAND_TEXT)
+                    name.color(theme::palette(ui).brand_text)
                 } else {
                     name
                 };
@@ -174,7 +174,7 @@ impl ControlPanel {
                         }
                     });
                 if let Some(ClipState::Error(message)) = state {
-                    ui.label(RichText::new("⚠").color(color::DANGER_TEXT))
+                    ui.label(RichText::new("⚠").color(theme::palette(ui).danger_text))
                         .on_hover_text(message.as_str());
                 }
             });
@@ -328,11 +328,12 @@ impl Cell<'_> {
     /// Empty cells are outlines on the canvas; clips are cards, green while
     /// they play, with their kind above their name.
     fn paint(&self, ui: &egui::Ui, rect: Rect) {
+        let palette = theme::palette(ui);
         let painter = ui.painter();
         let radius = theme::RADIUS;
         let Some(name) = self.name else {
             let fill = if self.hovered {
-                color::BG
+                palette.bg
             } else {
                 Color32::TRANSPARENT
             };
@@ -340,7 +341,7 @@ impl Cell<'_> {
                 rect,
                 radius,
                 fill,
-                Stroke::new(1.0, color::BORDER_SUBTLE),
+                Stroke::new(1.0, palette.border_subtle),
                 StrokeKind::Inside,
             );
             if self.hovered {
@@ -349,7 +350,7 @@ impl Cell<'_> {
                     Align2::CENTER_CENTER,
                     "+",
                     TextStyle::Heading.resolve(ui.style()),
-                    color::TEXT_TERTIARY,
+                    palette.text_tertiary,
                 );
             }
             self.paint_selection(ui, rect);
@@ -357,17 +358,17 @@ impl Cell<'_> {
         };
 
         let fill = match (self.playing, self.hovered) {
-            (true, _) => color::SUCCESS,
-            (false, true) => color::BG_TERTIARY,
-            (false, false) => color::BG_SECONDARY,
+            (true, _) => palette.success,
+            (false, true) => palette.card_hover,
+            (false, false) => palette.card,
         };
         painter.rect_filled(rect, radius, fill);
 
         let inner = rect.shrink(theme::SPACE_2);
         let (kind_color, name_color) = match (self.missing, self.playing) {
-            (true, _) => (color::DANGER_TEXT, color::DANGER_TEXT),
-            (false, true) => (color::TEXT, color::TEXT),
-            (false, false) => (color::TEXT_TERTIARY, color::TEXT),
+            (true, _) => (palette.danger_text, palette.danger_text),
+            (false, true) => (Color32::WHITE, Color32::WHITE),
+            (false, false) => (palette.text_tertiary, palette.text),
         };
         let kind = if self.missing {
             "⚠ Introuvable"
@@ -391,17 +392,18 @@ impl Cell<'_> {
             );
             let mut bar = track;
             bar.set_width(track.width() * progress.clamp(0.0, 1.0));
-            painter.rect_filled(bar, 0.0, color::TEXT);
+            painter.rect_filled(bar, 0.0, Color32::WHITE);
         }
         self.paint_selection(ui, rect);
     }
 
     fn paint_selection(&self, ui: &egui::Ui, rect: Rect) {
+        let palette = theme::palette(ui);
         if self.selected {
             ui.painter().rect_stroke(
                 rect,
                 theme::RADIUS,
-                Stroke::new(2.0, color::BRAND),
+                Stroke::new(2.0, palette.brand),
                 StrokeKind::Outside,
             );
         }

@@ -25,7 +25,7 @@ use crate::effects::{
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
 use crate::slider::Slider;
-use crate::theme::{Emphasis, color};
+use crate::theme::{self, Emphasis};
 
 impl ControlPanel {
     pub(crate) fn inspector(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
@@ -391,7 +391,7 @@ impl ControlPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 RichText::new("Introuvable")
-                                    .color(color::DANGER_TEXT),
+                                    .color(theme::palette(ui).danger_text),
                             );
                             relocate = ui.button("Localiser…").clicked();
                         });

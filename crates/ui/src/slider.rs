@@ -11,7 +11,7 @@ use egui::{
     Widget, WidgetInfo, WidgetText, pos2,
 };
 
-use crate::theme::color;
+use crate::theme;
 
 /// Height of the track and diameter of the knob, in points.
 const TRACK: f32 = 16.0;
@@ -263,14 +263,15 @@ impl Widget for Slider<'_> {
 /// horizontal positions given.
 fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f32>, marks: &[f32]) {
     let painter = ui.painter();
+    let palette = theme::palette(ui);
     let radius = TRACK / 2.0;
     let round = CornerRadius::same(radius as u8);
     let y = track.center().y;
     painter.rect(
         track,
         round,
-        color::BG_SECONDARY,
-        Stroke::new(1.0, color::BORDER),
+        palette.bg_secondary,
+        Stroke::new(1.0, palette.border),
         StrokeKind::Inside,
     );
 
@@ -280,14 +281,14 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
         None => (track.left(), knob + radius),
     };
     let fill = Rect::from_min_max(pos2(start, track.top()), pos2(end, track.bottom()));
-    painter.rect_filled(fill, round, color::BRAND);
+    painter.rect_filled(fill, round, palette.brand);
 
     for &mark in marks {
         let filled = mark >= start + radius && mark <= end - radius;
         let mark_color = if filled {
-            color::BRAND_DARK
+            palette.brand_dark
         } else {
-            color::TEXT_TERTIARY
+            palette.text_tertiary
         };
         painter.circle_filled(pos2(mark, y), MARK, mark_color);
     }
@@ -309,14 +310,14 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
     painter.circle(
         center,
         if response.dragged() { DOT + 1.0 } else { DOT },
-        color::BRAND,
-        Stroke::new(1.0, color::BRAND_DARK),
+        palette.brand,
+        Stroke::new(1.0, palette.brand_dark),
     );
     if response.has_focus() {
         painter.circle_stroke(
             center,
             knob_radius + 2.0,
-            Stroke::new(1.5, color::BRAND_TEXT),
+            Stroke::new(1.5, palette.brand_text),
         );
     }
 }

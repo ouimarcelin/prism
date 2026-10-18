@@ -13,16 +13,16 @@ use prism_core::{
 
 use crate::panel::{Action, ControlPanel, Screen as Display};
 use crate::slider::Slider;
-use crate::theme::{self, Emphasis, color};
+use crate::theme::{self, Emphasis};
 
 /// Radius of a corner handle, in points.
 const HANDLE: f32 = 6.0;
 /// Smallest width or height of a slice's area, as a fraction.
 const MIN_SIZE: f32 = 0.01;
 
-const SELECTED: Color32 = color::BRAND;
-const OTHER: Color32 = color::TEXT_SECONDARY;
-const MASK: Color32 = color::ASSISTIVE;
+const SELECTED: Color32 = theme::DARK.brand;
+const OTHER: Color32 = theme::DARK.text_secondary;
+const MASK: Color32 = theme::DARK.assistive;
 
 /// What the stage window shows besides the document.
 pub struct StageFrame<'a> {
@@ -230,7 +230,7 @@ fn image(ui: &egui::Ui, rect: Rect, texture: Option<egui::TextureId>) {
     ui.painter().rect_stroke(
         rect,
         0.0,
-        Stroke::new(1.0, color::BORDER),
+        Stroke::new(1.0, theme::palette(ui).border),
         egui::StrokeKind::Outside,
     );
 }
@@ -239,6 +239,7 @@ impl ControlPanel {
     /// Draws the stage editor; returns what the application must do.
     pub fn stage_ui(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) -> Vec<Action> {
         let before = self.document.composition().clone();
+        theme::set_light(ui.ctx(), self.preferences.light_theme);
         if !ui.ctx().egui_wants_keyboard_input() {
             self.undo_keys(ui.ctx());
         }

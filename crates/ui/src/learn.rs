@@ -8,7 +8,7 @@ use egui::{Color32, Rect, Sense, Stroke};
 use prism_control::describe_source;
 use prism_core::{ControlTarget, Mapping};
 
-use crate::theme::{self, color};
+use crate::theme;
 
 /// State of the learn mode.
 #[derive(Debug, Default)]
@@ -23,8 +23,7 @@ pub(crate) struct Learn {
 
 /// Overlays: the accent on mapped controls, grey on free ones, the
 /// warning colour on the control waiting for a message.
-/// (Premultiplied: [`color::BRAND`], [`color::BG_TERTIARY`] and
-/// [`color::WARNING`] at 43 %.)
+/// (Premultiplied: the dark accent, grey and warning at 43 %.)
 const MAPPED: Color32 = Color32::from_rgba_premultiplied(5, 60, 100, 110);
 const FREE: Color32 = Color32::from_rgba_premultiplied(29, 29, 29, 110);
 const PICKED: Color32 = Color32::from_rgba_premultiplied(105, 83, 12, 110);
@@ -63,7 +62,7 @@ impl Learn {
             ui.painter().rect_stroke(
                 rect,
                 theme::RADIUS,
-                Stroke::new(2.0, color::WARNING),
+                Stroke::new(2.0, theme::palette(ui).warning),
                 egui::StrokeKind::Inside,
             );
         }
