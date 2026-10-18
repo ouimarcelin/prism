@@ -55,6 +55,12 @@ fn main() {
     capture.get_by_label("Fichier").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "menu");
+    capture.get_by_label("Mode clair").click();
+    capture.run_steps(4);
+    save(&mut capture, &folder, "menu-clair");
+    capture.key_press(egui::Key::Escape);
+    capture.run_steps(4);
+    save(&mut capture, &folder, "controle-clair");
     drop(capture);
 
     let mut capture = harness(Vec2::new(1280.0, 800.0), |ui| {
@@ -67,10 +73,10 @@ fn main() {
         };
         panel.stage_ui(ui, &frame);
     });
-    save(&mut capture, &folder, "scene");
+    save(&mut capture, &folder, "scene-clair");
     capture.get_by_label("Lumière (DMX)").click();
     capture.run_steps(4);
-    save(&mut capture, &folder, "lumiere");
+    save(&mut capture, &folder, "lumiere-clair");
 }
 
 fn harness<'a>(size: Vec2, mut app: impl FnMut(&mut egui::Ui) + 'a) -> Harness<'a> {

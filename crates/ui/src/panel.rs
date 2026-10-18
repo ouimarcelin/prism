@@ -444,6 +444,7 @@ impl ControlPanel {
     /// Draws one frame of the interface in `ui`, the whole window.
     pub fn ui(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) -> Vec<Action> {
         let before = self.document.composition().clone();
+        theme::set_light(ui.ctx(), self.preferences.light_theme);
         self.learn.refresh(&self.document.composition().mappings);
         self.keyboard(ui.ctx());
         self.refresh_missing();
@@ -576,18 +577,20 @@ impl ControlPanel {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Fichier", |ui| {
+            settings_menu("Fichier").ui(ui, |ui| {
                 if ui
                     .add(egui::Button::new("Nouveau").shortcut_text("Cmd+N"))
                     .clicked()
                 {
                     self.new_project();
+                    ui.close();
                 }
                 if ui
                     .add(egui::Button::new("Ouvrir…").shortcut_text("Cmd+O"))
                     .clicked()
                 {
                     self.open_project();
+                    ui.close();
                 }
                 ui.menu_button("Projets récents", |ui| {
                     if self.preferences.recent_projects.is_empty() {
@@ -604,6 +607,7 @@ impl ControlPanel {
                             .clicked()
                         {
                             self.open_recent(path);
+                            ui.close();
                         }
                     }
                 });
@@ -613,27 +617,41 @@ impl ControlPanel {
                     .clicked()
                 {
                     self.save_project();
+                    ui.close();
                 }
                 if ui
                     .add(egui::Button::new("Enregistrer sous…").shortcut_text("Cmd+Maj+S"))
                     .clicked()
                 {
                     self.save_project_as();
+                    ui.close();
                 }
                 ui.separator();
                 if ui.button("Importer des médias…").clicked() {
                     self.import_dialog(self.selected.or_else(|| first_slot(&self.document)));
+                    ui.close();
                 }
                 if ui.button("Importer une séquence d'images…").clicked() {
                     self.import_sequence_dialog(
                         self.selected.or_else(|| first_slot(&self.document)),
                     );
+                    ui.close();
                 }
                 if ui.button("Médias manquants…").clicked() {
                     self.dialogs.missing = self.document.missing_media();
                     if self.dialogs.missing.is_empty() {
                         self.dialogs.message = Some("Tous les médias sont présents.".into());
                     }
+                    ui.close();
+                }
+                ui.separator();
+                let mut light = self.preferences.light_theme;
+                if theme::switch_row(ui, &mut light, "Mode clair")
+                    .on_hover_text("Interface claire, pour le jour et la préparation ; le mode sombre convient mieux en salle")
+                    .changed()
+                {
+                    self.preferences.light_theme = light;
+                    self.save_preferences();
                 }
                 ui.separator();
                 if ui
@@ -641,6 +659,7 @@ impl ControlPanel {
                     .clicked()
                 {
                     self.shortcut(Shortcut::Quit);
+                    ui.close();
                 }
             });
             ui.menu_button("Édition", |ui| {
@@ -1459,8 +1478,8 @@ fn beat_lights(ui: &mut egui::Ui, beat: f64) {
     response.on_hover_text("Temps de la mesure");
 }
 
-/// A menu of settings: clicking a checkbox or an option inside leaves it
-/// open; its actions close it themselves.
+/// A menu holding settings: clicking a checkbox, a switch or an option
+/// inside leaves it open; its actions close it themselves.
 fn settings_menu(title: &str) -> egui::containers::menu::MenuButton<'_> {
     egui::containers::menu::MenuButton::new(title).config(
         egui::containers::menu::MenuConfig::new()
