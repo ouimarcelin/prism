@@ -4,8 +4,11 @@
 //!
 //! ```text
 //! cargo run --release -p prism-engine --example engine-run -- \
-//!     [--seconds N] [--every N] [--report FILE.md] FILE [FILE ...]
+//!     [--seconds N] [--every N] [--effects N] [--report FILE.md] FILE [FILE ...]
 //! ```
+//!
+//! `--effects N` adds the first N effects of [`HEAVY_EFFECTS`] to each layer
+//! and to the composition: a show with effects rather than bare clips.
 //!
 //! One layer per file, all playing at once. Prints the statistics every
 //! `--every` seconds and every incident as it happens (stutter with the
@@ -135,14 +138,19 @@ struct Options {
     seconds: u64,
     every: u64,
     report: Option<String>,
+    effects: usize,
     files: Vec<String>,
 }
+
+/// Effects added by `--effects`, in order: the costly ones first.
+const HEAVY_EFFECTS: [&str; 6] = ["blur", "color", "kaleidoscope", "rgb_split", "wave", "glitch"];
 
 fn parse() -> Option<Options> {
     let mut options = Options {
         seconds: 10,
         every: 0,
         report: None,
+        effects: 0,
         files: Vec::new(),
     };
     let mut args = std::env::args().skip(1);
@@ -151,6 +159,7 @@ fn parse() -> Option<Options> {
             "--seconds" => options.seconds = args.next()?.parse().ok()?,
             "--every" => options.every = args.next()?.parse().ok()?,
             "--report" => options.report = Some(args.next()?),
+            "--effects" => options.effects = args.next()?.parse().ok()?,
             _ => options.files.push(arg),
         }
     }
@@ -236,7 +245,9 @@ impl Incident {
 
 fn main() -> ExitCode {
     let Some(options) = parse() else {
-        eprintln!("usage: engine-run [--seconds N] [--every N] [--report FILE.md] FILE [FILE ...]");
+        eprintln!(
+            "usage: engine-run [--seconds N] [--every N] [--effects N] [--report FILE.md] FILE [FILE ...]"
+        );
         return ExitCode::FAILURE;
     };
     let gpu = match Gpu::headless() {
@@ -264,6 +275,20 @@ fn main() -> ExitCode {
             eprintln!("error: {error}");
             return ExitCode::FAILURE;
         }
+    }
+    let effects: Vec<_> = HEAVY_EFFECTS
+        .iter()
+        .take(options.effects)
+        .filter_map(|kind| prism_fx::find(kind).map(|info| info.create()))
+        .collect();
+    for layer in &layers {
+        if let Some(layer) = composition.layer_mut(*layer) {
+            layer.effects = effects.clone();
+        }
+    }
+    composition.effects = effects.clone();
+    if !effects.is_empty() {
+        println!("effects   {} per layer and on the composition", effects.len());
     }
     if let Err(error) = composition.trigger_column(column) {
         eprintln!("error: {error}");
