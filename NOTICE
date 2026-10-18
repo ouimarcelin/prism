@@ -62,3 +62,14 @@ Lynn Jarvis). No code of the SDK is included.
 
 Application icon (assets/icon-1024.png): the logo of Prism, drawn by its
 author (@ouimarcelin), under the licence of Prism.
+
+Inter (assets/fonts/Inter-Medium.ttf, assets/fonts/Inter-SemiBold.ttf):
+Copyright 2020 The Inter Project Authors (https://github.com/rsms/inter),
+licensed under the SIL Open Font License, Version 1.1
+(assets/fonts/OFL.txt). The fonts are embedded unmodified in the
+interface.
+
+Interface theme: the colours, sizes and spacing of the interface follow the
+values of Figma's "UI3" community UI kit. No artwork of the kit is included.
+Figma is a trademark of Figma, Inc.; Prism is not a product of, nor endorsed
+by, Figma, Inc.

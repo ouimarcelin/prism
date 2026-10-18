@@ -10,11 +10,11 @@ use prism_render::{Gpu, wgpu};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-/// Background behind the interface.
+/// Background behind the interface: the theme's canvas, #1e1e1e.
 const BACKGROUND: wgpu::Color = wgpu::Color {
-    r: 0.08,
-    g: 0.08,
-    b: 0.09,
+    r: 30.0 / 255.0,
+    g: 30.0 / 255.0,
+    b: 30.0 / 255.0,
     a: 1.0,
 };
 
@@ -56,6 +56,7 @@ impl ControlWindow {
         surface.configure(&gpu.device, &config);
 
         let egui = egui::Context::default();
+        prism_ui::apply_theme(&egui);
         let state = egui_winit::State::new(
             egui.clone(),
             egui::ViewportId::ROOT,

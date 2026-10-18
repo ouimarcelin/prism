@@ -45,6 +45,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/check-clean-room.sh
 ```
 
+Voir l'interface sans lancer l'application (fenêtre principale, clip sélectionné, menu, éditeur de scène et lumière, en PNG dans `target/captures`) ; l'apparence se règle dans `crates/ui/src/theme.rs` (ADR 0040) :
+
+```bash
+cargo run -p prism-ui --example capture
+```
+
 ## Lancer Prism
 
 ```bash

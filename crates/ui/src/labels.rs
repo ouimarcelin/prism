@@ -1,6 +1,20 @@
 //! Names shown in the interface for model values.
 
-use prism_core::{BlendMode, CrossfaderCurve, CrossfaderSide, Direction, LoopMode};
+use prism_core::{BlendMode, CrossfaderCurve, CrossfaderSide, Direction, LoopMode, MediaSource};
+
+/// Kind of a clip's source, shown on its cell.
+pub(crate) fn source_kind(source: &MediaSource) -> &'static str {
+    match source {
+        MediaSource::File { path } if crate::is_image(path) => "Image",
+        MediaSource::File { .. } => "Vidéo",
+        MediaSource::ImageSequence { .. } => "Séquence",
+        MediaSource::Generator { .. } => "Générateur",
+        MediaSource::Camera { .. } => "Caméra",
+        MediaSource::Syphon { .. } => "Syphon",
+        MediaSource::Ndi { .. } => "NDI®",
+        MediaSource::Spout { .. } => "Spout",
+    }
+}
 
 pub(crate) fn blend(mode: BlendMode) -> &'static str {
     match mode {

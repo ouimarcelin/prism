@@ -5,6 +5,7 @@ use prism_core::{FrameRate, Resolution};
 
 use crate::panel::ControlPanel;
 use crate::shortcuts::SHORTCUT_HELP;
+use crate::theme::Emphasis;
 
 const RESOLUTIONS: [(u32, u32); 5] = [
     (1280, 720),
@@ -78,7 +79,7 @@ impl ControlPanel {
                         ),
                         None => "Apprentissage actif : cliquez une commande de la fenêtre.".to_owned(),
                     };
-                    ui.label(RichText::new(text).strong());
+                    ui.label(RichText::new(text).semibold());
                 }
             });
         if let Some(index) = remove {
@@ -93,10 +94,14 @@ impl ControlPanel {
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
-                ui.heading(format!("Prism {}", env!("CARGO_PKG_VERSION")));
+                ui.label(
+                    RichText::new(format!("Prism {}", env!("CARGO_PKG_VERSION")))
+                        .heading()
+                        .semibold(),
+                );
                 ui.label("Logiciel libre de VJing et de projection mapping.");
                 ui.add_space(6.0);
-                ui.label(RichText::new("Projet indépendant, non affilié à Resolume.").strong()); // clean-room-allow
+                ui.label(RichText::new("Projet indépendant, non affilié à Resolume.").semibold()); // clean-room-allow
                 ui.label("Développé en « clean room », à partir de descriptions de comportement uniquement.");
                 ui.add_space(6.0);
                 ui.label("Licence MIT ou Apache 2.0, au choix.");
@@ -235,7 +240,7 @@ impl ControlPanel {
                                 if ui.button("Localiser…").clicked() {
                                     relocate = Some(media.slot);
                                 }
-                                ui.label(RichText::new(place).strong());
+                                ui.label(RichText::new(place).semibold());
                                 ui.label(
                                     RichText::new(media.path.display().to_string())
                                         .small()
@@ -276,7 +281,11 @@ impl ControlPanel {
         let mut choice = None;
         let response = egui::Modal::new(egui::Id::new("unsaved changes")).show(ctx, |ui| {
             ui.set_width(380.0);
-            ui.heading("Modifications non enregistrées");
+            ui.label(
+                RichText::new("Modifications non enregistrées")
+                    .heading()
+                    .semibold(),
+            );
             ui.label(format!(
                 "Enregistrer les modifications de « {} » ?",
                 self.document.display_name()

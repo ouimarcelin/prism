@@ -24,6 +24,7 @@ use crate::effects::{
 };
 use crate::labels;
 use crate::panel::{Action, ControlPanel, FrameInfo};
+use crate::theme::{Emphasis, color};
 
 impl ControlPanel {
     pub(crate) fn inspector(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
@@ -64,7 +65,7 @@ impl ControlPanel {
             return;
         };
         ui.horizontal(|ui| {
-            ui.heading("Couche");
+            ui.label(RichText::new("Couche").heading().semibold());
             self.presets
                 .layer_menu(ui, egui::Id::new(("layer presets", slot.layer)), layer);
         });
@@ -166,7 +167,7 @@ impl ControlPanel {
     }
 
     fn clip_properties(&mut self, ui: &mut egui::Ui, slot: Slot, status: Option<&LayerStatus>) {
-        ui.heading("Clip");
+        ui.label(RichText::new("Clip").heading().semibold());
         let missing = self.is_missing(slot);
         if self.document.composition().clip(slot).is_none() {
             ui.label(RichText::new("Case vide.").weak());
@@ -389,7 +390,7 @@ impl ControlPanel {
                         ui.horizontal(|ui| {
                             ui.label(
                                 RichText::new("Introuvable")
-                                    .color(egui::Color32::from_rgb(220, 80, 60)),
+                                    .color(color::DANGER_TEXT),
                             );
                             relocate = ui.button("Localiser…").clicked();
                         });
@@ -583,7 +584,7 @@ impl ControlPanel {
     }
 
     fn cue_points(&mut self, ui: &mut egui::Ui, slot: Slot, playing: Option<&LayerStatus>) {
-        ui.label(RichText::new("Points de repère").strong());
+        ui.label(RichText::new("Points de repère").semibold());
         let position = playing.map(|status| status.position);
         let Some(clip) = self.document.composition_mut().clip_mut(slot) else {
             return;
@@ -635,7 +636,7 @@ impl ControlPanel {
 
 /// The program image, as wide as the panel.
 fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
-    ui.label(RichText::new("Programme").strong());
+    ui.label(RichText::new("Programme").semibold());
     let Some((texture, resolution)) = frame.preview else {
         ui.label(RichText::new("Aperçu indisponible").weak());
         return;

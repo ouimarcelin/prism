@@ -9,6 +9,13 @@ use prism_core::{Clip, Composition, Effect, Slot};
 use prism_engine::{ClipState, Command, EngineStatus, LayerStatus};
 use prism_ui::{Action, ControlPanel, Document, FrameInfo, Screen, Shortcut};
 
+/// A context with Prism's theme, as the application makes it.
+fn context() -> egui::Context {
+    let ctx = egui::Context::default();
+    prism_ui::apply_theme(&ctx);
+    ctx
+}
+
 fn input(events: Vec<Event>) -> RawInput {
     RawInput {
         screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(1400.0, 900.0))),
@@ -100,7 +107,7 @@ fn playing_status(slot: Slot) -> EngineStatus {
 fn draws_every_part_without_panicking() {
     let (document, slot) = sample_document();
     let mut panel = ControlPanel::new(document, Vec::new());
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = playing_status(slot);
     for _ in 0..3 {
         frame(&ctx, &mut panel, &status, Vec::new());
@@ -123,7 +130,7 @@ fn draws_effect_chains_without_changing_them() {
     let document = Document::new(saved.clone());
 
     let mut panel = ControlPanel::new(document, Vec::new());
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = playing_status(slot);
     for _ in 0..3 {
         frame(&ctx, &mut panel, &status, Vec::new());
@@ -137,7 +144,7 @@ fn draws_effect_chains_without_changing_them() {
 fn digit_keys_trigger_columns_and_space_stops() {
     let (document, slot) = sample_document();
     let mut panel = ControlPanel::new(document, Vec::new());
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = EngineStatus::default();
     frame(&ctx, &mut panel, &status, Vec::new());
 
@@ -168,7 +175,7 @@ fn digit_keys_trigger_columns_and_space_stops() {
 fn output_shortcuts_become_actions() {
     let (document, _) = sample_document();
     let mut panel = ControlPanel::new(document, Vec::new());
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = EngineStatus::default();
     // Like the application, start with a frame without input: keys sent in
     // the very first frame of a context are not seen.
@@ -214,7 +221,7 @@ fn quitting_with_unsaved_changes_asks_first() {
     panel.drop_files(&[PathBuf::from("/media/a.mov")]);
     assert!(!panel.request_quit());
     // The confirmation is drawn without panicking.
-    let ctx = egui::Context::default();
+    let ctx = context();
     frame(&ctx, &mut panel, &EngineStatus::default(), Vec::new());
 }
 
@@ -225,7 +232,7 @@ fn missing_media_dialog_is_drawn() {
     assert_eq!(missing.len(), 1);
     assert_eq!(missing[0].slot, slot);
     let mut panel = ControlPanel::new(document, missing);
-    let ctx = egui::Context::default();
+    let ctx = context();
     for _ in 0..2 {
         frame(&ctx, &mut panel, &EngineStatus::default(), Vec::new());
     }
@@ -253,7 +260,7 @@ fn key_with(key: Key, modifiers: Modifiers) -> Event {
 
 #[test]
 fn command_q_quits_or_asks_first() {
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = EngineStatus::default();
     let mut panel = ControlPanel::new(Document::default(), Vec::new());
     frame(&ctx, &mut panel, &status, Vec::new());
@@ -288,7 +295,7 @@ fn crossfader_moves_on_its_own_when_asked() {
     };
     let mut panel =
         ControlPanel::new(Document::default(), Vec::new()).with_preferences(preferences, None);
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = EngineStatus::default();
     frame(&ctx, &mut panel, &status, Vec::new());
     assert!(!panel.is_animating());
@@ -358,7 +365,7 @@ fn click_button(
 fn tap_tempo_and_resync_reach_the_engine() {
     let (document, _) = sample_document();
     let mut panel = ControlPanel::new(document, Vec::new());
-    let ctx = egui::Context::default();
+    let ctx = context();
     let status = EngineStatus::default();
     frame(&ctx, &mut panel, &status, Vec::new());
 
