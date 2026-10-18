@@ -1,5 +1,5 @@
 // Renders an SVG into a square transparent PNG, centred and fitted.
-// Usage: swift scripts/svg-to-png.swift assets/splash.svg assets/splash-2048.png 2048
+// Usage: swift scripts/svg-to-png.swift assets/splash.svg target/splash.png 2048
 
 import AppKit
 let args = CommandLine.arguments
