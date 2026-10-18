@@ -18,6 +18,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Modifié
 
+- Menus Sortie, Contrôle et Audio : cocher une case ou choisir une option (Art-Net, sACN…) ne les ferme plus ; un clic dehors ou une action les ferme.
 - Sortie avancée : masques lus dans une image de couverture et sommets des découpes gardés sur le GPU ; deux écrans 1080p en environ 1 ms par image quels que soient les réglages (avant : jusqu'à 24 ms). Outil `stage-bench`, rapport `docs/benchmarks/2026-10-17-sortie-avancee.md`.
 - Flou : 7 lectures par passe au lieu de 13 (filtrage linéaire), de 2,16 à 0,88 ms en 1080p sur M1, même courbe.
 - README : état des phases 1 et 2 et mode d'emploi des effets, générateurs, animations et du son.
