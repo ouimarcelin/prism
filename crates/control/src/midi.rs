@@ -153,7 +153,7 @@ impl MidiInputs {
             .connect(
                 port,
                 "prism-in",
-                move |micros, bytes, ()| {
+                move |_micros, bytes, ()| {
                     if let Some(&status) = bytes.first()
                         && matches!(status, 0xF1 | 0xF0)
                     {
@@ -170,14 +170,12 @@ impl MidiInputs {
                         if let Ok(mut state) = clock.lock() {
                             match status {
                                 CLOCK_PULSE => {
-                                    // Messages sent without a time (virtual
-                                    // ports) are timed on arrival.
-                                    let micros = if micros > 0 {
-                                        micros
-                                    } else {
-                                        epoch.elapsed().as_micros() as u64
-                                    };
-                                    state.clock.pulse(micros);
+                                    // Timed on arrival: the times of the
+                                    // driver can be missing (virtual ports)
+                                    // or not increase (virtual machines).
+                                    // The tempo averages a window of pulses,
+                                    // which smooths the arrival jitter.
+                                    state.clock.pulse(epoch.elapsed().as_micros() as u64);
                                     state.last_pulse = Some(Instant::now());
                                 }
                                 CLOCK_START => {

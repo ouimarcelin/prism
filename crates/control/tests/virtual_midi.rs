@@ -102,7 +102,7 @@ fn a_midi_clock_gives_the_tempo() {
     });
     running.store(false, std::sync::atomic::Ordering::Relaxed);
     pulses.join().unwrap();
-    assert!(read, "{:?}", inputs.clock().bpm);
+    assert!(read, "{:?}", inputs.clock());
 }
 
 #[test]
