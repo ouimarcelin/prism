@@ -143,7 +143,14 @@ struct Options {
 }
 
 /// Effects added by `--effects`, in order: the costly ones first.
-const HEAVY_EFFECTS: [&str; 6] = ["blur", "color", "kaleidoscope", "rgb_split", "wave", "glitch"];
+const HEAVY_EFFECTS: [&str; 6] = [
+    "blur",
+    "color",
+    "kaleidoscope",
+    "rgb_split",
+    "wave",
+    "glitch",
+];
 
 fn parse() -> Option<Options> {
     let mut options = Options {
@@ -288,7 +295,10 @@ fn main() -> ExitCode {
     }
     composition.effects = effects.clone();
     if !effects.is_empty() {
-        println!("effects   {} per layer and on the composition", effects.len());
+        println!(
+            "effects   {} per layer and on the composition",
+            effects.len()
+        );
     }
     if let Err(error) = composition.trigger_column(column) {
         eprintln!("error: {error}");
