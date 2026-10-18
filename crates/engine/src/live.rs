@@ -5,14 +5,14 @@ use std::sync::mpsc::{self, Receiver};
 
 use prism_media::Frame;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 type Device = prism_media::Camera;
 
 /// A device that does not exist on this system.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 struct Device;
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 impl Device {
     fn open(_id: &str) -> Result<Self, String> {
         Err("caméras non prises en charge sur ce système".into())
@@ -25,14 +25,14 @@ impl Device {
 
 /// The cameras connected now, as identifier and name.
 pub fn cameras() -> Vec<(String, String)> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
     {
         prism_media::cameras()
             .into_iter()
             .map(|camera| (camera.id, camera.name))
             .collect()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Vec::new()
     }
@@ -106,9 +106,9 @@ impl Live {
         let spawned = std::thread::Builder::new()
             .name("prism-camera".into())
             .spawn(move || {
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "windows"))]
                 let device = Device::open(&id).map_err(|error| error.to_string());
-                #[cfg(not(target_os = "macos"))]
+                #[cfg(not(any(target_os = "macos", target_os = "windows")))]
                 let device = Device::open(&id);
                 let _ = sender.send(device);
             });

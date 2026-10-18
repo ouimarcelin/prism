@@ -23,6 +23,8 @@ La phase 6 demande le « portage Windows (Spout, cartes de capture, DirectX 12 v
 
 ## Limites (tickets à part)
 
+*Vidéos, son et caméras : faits au ticket 73 (ADR 0038).*
+
 - **Vidéos autres que HAP** (H.264, ProRes) et **son des clips** : décodés par AVFoundation sur macOS ; sous Windows, refusés avec un message. HAP, images fixes et séquences PNG marchent. Piste : Media Foundation.
 - **Caméras** : AVFoundation sur macOS ; sous Windows, « non prises en charge sur ce système ». Piste : Media Foundation.
 - **Cartes de capture** : sur macOS, une carte dont le pilote expose une caméra système apparaît dans « Caméra… » (à confirmer par une observation avec une carte réelle). Les SDK DeckLink (Blackmagic) et NTV2 (AJA) demandent chacun une intégration propre ; la licence du SDK DeckLink n'est pas compatible avec MIT/Apache 2.0 pour reprendre ses en-têtes, il faudrait des déclarations écrites à partir de sa documentation, chargées à l'exécution comme NDI.

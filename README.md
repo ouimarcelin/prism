@@ -30,7 +30,7 @@ cargo build --workspace --release
 cargo test --workspace
 ```
 
-Windows 10 ou 11 (portage pas encore essayé sur un PC, ADR 0037) : Rust stable avec les Build Tools de Visual Studio (C++), puis les mêmes commandes. Sous Windows, Prism lit le HAP, les images et les séquences PNG ; les autres vidéos et les caméras sont pour l'instant réservées à macOS. Vérifier la compilation Windows depuis un Mac :
+Windows 10 ou 11 (portage pas encore essayé sur un PC, ADR 0037) : Rust stable avec les Build Tools de Visual Studio (C++), puis les mêmes commandes. Sous Windows, Media Foundation lit les vidéos (H.264, HEVC…, pas le ProRes), leur son, les caméras et les cartes de capture ; Spout remplace Syphon. Vérifier la compilation Windows depuis un Mac :
 
 ```bash
 rustup target add x86_64-pc-windows-msvc
