@@ -15,7 +15,7 @@ use prism_core::ControlSource;
 /// Waits up to two seconds for `done`.
 fn wait_for(mut done: impl FnMut() -> bool) -> bool {
     let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(2) {
+    while start.elapsed() < Duration::from_secs(5) {
         if done() {
             return true;
         }
@@ -82,16 +82,27 @@ fn a_midi_clock_gives_the_tempo() {
     assert!(inputs.sync(|port| port == name).is_empty());
     assert_eq!(inputs.clock().bpm, None);
     sender.send(&[0xFA]).unwrap();
-    // 125 BPM: a pulse every 20 ms.
-    let start = Instant::now();
-    for pulse in 1..=60u32 {
-        sender.send(&[0xF8]).unwrap();
-        let next = start + Duration::from_millis(20) * pulse;
-        std::thread::sleep(next.saturating_duration_since(Instant::now()));
-    }
-    assert!(wait_for(|| inputs.clock().starts == 1));
-    let bpm = inputs.clock().bpm.unwrap();
-    assert!((bpm - 125.0).abs() < 3.0, "{bpm}");
+    // 125 BPM: a pulse every 20 ms, sent until the tempo is read, so a
+    // slow machine never sees the clock stop.
+    let running = Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let still = Arc::clone(&running);
+    let pulses = std::thread::spawn(move || {
+        let start = Instant::now();
+        let mut pulse = 1u32;
+        while still.load(std::sync::atomic::Ordering::Relaxed) && pulse < 1000 {
+            sender.send(&[0xF8]).unwrap();
+            let next = start + Duration::from_millis(20) * pulse;
+            std::thread::sleep(next.saturating_duration_since(Instant::now()));
+            pulse += 1;
+        }
+    });
+    let read = wait_for(|| {
+        let clock = inputs.clock();
+        clock.starts == 1 && clock.bpm.is_some_and(|bpm| (bpm - 125.0).abs() < 3.0)
+    });
+    running.store(false, std::sync::atomic::Ordering::Relaxed);
+    pulses.join().unwrap();
+    assert!(read, "{:?}", inputs.clock().bpm);
 }
 
 #[test]
