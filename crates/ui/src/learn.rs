@@ -8,6 +8,8 @@ use egui::{Color32, Rect, Sense, Stroke};
 use prism_control::describe_source;
 use prism_core::{ControlTarget, Mapping};
 
+use crate::theme::{self, color};
+
 /// State of the learn mode.
 #[derive(Debug, Default)]
 pub(crate) struct Learn {
@@ -19,9 +21,13 @@ pub(crate) struct Learn {
     mapped: HashMap<ControlTarget, String>,
 }
 
-const MAPPED: Color32 = Color32::from_rgba_premultiplied(30, 90, 160, 90);
-const FREE: Color32 = Color32::from_rgba_premultiplied(60, 60, 60, 60);
-const PICKED: Color32 = Color32::from_rgba_premultiplied(200, 140, 20, 120);
+/// Overlays: the accent on mapped controls, grey on free ones, the
+/// warning colour on the control waiting for a message.
+/// (Premultiplied: [`color::BRAND`], [`color::BG_TERTIARY`] and
+/// [`color::WARNING`] at 43 %.)
+const MAPPED: Color32 = Color32::from_rgba_premultiplied(5, 60, 100, 110);
+const FREE: Color32 = Color32::from_rgba_premultiplied(29, 29, 29, 110);
+const PICKED: Color32 = Color32::from_rgba_premultiplied(105, 83, 12, 110);
 
 impl Learn {
     /// Reads which controls are mapped.
@@ -52,12 +58,12 @@ impl Learn {
             (false, Some(_)) => MAPPED,
             (false, None) => FREE,
         };
-        ui.painter().rect_filled(rect, 2.0, fill);
+        ui.painter().rect_filled(rect, theme::RADIUS, fill);
         if picked {
             ui.painter().rect_stroke(
                 rect,
-                2.0,
-                Stroke::new(2.0, Color32::from_rgb(240, 170, 30)),
+                theme::RADIUS,
+                Stroke::new(2.0, color::WARNING),
                 egui::StrokeKind::Inside,
             );
         }

@@ -6,9 +6,10 @@ use prism_core::{ColorOrder, DmxProtocol, FixtureId, MAX_FIXTURE_PIXELS, Point};
 
 use crate::panel::ControlPanel;
 use crate::stage::StageFrame;
+use crate::theme::{self, Emphasis, color};
 
-const SELECTED: Color32 = Color32::from_rgb(240, 170, 30);
-const OTHER: Color32 = Color32::from_rgb(90, 200, 160);
+const SELECTED: Color32 = color::BRAND;
+const OTHER: Color32 = color::SUCCESS_TEXT;
 
 fn to_screen(rect: Rect, point: Point) -> Pos2 {
     rect.min + Vec2::new(point.x * rect.width(), point.y * rect.height())
@@ -37,10 +38,13 @@ impl ControlPanel {
     /// The lighting tab: DMX settings, fixtures, and the composition with
     /// the fixtures over it.
     pub(crate) fn lighting_ui(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) {
-        egui::Panel::top("lighting settings").show(ui, |ui| {
+        let style = ui.style().clone();
+        egui::Panel::top("lighting settings")
+            .frame(theme::bar_frame(&style))
+            .show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
                 let lighting = &mut self.document.composition_mut().lighting;
-                ui.checkbox(&mut lighting.enabled, RichText::new("Envoyer le DMX").strong());
+                ui.checkbox(&mut lighting.enabled, RichText::new("Envoyer le DMX").semibold());
                 egui::ComboBox::from_id_salt("dmx protocol")
                     .selected_text(match lighting.protocol {
                         DmxProtocol::ArtNet => "Art-Net",
@@ -71,17 +75,20 @@ impl ControlPanel {
             });
         });
         egui::Panel::left("lighting fixtures")
+            .frame(theme::side_frame(&style))
             .resizable(true)
             .default_size(260.0)
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.fixtures_ui(ui));
             });
-        egui::CentralPanel::default().show(ui, |ui| self.fixtures_view(ui, frame));
+        egui::CentralPanel::default()
+            .frame(theme::canvas_frame(&style))
+            .show(ui, |ui| self.fixtures_view(ui, frame));
     }
 
     fn fixtures_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Luminaires").strong());
+            ui.label(RichText::new("Luminaires").semibold());
             if ui
                 .button("+ Bande")
                 .on_hover_text("Une bande de LED RVB de 60 pixels, après les canaux déjà pris")

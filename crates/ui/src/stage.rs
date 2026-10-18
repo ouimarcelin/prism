@@ -12,15 +12,16 @@ use prism_core::{
 };
 
 use crate::panel::{Action, ControlPanel, Screen as Display};
+use crate::theme::{self, Emphasis, color};
 
 /// Radius of a corner handle, in points.
 const HANDLE: f32 = 6.0;
 /// Smallest width or height of a slice's area, as a fraction.
 const MIN_SIZE: f32 = 0.01;
 
-const SELECTED: Color32 = Color32::from_rgb(240, 170, 30);
-const OTHER: Color32 = Color32::from_rgb(90, 160, 230);
-const MASK: Color32 = Color32::from_rgb(220, 90, 200);
+const SELECTED: Color32 = color::BRAND;
+const OTHER: Color32 = color::TEXT_SECONDARY;
+const MASK: Color32 = color::ASSISTIVE;
 
 /// What the stage window shows besides the document.
 pub struct StageFrame<'a> {
@@ -228,7 +229,7 @@ fn image(ui: &egui::Ui, rect: Rect, texture: Option<egui::TextureId>) {
     ui.painter().rect_stroke(
         rect,
         0.0,
-        Stroke::new(1.0, Color32::from_gray(90)),
+        Stroke::new(1.0, color::BORDER),
         egui::StrokeKind::Outside,
     );
 }
@@ -259,10 +260,13 @@ impl ControlPanel {
                 screen.and_then(|screen| screen.slices.last().map(|slice| slice.id()));
         }
 
-        egui::Panel::top("stage tabs").show(ui, |ui| {
+        let style = ui.style().clone();
+        egui::Panel::top("stage tabs")
+            .frame(theme::bar_frame(&style))
+            .show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.stage.lighting, false, RichText::new("Écrans").strong());
-                ui.selectable_value(&mut self.stage.lighting, true, RichText::new("Lumière (DMX)").strong())
+                ui.selectable_value(&mut self.stage.lighting, false, RichText::new("Écrans").semibold());
+                ui.selectable_value(&mut self.stage.lighting, true, RichText::new("Lumière (DMX)").semibold())
                     .on_hover_text("Bandes de LED et luminaires posés sur la composition, leurs couleurs envoyées en Art-Net ou sACN");
             });
         });
@@ -271,16 +275,21 @@ impl ControlPanel {
             self.document.commit(&before);
             return std::mem::take(&mut self.actions);
         }
-        egui::Panel::top("stage screens").show(ui, |ui| self.stage_screens(ui, frame));
+        egui::Panel::top("stage screens")
+            .frame(theme::bar_frame(&style))
+            .show(ui, |ui| self.stage_screens(ui, frame));
         if self.stage.screen.is_some() {
             egui::Panel::left("stage slices")
+                .frame(theme::side_frame(&style))
                 .resizable(true)
                 .default_size(260.0)
                 .show(ui, |ui| {
                     egui::ScrollArea::vertical().show(ui, |ui| self.stage_slices(ui));
                 });
         }
-        egui::CentralPanel::default().show(ui, |ui| self.stage_views(ui, frame));
+        egui::CentralPanel::default()
+            .frame(theme::canvas_frame(&style))
+            .show(ui, |ui| self.stage_views(ui, frame));
 
         self.document.commit(&before);
         std::mem::take(&mut self.actions)
@@ -289,7 +298,7 @@ impl ControlPanel {
     fn stage_screens(&mut self, ui: &mut egui::Ui, frame: &StageFrame<'_>) {
         ui.horizontal_wrapped(|ui| {
             let stage = &self.document.composition().stage;
-            ui.label(RichText::new("Écran").strong());
+            ui.label(RichText::new("Écran").semibold());
             let current = self
                 .stage
                 .screen
@@ -500,7 +509,7 @@ impl ControlPanel {
         };
         let resolution = self.document.composition().resolution();
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Découpes").strong());
+            ui.label(RichText::new("Découpes").semibold());
             if ui.button("+ Découpe").clicked() {
                 let stage = &mut self.document.composition_mut().stage;
                 let count = stage
@@ -666,7 +675,7 @@ impl ControlPanel {
             );
         }
         ui.separator();
-        ui.label(RichText::new("Déformation").strong());
+        ui.label(RichText::new("Déformation").semibold());
         let mode = match &slice.warp {
             None => 0,
             Some(warp) if warp.curve == WarpCurve::Linear => 1,
@@ -729,7 +738,7 @@ impl ControlPanel {
             }
         }
         ui.separator();
-        ui.label(RichText::new("Fondu des bords").strong())
+        ui.label(RichText::new("Fondu des bords").semibold())
             .on_hover_text("Là où l'image de deux projecteurs se recouvre, chacun s'assombrit vers son bord pour que la somme reste égale");
         let blend = &mut slice.blend;
         egui::Grid::new("slice blend").num_columns(2).show(ui, |ui| {
@@ -765,7 +774,7 @@ impl ControlPanel {
         ui.separator();
         let mut masked = slice.mask.is_some();
         if ui
-            .checkbox(&mut masked, RichText::new("Masque").strong())
+            .checkbox(&mut masked, RichText::new("Masque").semibold())
             .on_hover_text("Un polygone sur l'écran : la découpe ne se montre qu'à l'intérieur")
             .changed()
         {
@@ -815,7 +824,7 @@ impl ControlPanel {
                 Pos2::new(space.min.x, space.max.y - height),
                 egui::Align2::LEFT_TOP,
                 "Simulation : les écrans côte à côte, lumière additionnée",
-                egui::FontId::proportional(13.0),
+                egui::TextStyle::Body.resolve(ui.style()),
                 ui.visuals().text_color(),
             );
             let rect = fit(area, size.width as f32 / size.height.max(1) as f32);
@@ -837,14 +846,14 @@ impl ControlPanel {
             space.min,
             egui::Align2::LEFT_TOP,
             "Entrée : la composition",
-            egui::FontId::proportional(13.0),
+            egui::TextStyle::Body.resolve(ui.style()),
             ui.visuals().text_color(),
         );
         ui.painter().text(
             space.min + Vec2::new(half + gap, 0.0),
             egui::Align2::LEFT_TOP,
             "Sortie : l'écran",
-            egui::FontId::proportional(13.0),
+            egui::TextStyle::Body.resolve(ui.style()),
             ui.visuals().text_color(),
         );
 

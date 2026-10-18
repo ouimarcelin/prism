@@ -13,6 +13,7 @@ use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, s
 
 use crate::learn::Learn;
 use crate::presets::PresetStore;
+use crate::theme::Emphasis;
 
 /// What effect editors share with the rest of the window: presets, and the
 /// learn mode.
@@ -123,7 +124,7 @@ pub(crate) fn effect_section(
     } else {
         format!("{title} ({active}/{})", effects.len())
     };
-    egui::CollapsingHeader::new(RichText::new(header).strong())
+    egui::CollapsingHeader::new(RichText::new(header).semibold())
         .id_salt(("effects", &id))
         .default_open(!effects.is_empty())
         .show(ui, |ui| effect_chain(ui, owner, effects, dashboard, tools));
@@ -155,7 +156,7 @@ fn effect_chain(
                 let mut on = !effect.bypass;
                 let hover = file_hover(effect).map_or_else(String::new, |text| format!("{text}\n"));
                 let checkbox = ui
-                    .checkbox(&mut on, RichText::new(name).strong())
+                    .checkbox(&mut on, RichText::new(name).semibold())
                     .on_hover_text(format!("{hover}Décocher pour passer l'effet (bypass)"));
                 effect.bypass = !on;
                 tools.learn.cover(
@@ -242,7 +243,7 @@ pub(crate) fn generator_settings(
 ) {
     match describe(generator) {
         Ok(info) => {
-            let title = ui.label(RichText::new(info.label).strong());
+            let title = ui.label(RichText::new(info.label).semibold());
             if let Some(hover) = file_hover(generator) {
                 title.on_hover_text(hover);
             }
@@ -423,7 +424,7 @@ pub(crate) fn dashboard_section(
     dashboard: &mut [Unit; DASHBOARD_SIZE],
     learn: &mut Learn,
 ) {
-    egui::CollapsingHeader::new(RichText::new("Tableau de bord").strong())
+    egui::CollapsingHeader::new(RichText::new("Tableau de bord").semibold())
         .id_salt(("dashboard", slot))
         .show(ui, |ui| {
             ui.label(

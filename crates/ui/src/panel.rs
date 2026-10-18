@@ -18,6 +18,7 @@ use crate::learn::Learn;
 use crate::preferences::Preferences;
 use crate::presets::PresetStore;
 use crate::shortcuts::Shortcut;
+use crate::theme::{self, Emphasis};
 
 /// A screen that can show the full-screen output.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -446,16 +447,23 @@ impl ControlPanel {
         self.keyboard(ui.ctx());
         self.refresh_missing();
 
-        egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui, frame));
+        let style = ui.style().clone();
+        egui::Panel::top("menu")
+            .frame(theme::bar_frame(&style))
+            .show(ui, |ui| self.menu_bar(ui, frame));
         egui::Panel::bottom("transport")
+            .frame(theme::bar_frame(&style))
             .resizable(false)
             .show(ui, |ui| self.transport(ui, frame.status, &frame.audio));
         egui::Panel::right("inspector")
+            .frame(theme::side_frame(&style))
             .resizable(true)
             .default_size(340.0)
             .min_size(260.0)
             .show(ui, |ui| self.inspector(ui, frame));
-        egui::CentralPanel::default().show(ui, |ui| self.grid(ui, frame.status));
+        egui::CentralPanel::default()
+            .frame(theme::canvas_frame(&style))
+            .show(ui, |ui| self.grid(ui, frame.status));
         self.dialogs(ui.ctx());
 
         self.document.commit(&before);
@@ -795,7 +803,7 @@ impl ControlPanel {
             ui.close();
         }
         ui.separator();
-        ui.label(egui::RichText::new("Entrées MIDI").strong());
+        ui.label(egui::RichText::new("Entrées MIDI").semibold());
         if midi.ports.is_empty() {
             ui.label(egui::RichText::new("Aucune entrée MIDI").weak());
         }
@@ -828,7 +836,7 @@ impl ControlPanel {
         )
         .on_hover_text("Allume les pads des clips qui jouent, place les faders motorisés");
         ui.separator();
-        ui.label(egui::RichText::new("DMX (console lumière)").strong());
+        ui.label(egui::RichText::new("DMX (console lumière)").semibold());
         ui.horizontal(|ui| {
             ui.checkbox(&mut preferences.dmx_input, "Écouter")
                 .on_hover_text("Chaque canal DMX reçu d'une console s'apprend comme un fader MIDI (Apprentissage MIDI, cliquer une commande, bouger le canal)");
@@ -849,7 +857,7 @@ impl ControlPanel {
             ui.label(egui::RichText::new("À l'écoute (sACN : univers 1 à 16)").weak());
         }
         ui.separator();
-        ui.label(egui::RichText::new("OSC").strong());
+        ui.label(egui::RichText::new("OSC").semibold());
         ui.horizontal(|ui| {
             ui.checkbox(&mut preferences.osc_input, "Écouter sur le port");
             ui.add(egui::DragValue::new(&mut preferences.osc_port).range(1024..=65535));
@@ -869,7 +877,7 @@ impl ControlPanel {
             ui.colored_label(ui.visuals().error_fg_color, error);
         }
         ui.separator();
-        ui.label(egui::RichText::new("API réseau").strong());
+        ui.label(egui::RichText::new("API réseau").semibold());
         ui.horizontal(|ui| {
             ui.checkbox(&mut preferences.api_enabled, "Activer sur le port");
             ui.add(egui::DragValue::new(&mut preferences.api_port).range(1024..=65535));
@@ -1087,7 +1095,7 @@ impl ControlPanel {
             {
                 fade_to = Some(0.0);
             }
-            ui.label(egui::RichText::new("A").strong());
+            ui.label(egui::RichText::new("A").semibold());
             let crossfader = &mut self.document.composition_mut().crossfader;
             let mut position = crossfader.position.get();
             // A slider takes its length from the spacing, not from its size.
@@ -1113,7 +1121,7 @@ impl ControlPanel {
             crossfader.position = prism_core::Unit::new(position);
             self.learn
                 .cover(ui, response.rect, prism_core::ControlTarget::Crossfader);
-            ui.label(egui::RichText::new("B").strong());
+            ui.label(egui::RichText::new("B").semibold());
             if ui
                 .button("B ▶")
                 .on_hover_text(format!("Crossfader vers B en {duration}"))
