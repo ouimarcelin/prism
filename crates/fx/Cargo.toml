@@ -24,4 +24,5 @@ workspace = true
 
 [dev-dependencies]
 png = "0.18.1"
+tempfile.workspace = true
 prism-clock = { path = "../clock" }

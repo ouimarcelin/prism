@@ -2651,6 +2651,7 @@ dependencies = [
  "prism-render",
  "serde_json",
  "skrifa",
+ "tempfile",
  "thiserror 2.0.21",
 ]
 

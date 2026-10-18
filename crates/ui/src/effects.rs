@@ -18,6 +18,7 @@ use crate::presets::PresetStore;
 /// learn mode.
 pub(crate) struct Tools<'a> {
     pub(crate) presets: &'a mut PresetStore,
+    pub(crate) plugins: &'a mut crate::plugins::PluginShelf,
     pub(crate) learn: &'a mut Learn,
 }
 
@@ -204,6 +205,10 @@ fn effect_chain(
                     if ui.selectable_label(false, info.label).clicked() {
                         edits.push(ChainEdit::Add(info.kind));
                     }
+                }
+                ui.separator();
+                if let Some(path) = tools.plugins.menu_items(ui, true) {
+                    edits.push(ChainEdit::AddFile(path));
                 }
                 ui.separator();
                 if ui

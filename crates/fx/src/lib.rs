@@ -14,6 +14,7 @@
 mod catalog;
 mod chain;
 mod isf;
+mod plugins;
 mod text;
 
 pub use catalog::{
@@ -21,4 +22,5 @@ pub use catalog::{
 };
 pub use chain::{EffectChain, EffectRenderer, FrameTime, is_active};
 pub use isf::{ISF_KIND, IsfError, IsfShader, compile as compile_isf, load as load_isf, shader_of};
+pub use plugins::{PLUGIN_EXTENSIONS, Plugin, scan_plugins};
 pub use text::TEXT_KIND;
