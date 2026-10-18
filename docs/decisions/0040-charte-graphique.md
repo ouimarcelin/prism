@@ -26,5 +26,5 @@ Le kit a été lu avec l'outil Figma de Claude Code : variables (couleurs en mod
 - Une seule source pour l'apparence : changer une couleur ou une taille se fait dans `theme.rs`.
 - Tout contexte egui qui dessine l'interface doit recevoir le thème : sans lui, la famille de police demi-grasse n'existe pas et egui s'arrête. Les tests de l'interface créent leurs contextes avec le thème.
 - Le binaire grossit de 650 Ko (les deux fichiers Inter).
-- La poignée des curseurs reste celle d'egui (cercle gris cerclé de blanc) : la couleur pleine du kit demanderait un curseur dessiné à la main.
+- Les curseurs d'egui gardaient une poignée grise : remplacés par un curseur dessiné à la main (ADR 0041).
 - `egui_kittest` (MIT OR Apache-2.0) devient une dépendance de développement de `prism-ui`.

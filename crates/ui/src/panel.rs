@@ -18,6 +18,7 @@ use crate::learn::Learn;
 use crate::preferences::Preferences;
 use crate::presets::PresetStore;
 use crate::shortcuts::Shortcut;
+use crate::slider::Slider;
 use crate::theme::{self, Emphasis};
 
 /// A screen that can show the full-screen output.
@@ -931,10 +932,7 @@ impl ControlPanel {
         ui.add_enabled_ui(preferences.clip_sound, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Volume");
-                ui.add(egui::Slider::new(
-                    &mut preferences.clip_sound_volume,
-                    0.0..=1.0,
-                ));
+                ui.add(Slider::new(&mut preferences.clip_sound_volume, 0.0..=1.0).quarters());
             });
         });
         match (&status.output, &status.output_error) {
@@ -965,7 +963,7 @@ impl ControlPanel {
             ui.horizontal(|ui| {
                 ui.label("Sensibilité");
                 ui.add(
-                    egui::Slider::new(
+                    Slider::new(
                         &mut preferences.audio_gain_db,
                         0.0..=prism_audio::MAX_GAIN_DB,
                     )
@@ -1100,7 +1098,9 @@ impl ControlPanel {
             let mut position = crossfader.position.get();
             // A slider takes its length from the spacing, not from its size.
             ui.spacing_mut().slider_width = 320.0;
-            let slider = egui::Slider::new(&mut position, 0.0..=1.0).show_value(false);
+            let slider = Slider::new(&mut position, 0.0..=1.0)
+                .show_value(false)
+                .origin(0.5);
             let response = ui
                 .add(slider)
                 .on_hover_text("Crossfader : double-clic pour centrer");
