@@ -263,8 +263,9 @@ impl FrameSource for HapDecoder {
     }
 }
 
-/// Opens a media file: a still image (PNG, JPEG), a HAP movie, or on macOS
-/// a movie in any codec AVFoundation decodes (H.264, ProRes…).
+/// Opens a media file: a still image (PNG, JPEG), a HAP movie, or a movie
+/// in any codec the system decodes: AVFoundation on macOS (H.264,
+/// ProRes…), Media Foundation on Windows (H.264, HEVC…).
 pub fn open_file(path: &Path) -> Result<Box<dyn FrameSource>, DecodeError> {
     let extension = path
         .extension()
@@ -292,7 +293,17 @@ fn open_platform(path: &Path, track: &VideoTrack) -> Result<Box<dyn FrameSource>
     )?))
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn open_platform(path: &Path, track: &VideoTrack) -> Result<Box<dyn FrameSource>, DecodeError> {
+    Ok(Box::new(crate::mf::MfSource::open(
+        path,
+        track.codec_name(),
+        track.frame_count(),
+        track.duration_seconds(),
+    )?))
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn open_platform(_path: &Path, track: &VideoTrack) -> Result<Box<dyn FrameSource>, DecodeError> {
     Err(DecodeError::UnsupportedCodec(track.codec_name()))
 }

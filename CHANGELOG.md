@@ -7,7 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
-- Portage Windows (non essayé sur un PC, ADR 0037) : compilation vérifiée pour `x86_64-pc-windows-msvc`, priorité temps réel et minuteur à 1 ms du thread de rendu, écran gardé allumé, Spout en sortie (programme et écrans de la scène) et en entrée, NDI. Vidéos autres que HAP et caméras : macOS seulement pour l'instant.
+- Portage Windows (non essayé sur un PC, ADR 0037) : compilation vérifiée pour `x86_64-pc-windows-msvc`, priorité temps réel et minuteur à 1 ms du thread de rendu, écran gardé allumé, Spout en sortie (programme et écrans de la scène) et en entrée, NDI ; vidéos (H.264, HEVC…), son des clips, caméras et cartes de capture par Media Foundation (ADR 0038).
 - `engine-run --effects N` : mesure du moteur avec des effets sur chaque couche ; rapport `docs/benchmarks/2026-10-18-phase-6.md`.
 - Plugins : les shaders ISF déposés dans le dossier `Plugins` (à côté des préférences) apparaissent dans « Ajouter un effet… » et « Générateur… » ; « Ouvrir le dossier des plugins » (ADR 0036).
 - API réseau (Contrôle > API réseau, désactivée par défaut, port 8080, code d'accès) : état en JSON, commandes HTTP et WebSocket avec les adresses `/prism/…` de l'OSC, page de télécommande pour tablette (ADR 0035).

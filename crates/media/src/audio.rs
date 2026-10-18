@@ -56,7 +56,11 @@ pub fn decode_audio(path: &Path) -> Result<Option<ClipAudio>, DecodeError> {
     {
         crate::avf::decode_audio(path)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        crate::mf::decode_audio(path)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = path;
         Ok(None)

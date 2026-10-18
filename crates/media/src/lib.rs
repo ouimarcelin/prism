@@ -23,6 +23,8 @@ mod camera;
 mod decoder;
 pub mod hap;
 pub mod image;
+#[cfg(target_os = "windows")]
+mod mf;
 pub mod mov;
 mod source;
 #[cfg(any(test, feature = "test-support"))]
@@ -34,6 +36,8 @@ pub use camera::{Camera, CameraDevice, cameras};
 pub use decoder::{DecodeError, HapDecoder, is_hap};
 pub use hap::{BlockFormat, ColorLayout, HapError, HapFrame, Plane};
 pub use image::{IMAGE_EXTENSIONS, ImageSequence, StillImage, decode_image, natural_order};
+#[cfg(target_os = "windows")]
+pub use mf::{Camera, CameraDevice, cameras};
 pub use mov::{ContainerError, FourCc, Sample, VideoTrack};
 pub use source::{
     ChannelOrder, Frame, FrameSource, MediaInfo, RgbaImage, YuvImage, YuvMatrix, open_file,
