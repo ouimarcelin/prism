@@ -2567,6 +2567,7 @@ dependencies = [
  "prism-output",
  "prism-render",
  "prism-ui",
+ "windows-sys 0.61.2",
  "winit",
 ]
 
@@ -2665,6 +2666,7 @@ dependencies = [
  "prism-core",
  "prism-render",
  "wgpu",
+ "windows",
 ]
 
 [[package]]

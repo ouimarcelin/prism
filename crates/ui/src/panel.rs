@@ -728,12 +728,17 @@ impl ControlPanel {
                     self.actions.push(Action::OpenStage);
                     ui.close();
                 }
-                if cfg!(target_os = "macos") {
+                if cfg!(any(target_os = "macos", target_os = "windows")) {
                     ui.separator();
                     let mut syphon = self.preferences.syphon_output;
+                    let (label, hover) = if cfg!(target_os = "windows") {
+                        ("Publier sur Spout", "L'image programme, sous le nom « Prism », pour les autres applications du PC")
+                    } else {
+                        ("Publier sur Syphon", "L'image programme, sous le nom « Prism », pour les autres applications du Mac")
+                    };
                     if ui
-                        .checkbox(&mut syphon, "Publier sur Syphon")
-                        .on_hover_text("L'image programme, sous le nom « Prism », pour les autres applications du Mac")
+                        .checkbox(&mut syphon, label)
+                        .on_hover_text(hover)
                         .changed()
                     {
                         self.preferences.syphon_output = syphon;

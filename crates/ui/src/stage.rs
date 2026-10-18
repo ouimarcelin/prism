@@ -408,6 +408,9 @@ impl ControlPanel {
             if cfg!(target_os = "macos") {
                 ui.checkbox(&mut screen.syphon, "Syphon")
                     .on_hover_text("L'image de cet écran publiée sur Syphon sous « Prism – » et son nom, pour un autre logiciel du Mac");
+            } else if cfg!(target_os = "windows") {
+                ui.checkbox(&mut screen.syphon, "Spout")
+                    .on_hover_text("L'image de cet écran publiée sur Spout sous « Prism – » et son nom, pour un autre logiciel du PC");
             }
             ui.checkbox(&mut screen.test_pattern, "Mire")
                 .on_hover_text("Les découpes montrent une grille au lieu de la composition, pour aligner les projecteurs");

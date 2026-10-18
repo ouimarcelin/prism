@@ -19,11 +19,11 @@ prism-clock = { path = "../clock" }
 prism-core = { path = "../core" }
 prism-dmx = { path = "../dmx" }
 prism-fx = { path = "../fx" }
+prism-io-video = { path = "../io-video" }
 prism-media = { path = "../media" }
 prism-render = { path = "../render" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-prism-io-video = { path = "../io-video" }
 libc = "0.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
