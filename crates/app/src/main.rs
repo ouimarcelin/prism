@@ -7,6 +7,7 @@
 
 mod control;
 mod options;
+mod splash;
 
 use std::error::Error;
 use std::path::PathBuf;
@@ -116,6 +117,7 @@ fn main() -> ExitCode {
         output_screen: options.output_screen,
         panel: ControlPanel::new(document, missing).with_preferences(preferences, preferences_path),
         running: None,
+        splash: None,
         error: None,
         output_modifiers: ModifiersState::empty(),
         last_input: Instant::now(),
@@ -346,6 +348,8 @@ struct App {
     output_screen: Option<usize>,
     panel: ControlPanel,
     running: Option<Running>,
+    /// Logo shown until `running` starts.
+    splash: Option<splash::Splash>,
     error: Option<String>,
     /// Modifier keys held over the output window.
     output_modifiers: ModifiersState,
@@ -430,7 +434,11 @@ struct AudioState {
 }
 
 impl Running {
-    fn start(event_loop: &ActiveEventLoop, panel: &ControlPanel) -> Result<Self, Box<dyn Error>> {
+    fn start(
+        event_loop: &ActiveEventLoop,
+        panel: &ControlPanel,
+        gpu: Option<Arc<Gpu>>,
+    ) -> Result<Self, Box<dyn Error>> {
         let window = Arc::new(
             event_loop.create_window(
                 Window::default_attributes()
@@ -439,17 +447,27 @@ impl Running {
                     .with_min_inner_size(LogicalSize::new(960.0, 600.0)),
             )?,
         );
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
-                event_loop.owned_display_handle(),
-            ))
-        });
-        let surface = instance.create_surface(Arc::clone(&window))?;
-        let gpu = Arc::new(pollster::block_on(Gpu::from_instance(
-            &instance,
-            Some(&surface),
-        ))?);
+        // The GPU opened by the splash window, or a new one.
+        let (gpu, surface) = match gpu {
+            Some(gpu) => {
+                let surface = gpu.instance.create_surface(Arc::clone(&window))?;
+                (gpu, surface)
+            }
+            None => {
+                let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+                    backends: wgpu::Backends::PRIMARY,
+                    ..wgpu::InstanceDescriptor::new_with_display_handle(Box::new(
+                        event_loop.owned_display_handle(),
+                    ))
+                });
+                let surface = instance.create_surface(Arc::clone(&window))?;
+                let gpu = Arc::new(pollster::block_on(Gpu::from_instance(
+                    &instance,
+                    Some(&surface),
+                ))?);
+                (gpu, surface)
+            }
+        };
         let control = ControlWindow::new(&gpu, window, surface)?;
         let document = panel.document();
         let engine = Engine::start(Arc::clone(&gpu), document.composition().clone())?;
@@ -771,6 +789,25 @@ impl Running {
 }
 
 impl App {
+    /// Starts the GPU, the engine and the control window, then closes the
+    /// splash window.
+    fn start(&mut self, event_loop: &ActiveEventLoop) {
+        let gpu = self.splash.as_ref().map(splash::Splash::gpu);
+        match Running::start(event_loop, &self.panel, gpu) {
+            Ok(running) => {
+                self.running = Some(running);
+                if let Some(screen) = self.output_screen {
+                    self.handle(event_loop, vec![Action::ToggleScreen(screen - 1)]);
+                }
+            }
+            Err(error) => {
+                self.error = Some(describe(error.as_ref()));
+                event_loop.exit();
+            }
+        }
+        self.splash = None;
+    }
+
     fn handle(&mut self, event_loop: &ActiveEventLoop, actions: Vec<Action>) {
         let Some(running) = &mut self.running else {
             return;
@@ -1020,7 +1057,13 @@ impl ApplicationHandler<UserEvent> for App {
         }
     }
 
-    fn new_events(&mut self, _event_loop: &ActiveEventLoop, cause: StartCause) {
+    fn new_events(&mut self, event_loop: &ActiveEventLoop, cause: StartCause) {
+        if let Some(splash) = &self.splash
+            && Instant::now() >= splash.ready_at()
+        {
+            self.start(event_loop);
+            return;
+        }
         // Time for the next frame of an idle interface.
         if matches!(cause, StartCause::ResumeTimeReached { .. })
             && let Some(running) = &self.running
@@ -1030,20 +1073,16 @@ impl ApplicationHandler<UserEvent> for App {
     }
 
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.running.is_some() {
+        if self.running.is_some() || self.splash.is_some() {
             return;
         }
-        match Running::start(event_loop, &self.panel) {
-            Ok(running) => {
-                self.running = Some(running);
-                if let Some(screen) = self.output_screen {
-                    self.handle(event_loop, vec![Action::ToggleScreen(screen - 1)]);
-                }
+        // The start blocks the event loop: the logo shows first.
+        match splash::Splash::open(event_loop) {
+            Ok(splash) => {
+                event_loop.set_control_flow(ControlFlow::WaitUntil(splash.ready_at()));
+                self.splash = Some(splash);
             }
-            Err(error) => {
-                self.error = Some(describe(error.as_ref()));
-                event_loop.exit();
-            }
+            Err(_) => self.start(event_loop),
         }
     }
 
@@ -1053,6 +1092,18 @@ impl ApplicationHandler<UserEvent> for App {
         window_id: WindowId,
         event: WindowEvent,
     ) {
+        if let Some(splash) = &mut self.splash
+            && splash.id() == window_id
+        {
+            if matches!(event, WindowEvent::RedrawRequested) {
+                // Without a paint, the start waits for the timeout.
+                if let Err(error) = splash.paint() {
+                    eprintln!("fenêtre de démarrage : {error}");
+                }
+                event_loop.set_control_flow(ControlFlow::WaitUntil(splash.ready_at()));
+            }
+            return;
+        }
         let Some(running) = &mut self.running else {
             return;
         };

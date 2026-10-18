@@ -5,6 +5,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ## [Non publié]
 
+### Ajouté
+
+- Fenêtre de démarrage : le logo s'affiche sur fond transparent au centre de l'écran pendant que le moteur démarre ; le GPU ouvert pour elle sert ensuite à l'application. Nouveau logo.
+
 ### Modifié
 
 - Sortie avancée : masques lus dans une image de couverture et sommets des découpes gardés sur le GPU ; deux écrans 1080p en environ 1 ms par image quels que soient les réglages (avant : jusqu'à 24 ms). Outil `stage-bench`, rapport `docs/benchmarks/2026-10-17-sortie-avancee.md`.
