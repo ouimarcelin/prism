@@ -60,7 +60,7 @@ texture description used to exchange images follow the Spout 2 SDK
 (https://github.com/leadedge/Spout2, BSD 2-clause licence, Copyright (c)
 Lynn Jarvis). No code of the SDK is included.
 
-Splash image (assets/splash.svg, rendered as assets/splash-2048.png) and
+Splash image (assets/splash.svg) and
 application icon (assets/icon-1024.png): the logo of Prism, drawn by its
 author (@ouimarcelin), under the licence of Prism.
 
