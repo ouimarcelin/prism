@@ -16,3 +16,9 @@
 ## Problèmes
 
 - Les échecs de CI n'avaient pas été remarqués pendant 15 fusions : vérifier l'état de la CI après chaque fusion.
+
+## Suite (ticket 69)
+
+- La CI échoue encore : tempo absent après 5 s d'impulsions. Hypothèse : sur la machine virtuelle de la CI, les heures données par le pilote MIDI n'augmentent pas, et une heure qui n'avance pas vide la fenêtre d'impulsions.
+- Correction : les impulsions sont datées à leur arrivée, toujours. Le tempo moyenne 48 impulsions, ce qui lisse l'irrégularité d'arrivée.
+- Le message d'échec du test montre maintenant toute la lecture de l'horloge.
