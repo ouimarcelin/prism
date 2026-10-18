@@ -5,7 +5,10 @@
 #   scripts/make-app.sh          # without NDI
 #   scripts/make-app.sh --ndi    # with NDI (ADR 0026)
 #
-# The application is not signed: it opens on the Mac that built it.
+# The application is not signed: it opens on the Mac that built it. With
+# PRISM_NO_INSTALL=1 the bundle stays in the target folder (used by
+# scripts/make-dmg.sh). PRISM_TARGETS lists the Rust targets to build, for
+# a universal binary: "aarch64-apple-darwin x86_64-apple-darwin".
 set -eu
 
 cd "$(dirname "$0")/.."
@@ -14,9 +17,6 @@ if [ "${1:-}" = "--ndi" ]; then
     features="--features ndi"
 fi
 
-# shellcheck disable=SC2086
-cargo build --release -p prism-app $features
-
 target_dir=$(cargo metadata --format-version 1 --no-deps \
     | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
@@ -24,10 +24,22 @@ bundle="$target_dir/Prism.app"
 
 rm -rf "$bundle"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources"
-cp "$target_dir/release/prism" "$bundle/Contents/MacOS/prism"
+if [ -n "${PRISM_TARGETS:-}" ]; then
+    binaries=""
+    for target in $PRISM_TARGETS; do
+        # shellcheck disable=SC2086
+        cargo build --release -p prism-app --target "$target" $features
+        binaries="$binaries $target_dir/$target/release/prism"
+    done
+    # shellcheck disable=SC2086
+    lipo -create $binaries -output "$bundle/Contents/MacOS/prism"
+else
+    # shellcheck disable=SC2086
+    cargo build --release -p prism-app $features
+    cp "$target_dir/release/prism" "$bundle/Contents/MacOS/prism"
+fi
 
-# Icon: every size macOS asks for, from assets/icon-1024.png (drawn by
-# scripts/make-icon.swift).
+# Icon: every size macOS asks for, from assets/icon-1024.png (the logo).
 iconset="$target_dir/Prism.iconset"
 rm -rf "$iconset"
 mkdir -p "$iconset"
@@ -58,6 +70,11 @@ cat > "$bundle/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
+
+if [ -n "${PRISM_NO_INSTALL:-}" ]; then
+    echo "$bundle"
+    exit 0
+fi
 
 mkdir -p "$HOME/Applications"
 rm -rf "$HOME/Applications/Prism.app"

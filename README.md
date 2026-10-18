@@ -74,6 +74,8 @@ Dans la fenêtre de contrôle :
 
 Sans terminal : `scripts/make-app.sh` (ou `scripts/make-app.sh --ndi`) construit l'application `Prism.app` et l'installe dans le dossier Applications de l'utilisateur (`~/Applications`) ; elle s'ouvre ensuite depuis le Finder, le Dock ou Spotlight. Relancer le script après chaque mise à jour du code.
 
+Distribuer : `scripts/make-dmg.sh --ndi` fabrique `target/dist/Prism-<version>.dmg` ; sous Windows, `scripts\make-installer.ps1 -Ndi` fabrique l'installeur. Signature et notarisation : ADR 0039.
+
 `prism --help` liste les options de lancement (`--sortie N` ouvre la sortie au démarrage).
 
 NDI® (vidéo par le réseau) est une option de compilation, désactivée par défaut (ADR 0026). Installer le NDI SDK for Apple ou NDI Tools, puis :

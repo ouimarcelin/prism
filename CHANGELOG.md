@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Installeurs (ADR 0039) : `scripts/make-dmg.sh` (image disque macOS, signature et notarisation si un Developer ID est configuré, binaire universel en option), `scripts/make-installer.ps1` (installeur Windows Inno Setup), workflow `release.yml` vers une version brouillon.
 - Portage Windows (non essayé sur un PC, ADR 0037) : compilation vérifiée pour `x86_64-pc-windows-msvc`, priorité temps réel et minuteur à 1 ms du thread de rendu, écran gardé allumé, Spout en sortie (programme et écrans de la scène) et en entrée, NDI ; vidéos (H.264, HEVC…), son des clips, caméras et cartes de capture par Media Foundation (ADR 0038).
 - `engine-run --effects N` : mesure du moteur avec des effets sur chaque couche ; rapport `docs/benchmarks/2026-10-18-phase-6.md`.
 - Plugins : les shaders ISF déposés dans le dossier `Plugins` (à côté des préférences) apparaissent dans « Ajouter un effet… » et « Générateur… » ; « Ouvrir le dossier des plugins » (ADR 0036).

@@ -1,7 +1,9 @@
-// Draws the Prism application icon: a crystal of coloured facets on a dark
-// rounded square. Writes a 1024 × 1024 PNG to the path given.
+// Draws the first, placeholder icon of Prism: a crystal of coloured facets
+// on a dark rounded square. Writes a 1024 × 1024 PNG to the path given.
+// Since 2026-10-18 assets/icon-1024.png holds the logo drawn by the author:
+// never write this drawing over it.
 //
-//   swift scripts/make-icon.swift assets/icon-1024.png
+//   swift scripts/make-icon.swift /tmp/placeholder-icon.png
 
 import AppKit
 import CoreGraphics
