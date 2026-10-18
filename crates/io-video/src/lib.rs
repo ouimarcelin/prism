@@ -6,10 +6,12 @@
 //! [`NdiReceiver`] reads a source of the network, through the NDI® library
 //! installed on the computer.
 
-#[cfg(any(target_os = "macos", feature = "ndi"))]
+#[cfg(any(target_os = "macos", target_os = "windows", feature = "ndi"))]
 mod convert;
 #[cfg(feature = "ndi")]
 mod ndi;
+#[cfg(any(target_os = "windows", feature = "ndi"))]
+mod readback;
 #[cfg(target_os = "macos")]
 mod syphon;
 

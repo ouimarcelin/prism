@@ -26,6 +26,9 @@ prism-render = { path = "../render" }
 prism-io-video = { path = "../io-video" }
 libc = "0.2"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Media", "Win32_System_Threading"] }
+
 [dev-dependencies]
 png = "0.18.1"
 prism-media = { path = "../media", features = ["test-support"] }

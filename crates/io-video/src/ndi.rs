@@ -17,7 +17,7 @@ use std::thread::JoinHandle;
 
 use prism_render::{Gpu, wgpu};
 
-use crate::convert::Converter;
+use crate::readback::{BgraReader, Picture};
 
 const fn fourcc(code: &[u8; 4]) -> u32 {
     u32::from_le_bytes(*code)
@@ -276,13 +276,6 @@ pub fn ndi_sources() -> Vec<String> {
     }
 }
 
-/// An image to send: 8-bit BGRA rows, packed.
-struct Picture {
-    width: u32,
-    height: u32,
-    pixels: Vec<u8>,
-}
-
 /// A source published on the network, sent to from a thread of its own.
 struct Sender {
     instance: Instance,
@@ -364,23 +357,6 @@ impl Sender {
     }
 }
 
-/// A buffer the converted image is copied to, then read on the CPU.
-struct Readback {
-    buffer: wgpu::Buffer,
-    size: (u32, u32),
-    /// Set when the buffer is mapped and can be read.
-    ready: Arc<AtomicBool>,
-    pending: bool,
-}
-
-/// Buffers in flight: the GPU fills one while the CPU reads another.
-const READBACKS: usize = 3;
-
-/// Bytes per row of a copy, padded as the GPU requires.
-fn padded_row(width: u32) -> u32 {
-    (width * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT)
-}
-
 /// The program image published as an NDI source of the network.
 ///
 /// Each frame is converted to BGRA on the GPU, read back without waiting
@@ -390,9 +366,7 @@ pub struct NdiSender {
     frames: Option<SyncSender<Picture>>,
     thread: Option<JoinHandle<()>>,
     state: Arc<Mutex<SenderState>>,
-    converter: Converter,
-    readbacks: Vec<Readback>,
-    next: usize,
+    reader: BgraReader,
     error: Option<String>,
     /// Frame rate announced, as numerator and denominator.
     rate: (i32, i32),
@@ -413,9 +387,7 @@ impl NdiSender {
             frames: None,
             thread: None,
             state: Arc::default(),
-            converter: Converter::default(),
-            readbacks: Vec::new(),
-            next: 0,
+            reader: BgraReader::default(),
             error: None,
             rate: ((frame_rate * 1000.0).round() as i32, 1000),
         }
@@ -487,103 +459,14 @@ impl NdiSender {
         if size.0 == 0 || size.1 == 0 || !self.start() {
             return;
         }
-        self.read_finished(gpu);
-        let Some(converted) = self.converter.convert(gpu, program, size) else {
-            return;
-        };
-        if self.readbacks.len() < READBACKS {
-            self.readbacks.push(Readback {
-                buffer: gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ndi readback"),
-                    size: u64::from(padded_row(size.0) * size.1),
-                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                    mapped_at_creation: false,
-                }),
-                size,
-                ready: Arc::default(),
-                pending: false,
-            });
-        }
-        let index = self.next % self.readbacks.len();
-        let readback = &mut self.readbacks[index];
-        // Every buffer still in flight: this frame is dropped.
-        if readback.pending {
-            return;
-        }
-        self.next = self.next.wrapping_add(1);
-        if readback.size != size {
-            readback.buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("ndi readback"),
-                size: u64::from(padded_row(size.0) * size.1),
-                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-                mapped_at_creation: false,
-            });
-            readback.size = size;
-        }
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        encoder.copy_texture_to_buffer(
-            converted.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &readback.buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded_row(size.0)),
-                    rows_per_image: Some(size.1),
-                },
-            },
-            wgpu::Extent3d {
-                width: size.0,
-                height: size.1,
-                depth_or_array_layers: 1,
-            },
-        );
-        gpu.queue.submit([encoder.finish()]);
-        let ready = Arc::clone(&readback.ready);
-        readback.pending = true;
-        readback
-            .buffer
-            .slice(..)
-            .map_async(wgpu::MapMode::Read, move |result| {
-                ready.store(result.is_ok(), Ordering::Release);
-            });
-    }
-
-    /// Sends the images read back since the last frame, oldest first.
-    fn read_finished(&mut self, gpu: &Gpu) {
-        let _ = gpu.device.poll(wgpu::PollType::Poll);
-        let count = self.readbacks.len();
-        for offset in 0..count {
-            // Oldest first: the buffer after the one filled last.
-            let index = (self.next + offset) % count;
-            let readback = &mut self.readbacks[index];
-            if !readback.pending || !readback.ready.swap(false, Ordering::Acquire) {
-                continue;
-            }
-            readback.pending = false;
-            let (width, height) = readback.size;
-            let row = padded_row(width) as usize;
-            let picture = match readback.buffer.slice(..).get_mapped_range() {
-                Ok(mapped) => Picture {
-                    width,
-                    height,
-                    pixels: mapped
-                        .chunks(row)
-                        .flat_map(|line| &line[..width as usize * 4])
-                        .copied()
-                        .collect(),
-                },
-                Err(_) => {
-                    readback.buffer.unmap();
-                    continue;
-                }
-            };
-            readback.buffer.unmap();
+        for picture in self.reader.finished(gpu) {
             if let Some(frames) = &self.frames
                 && let Err(TrySendError::Disconnected(_)) = frames.try_send(picture)
             {
                 self.frames = None;
             }
         }
+        self.reader.submit(gpu, program, size);
     }
 }
 
@@ -765,11 +648,5 @@ mod tests {
         // NDI_LIB_FOURCC('B','G','R','A'): first character in the low byte.
         assert_eq!(FOURCC_BGRA, 0x4152_4742);
         assert_eq!(FOURCC_BGRX, 0x5852_4742);
-    }
-
-    #[test]
-    fn copy_rows_are_padded() {
-        assert_eq!(padded_row(1920), 7680);
-        assert_eq!(padded_row(100), 512);
     }
 }

@@ -2635,6 +2635,7 @@ dependencies = [
  "prism-render",
  "tempfile",
  "wgpu",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
