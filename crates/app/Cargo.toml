@@ -31,6 +31,7 @@ prism-io-video = { path = "../io-video" }
 prism-output = { path = "../output" }
 prism-render = { path = "../render" }
 prism-ui = { path = "../ui" }
+resvg = { version = "0.48.1", default-features = false }
 winit = "0.30.13"
 
 [target.'cfg(target_os = "windows")'.dependencies]
