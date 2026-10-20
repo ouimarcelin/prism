@@ -1,5 +1,8 @@
 //! The clip grid: one row per layer, top layer first, one cell per column;
-//! a header row above the layers of each group.
+//! a header row above the layers of each group. Layers and groups move by
+//! drag and drop from their grip: dropped on the edge of a row, they go
+//! above or below it; a layer dropped on the middle of a layer, or on the
+//! lower half of a group header, joins its group.
 
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, TextStyle, Vec2};
@@ -17,6 +20,31 @@ const CELL_SIZE: Vec2 = Vec2::new(116.0, 64.0);
 const GROUP_BAR: f32 = 3.0;
 /// Indent of the headers of the layers of a group, in points.
 const GROUP_INDENT: f32 = 14.0;
+/// Part of the height of a layer row, at its top and bottom, where a
+/// dropped layer goes above or below it instead of joining it.
+const DROP_EDGE: f32 = 0.3;
+
+/// What is being dragged in the grid.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Drag {
+    Layer(LayerId),
+    Group(GroupId),
+}
+
+/// Where a drag is dropped: the row of a layer, or a group header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Target {
+    Layer(LayerId),
+    Group(GroupId),
+}
+
+/// Where, in the target, the drag goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Place {
+    Above,
+    Below,
+    Into,
+}
 
 impl ControlPanel {
     pub(crate) fn grid(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
@@ -33,19 +61,27 @@ impl ControlPanel {
                     .map(|layer| (layer.id(), layer.group()))
                     .collect();
                 let mut current = None;
+                let mut dropped = None;
                 for (layer, group) in layers {
                     if group != current {
                         current = group;
-                        if let Some(group) = group {
-                            self.group_row(ui, group);
+                        if let Some(group) = group
+                            && let Some(rect) = self.group_row(ui, group)
+                        {
+                            dropped = dropped.or(drop_zone(ui, rect, Target::Group(group)));
                         }
                     }
                     let collapsed = group
                         .and_then(|group| self.document.composition().group(group))
                         .is_some_and(|group| group.collapsed);
                     if !collapsed {
-                        self.layer_row(ui, layer, status);
+                        let rect = self.layer_row(ui, layer, status);
+                        dropped = dropped.or(drop_zone(ui, rect, Target::Layer(layer)));
                     }
+                }
+                self.drag_label(ui);
+                if let Some((drag, target, place)) = dropped {
+                    self.drop(drag, target, place);
                 }
                 ui.add_space(theme::SPACE_2);
                 if ui
@@ -133,7 +169,7 @@ impl ControlPanel {
     /// Header of a group: folding, name, bypass, solo, blend mode and
     /// opacity of the mixed group. A click selects its top layer, which
     /// shows the group in the inspector.
-    fn group_row(&mut self, ui: &mut egui::Ui, group: GroupId) {
+    fn group_row(&mut self, ui: &mut egui::Ui, group: GroupId) -> Option<Rect> {
         let top = self
             .document
             .composition()
@@ -153,12 +189,11 @@ impl ControlPanel {
             .is_some_and(|layer| layer.group() == Some(group));
         let mut dissolve = false;
         let mut select = false;
-        let Some(entry) = self.document.composition_mut().group_mut(group) else {
-            return;
-        };
+        let entry = self.document.composition_mut().group_mut(group)?;
         let palette = theme::palette(ui);
-        ui.horizontal(|ui| {
+        let row = ui.horizontal(|ui| {
             ui.set_width(HEADER_WIDTH);
+            grip(ui, Drag::Group(group));
             let arrow = if entry.collapsed { "▶" } else { "▼" };
             if ui
                 .add(egui::Button::new(arrow).frame_when_inactive(false))
@@ -210,9 +245,10 @@ impl ControlPanel {
         if dissolve {
             let _ = self.document.composition_mut().dissolve_group(group);
         }
+        Some(row.response.rect)
     }
 
-    fn layer_row(&mut self, ui: &mut egui::Ui, layer: LayerId, status: &EngineStatus) {
+    fn layer_row(&mut self, ui: &mut egui::Ui, layer: LayerId, status: &EngineStatus) -> Rect {
         let layer_status = status.layers.iter().find(|s| s.layer == Some(layer));
         let grouped = self
             .document
@@ -255,6 +291,83 @@ impl ControlPanel {
             ui.painter()
                 .rect_filled(bar, 1.0, theme::palette(ui).brand.gamma_multiply(0.6));
         }
+        row.response.rect
+    }
+
+    /// The name of what is dragged, next to the pointer.
+    fn drag_label(&self, ui: &egui::Ui) {
+        let Some(drag) = egui::DragAndDrop::payload::<Drag>(ui.ctx()) else {
+            return;
+        };
+        let Some(pointer) = ui.ctx().pointer_interact_pos() else {
+            return;
+        };
+        let composition = self.document.composition();
+        let name = match *drag {
+            Drag::Layer(layer) => composition.layer(layer).map(|layer| layer.name.clone()),
+            Drag::Group(group) => composition.group(group).map(|group| group.name.clone()),
+        };
+        let Some(name) = name else { return };
+        let palette = theme::palette(ui);
+        let painter = ui.ctx().layer_painter(egui::LayerId::new(
+            egui::Order::Tooltip,
+            egui::Id::new("grid drag label"),
+        ));
+        let galley =
+            painter.layout_no_wrap(name, TextStyle::Body.resolve(ui.style()), palette.text);
+        let rect = Rect::from_min_size(
+            pointer + Vec2::new(14.0, 6.0),
+            galley.size() + Vec2::splat(2.0 * theme::SPACE_2),
+        );
+        painter.rect(
+            rect,
+            theme::RADIUS,
+            palette.menu,
+            Stroke::new(1.0, palette.brand),
+            StrokeKind::Inside,
+        );
+        painter.galley(rect.min + Vec2::splat(theme::SPACE_2), galley, palette.text);
+    }
+
+    /// Applies a drop on the grid.
+    fn drop(&mut self, drag: Drag, target: Target, place: Place) {
+        let composition = self.document.composition_mut();
+        let edge = |composition: &prism_core::Composition, group, top: bool| {
+            let layers = composition.group_layers(group);
+            if top {
+                layers.last().copied()
+            } else {
+                layers.first().copied()
+            }
+        };
+        let _ = match (drag, target, place) {
+            (Drag::Layer(layer), Target::Layer(other), Place::Into) => {
+                composition.group_with(layer, other).map(|_| ())
+            }
+            (Drag::Layer(layer), Target::Layer(other), place) => {
+                composition.move_layer_next_to(layer, other, place == Place::Above)
+            }
+            (Drag::Layer(layer), Target::Group(group), place) => {
+                let Some(top) = edge(composition, group, true) else {
+                    return;
+                };
+                if place == Place::Into {
+                    composition.group_with(layer, top).map(|_| ())
+                } else {
+                    composition.move_layer_next_to(layer, top, true)
+                }
+            }
+            (Drag::Group(group), Target::Layer(other), place) => {
+                composition.move_group(group, other, place == Place::Above)
+            }
+            (Drag::Group(group), Target::Group(other), place) => {
+                let above = place == Place::Above;
+                let Some(edge) = edge(composition, other, above) else {
+                    return;
+                };
+                composition.move_group(group, edge, above)
+            }
+        };
     }
 
     fn layer_header(&mut self, ui: &mut egui::Ui, layer: LayerId, state: Option<&ClipState>) {
@@ -271,6 +384,7 @@ impl ControlPanel {
         let mut covers = Vec::new();
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
+                grip(ui, Drag::Layer(layer));
                 let name = RichText::new(entry.name.clone()).semibold();
                 let name = if selected_layer {
                     name.color(theme::palette(ui).brand_text)
@@ -561,4 +675,69 @@ fn one_line(text: &str, font: FontId, color: Color32, width: f32) -> LayoutJob {
     let mut job = LayoutJob::simple_singleline(text.to_owned(), font, color);
     job.wrap = TextWrapping::truncate_at_width(width);
     job
+}
+
+/// Handle that drags a layer or a group: two columns of dots.
+fn grip(ui: &mut egui::Ui, drag: Drag) {
+    let id = egui::Id::new(("grip", format!("{drag:?}")));
+    let response = ui
+        .dnd_drag_source(id, drag, |ui| {
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(10.0, 16.0), Sense::hover());
+            let color = theme::palette(ui).text_tertiary;
+            for column in 0..2 {
+                for row in 0..3 {
+                    let center = rect.left_top()
+                        + Vec2::new(3.0 + 4.0 * column as f32, 4.0 + 4.0 * row as f32);
+                    ui.painter().circle_filled(center, 1.1, color);
+                }
+            }
+        })
+        .response;
+    response.on_hover_text("Glisser pour déplacer ; déposer sur une couche pour les grouper");
+}
+
+/// Shows where a drag held over `rect` would go, and returns the drop when
+/// it is released there.
+fn drop_zone(ui: &egui::Ui, rect: Rect, target: Target) -> Option<(Drag, Target, Place)> {
+    let response = ui.interact(rect, egui::Id::new(("drop", target)), Sense::hover());
+    let drag = *response.dnd_hover_payload::<Drag>()?;
+    let same = matches!(
+        (drag, target),
+        (Drag::Layer(a), Target::Layer(b)) if a == b
+    ) || matches!((drag, target), (Drag::Group(a), Target::Group(b)) if a == b);
+    if same {
+        return None;
+    }
+    let pointer = ui.ctx().pointer_interact_pos()?;
+    let t = (pointer.y - rect.top()) / rect.height().max(1.0);
+    let place = match (drag, target) {
+        (Drag::Layer(_), Target::Layer(_)) if t < DROP_EDGE => Place::Above,
+        (Drag::Layer(_), Target::Layer(_)) if t > 1.0 - DROP_EDGE => Place::Below,
+        (Drag::Layer(_), Target::Layer(_)) => Place::Into,
+        (Drag::Layer(_), Target::Group(_)) if t >= 0.5 => Place::Into,
+        _ if t < 0.5 => Place::Above,
+        _ => Place::Below,
+    };
+    let palette = theme::palette(ui);
+    let painter = ui.painter();
+    let line = |y: f32| {
+        painter.hline(rect.x_range(), y, Stroke::new(2.0, palette.brand));
+    };
+    let gap = ui.spacing().item_spacing.y / 2.0;
+    match place {
+        Place::Above => line(rect.top() - gap),
+        Place::Below => line(rect.bottom() + gap),
+        Place::Into => {
+            painter.rect(
+                rect,
+                theme::RADIUS,
+                palette.brand.gamma_multiply(0.12),
+                Stroke::new(1.5, palette.brand),
+                StrokeKind::Outside,
+            );
+        }
+    }
+    response
+        .dnd_release_payload::<Drag>()
+        .map(|_| (drag, target, place))
 }

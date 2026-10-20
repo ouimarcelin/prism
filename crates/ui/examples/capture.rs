@@ -49,6 +49,25 @@ fn main() {
         panel.ui(ui, &frame);
     });
     save(&mut capture, &folder, "controle");
+    // A layer held over another: they would make a group.
+    let from = capture.get_by_label("Couche 3").rect().left_center() - Vec2::new(10.0, 0.0);
+    let to = capture.get_by_label("Couche 4").rect().left_top() + Vec2::new(260.0, 28.0);
+    capture.hover_at(from);
+    capture.run_steps(1);
+    capture.drag_at(from);
+    for step in 1..=6 {
+        capture.hover_at(from + (to - from) * (step as f32 / 6.0));
+        capture.run_steps(1);
+    }
+    save(&mut capture, &folder, "glisser");
+    capture.key_press(egui::Key::Escape);
+    capture.event(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: egui::Modifiers::NONE,
+    });
+    capture.run_steps(2);
     capture.get_by_label("Dégradé").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "clip");

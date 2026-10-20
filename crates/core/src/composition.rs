@@ -403,22 +403,106 @@ impl Composition {
     }
 
     /// Moves a layer to another stack position. Moved between two layers of
-    /// a group, it joins the group; moved away from its group, it leaves it.
+    /// a group, it joins the group; next to a layer of its own group, it
+    /// stays in it; elsewhere, it leaves it.
     pub fn move_layer(&mut self, id: LayerId, new_index: usize) -> Result<(), ModelError> {
         let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
         check_index(new_index, self.layers.len())?;
+        let layer = self.layers.remove(index);
+        self.insert_layer(layer, new_index);
+        Ok(())
+    }
+
+    /// Moves a layer just above or just below another one, with the group
+    /// rules of [`Composition::move_layer`].
+    pub fn move_layer_next_to(
+        &mut self,
+        id: LayerId,
+        target: LayerId,
+        above: bool,
+    ) -> Result<(), ModelError> {
+        let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
+        self.layer_index(target)
+            .ok_or(ModelError::UnknownLayer(target))?;
+        if id == target {
+            return Ok(());
+        }
+        let layer = self.layers.remove(index);
+        let target = self.layer_index(target).unwrap_or_default();
+        self.insert_layer(layer, target + usize::from(above));
+        Ok(())
+    }
+
+    /// Puts a layer just above another one, in a group with it: the group
+    /// of the other layer, or a new group of the two.
+    pub fn group_with(&mut self, id: LayerId, target: LayerId) -> Result<GroupId, ModelError> {
+        let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
+        self.layer_index(target)
+            .ok_or(ModelError::UnknownLayer(target))?;
+        if id == target {
+            return Err(ModelError::Inconsistent(format!(
+                "{id} grouped with itself"
+            )));
+        }
         let mut layer = self.layers.remove(index);
-        let below = new_index
+        layer.group = None;
+        let target = self.layer_index(target).unwrap_or_default();
+        self.layers.insert(target + 1, layer);
+        self.prune_groups();
+        self.group_with_above(self.layers[target].id())
+    }
+
+    /// Moves every layer of a group, in their order, just above or just
+    /// below a layer; next to a layer of another group, past that group.
+    pub fn move_group(
+        &mut self,
+        id: GroupId,
+        target: LayerId,
+        above: bool,
+    ) -> Result<(), ModelError> {
+        self.group(id).ok_or(ModelError::UnknownGroup(id))?;
+        let target_group = self
+            .layer(target)
+            .ok_or(ModelError::UnknownLayer(target))?
+            .group;
+        if target_group == Some(id) {
+            return Ok(());
+        }
+        let (members, rest): (Vec<Layer>, Vec<Layer>) = std::mem::take(&mut self.layers)
+            .into_iter()
+            .partition(|layer| layer.group == Some(id));
+        self.layers = rest;
+        let in_target = |layer: &Layer| match target_group {
+            Some(group) => layer.group == Some(group),
+            None => layer.id() == target,
+        };
+        let at = if above {
+            self.layers.iter().rposition(in_target).map_or(0, |i| i + 1)
+        } else {
+            self.layers.iter().position(in_target).unwrap_or(0)
+        };
+        self.layers.splice(at..at, members);
+        self.prune_groups();
+        Ok(())
+    }
+
+    /// Inserts a layer at `index`, joining the group around it or keeping
+    /// its own group next to it.
+    fn insert_layer(&mut self, mut layer: Layer, index: usize) {
+        let below = index
             .checked_sub(1)
             .and_then(|below| self.layers.get(below))
             .and_then(|layer| layer.group);
-        let above = self.layers.get(new_index).and_then(|layer| layer.group);
-        if below.is_some() && below == above {
-            layer.group = below;
-        }
-        self.layers.insert(new_index, layer);
+        let above = self.layers.get(index).and_then(|layer| layer.group);
+        layer.group = if below.is_some() && below == above {
+            below
+        } else if layer.group.is_some() && (layer.group == below || layer.group == above) {
+            layer.group
+        } else {
+            None
+        };
+        self.layers.insert(index, layer);
         self.prune_groups();
-        Ok(())
     }
 
     /// Groups of layers, in no particular order.
@@ -1249,5 +1333,30 @@ mod tests {
         split["layers"][0]["group"] = split["layers"][2]["group"].clone();
         split["layers"][1].as_object_mut().unwrap().remove("group");
         assert!(serde_json::from_value::<Composition>(split).is_err());
+    }
+
+    #[test]
+    fn layers_and_groups_move_by_drag_and_drop() {
+        let mut comp = grid(5, 1);
+        let ids = layer_ids(&comp);
+        // Dropped on another layer: a new group of the two.
+        let group = comp.group_with(ids[4], ids[1]).unwrap();
+        assert_eq!(layer_ids(&comp), [ids[0], ids[1], ids[4], ids[2], ids[3]]);
+        assert_eq!(comp.group_layers(group), [ids[1], ids[4]]);
+        // Dropped on a layer of a group: joins it.
+        comp.group_with(ids[0], ids[4]).unwrap();
+        assert_eq!(comp.group_layers(group), [ids[1], ids[4], ids[0]]);
+        // Reordered inside its group, a layer stays in it.
+        comp.move_layer_next_to(ids[0], ids[1], false).unwrap();
+        assert_eq!(comp.group_layers(group), [ids[0], ids[1], ids[4]]);
+        // Dropped next to a layer outside the group, it leaves it.
+        comp.move_layer_next_to(ids[4], ids[3], true).unwrap();
+        assert_eq!(comp.group_layers(group), [ids[0], ids[1]]);
+        // The whole group moves, past the other groups.
+        let other = comp.group_with(ids[3], ids[2]).unwrap();
+        comp.move_group(group, ids[2], true).unwrap();
+        assert_eq!(layer_ids(&comp), [ids[2], ids[3], ids[0], ids[1], ids[4]]);
+        assert_eq!(comp.group_layers(other), [ids[2], ids[3]]);
+        assert_eq!(comp.group_layers(group), [ids[0], ids[1]]);
     }
 }

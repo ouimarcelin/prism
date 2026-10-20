@@ -19,3 +19,15 @@ Le cahier des charges prévoit des effets « par clip, couche, groupe et composi
 
 - Les projets sans groupe ne changent pas (`groups` et `group` omis à l'enregistrement).
 - Pas encore : opacité de groupe animée ou suivant le son, cibles MIDI propres au groupe (opacité, bypass, solo), préréglages de groupe ; l'aperçu de référence (`plan_layers`) ignore les groupes.
+
+## Glisser-déposer (ticket 90)
+
+Demande de @ouimarcelin : couches réordonnables et groupes créés par glisser-déposer.
+
+- Chaque couche et chaque groupe a une poignée (deux colonnes de points) à gauche de son nom ; le nom suit le pointeur pendant le glisser.
+- Sur la ligne d'une couche : tiers du haut, au-dessus ; tiers du bas, en dessous (trait bleu) ; milieu, groupe avec elle (cadre bleu) : groupe de la couche visée, ou nouveau groupe des deux.
+- Sur l'en-tête d'un groupe : moitié haute, au-dessus du groupe ; moitié basse, dans le groupe, en haut.
+- Un groupe glissé se déplace en bloc, en passant par-dessus les autres groupes, sans s'y imbriquer.
+- Déplacée contre une couche de son groupe, une couche y reste ; entre deux couches d'un autre groupe, elle le rejoint ; ailleurs, elle le quitte.
+- Modèle : `move_layer_next_to`, `group_with`, `move_group`.
+
