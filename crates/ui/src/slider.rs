@@ -281,10 +281,7 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
     // From the left end, or from the origin, to just past the knob, so
     // that the knob sits inside the end of the fill.
     let (start, end) = match origin {
-        Some(origin) => (
-            origin.min(knob) - KNOB_INSET,
-            origin.max(knob) + KNOB_INSET,
-        ),
+        Some(origin) => (origin.min(knob) - KNOB_INSET, origin.max(knob) + KNOB_INSET),
         None => (track.left(), knob + KNOB_INSET),
     };
     let fill = Rect::from_min_max(pos2(start, track.top()), pos2(end, track.bottom()));
@@ -298,7 +295,11 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
     }
 
     let active = response.hovered() || response.dragged();
-    let size = if active { KNOB + Vec2::splat(1.0) } else { KNOB };
+    let size = if active {
+        KNOB + Vec2::splat(1.0)
+    } else {
+        KNOB
+    };
     let capsule = Rect::from_center_size(pos2(knob, y), size);
     painter.rect(
         capsule,
