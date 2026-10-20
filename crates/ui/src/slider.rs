@@ -1,12 +1,11 @@
 //! Sliders in the theme: a rounded track, the accent filling it from its
-//! origin to the value, a light dot marking the value at the end of the
-//! fill, a white capsule marking the origin, and snap points that hold the
-//! value when it passes near them (Alt held: no snapping).
+//! origin to the knob, a white capsule as the knob inside the end of the
+//! fill, and snap points that hold the knob when it passes near them (Alt
+//! held: no snapping).
 
 use std::ops::RangeInclusive;
 
 use egui::emath::{Numeric, remap_clamp};
-use egui::epaint::Shadow;
 use egui::{
     Color32, CornerRadius, DragValue, Key, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2,
     Widget, WidgetInfo, WidgetText, pos2,
@@ -18,12 +17,10 @@ use crate::theme;
 const TRACK: f32 = 16.0;
 /// Corner radius of the track and of the fill, in points.
 const CORNER: u8 = 3;
-/// Radius of the dot marking the value, in points.
-const DOT: f32 = 2.0;
-/// Width of the capsule marking the origin, in points.
-const CAPSULE_WIDTH: f32 = 6.0;
-/// How far the capsule passes the track above and below, in points.
-const CAPSULE_OVERHANG: f32 = 3.0;
+/// Size of the capsule-shaped knob, in points.
+const KNOB: Vec2 = Vec2::new(6.0, 12.0);
+/// Distance from the centre of the knob to the end of the fill, in points.
+const KNOB_INSET: f32 = 5.0;
 /// Radius of a snap point, in points.
 const MARK: f32 = 2.0;
 /// Distance under which the knob jumps to a snap point, in points.
@@ -184,7 +181,7 @@ impl<'a> Slider<'a> {
         let size = Vec2::new(ui.spacing().slider_width, ui.spacing().interact_size.y);
         let (rect, mut response) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let track = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), TRACK));
-        let span = track.x_range().shrink(TRACK / 2.0);
+        let span = track.x_range().shrink(KNOB_INSET);
         let x_of = |slider: &Self, value: f64| {
             egui::emath::lerp(span.min..=span.max, slider.fraction(value) as f32)
         };
@@ -266,12 +263,11 @@ impl Widget for Slider<'_> {
     }
 }
 
-/// Draws the track, the fill, the snap points, the value dot and the
-/// origin capsule, at the horizontal positions given.
+/// Draws the track, the fill, the snap points and the knob, at the
+/// horizontal positions given.
 fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f32>, marks: &[f32]) {
     let painter = ui.painter();
     let palette = theme::palette(ui);
-    let half = TRACK / 2.0;
     let round = CornerRadius::same(CORNER);
     let y = track.center().y;
     painter.rect(
@@ -282,19 +278,19 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
         StrokeKind::Inside,
     );
 
-    // From the capsule to half a track past the value, so that the dot
-    // sits inside the end of the fill.
-    let capsule = origin.unwrap_or(track.left() + CAPSULE_WIDTH / 2.0);
-    let (start, end) = if knob >= capsule {
-        (capsule - CAPSULE_WIDTH / 2.0, knob + half)
-    } else {
-        (knob - half, capsule + CAPSULE_WIDTH / 2.0)
+    // From the left end, or from the origin, to just past the knob, so
+    // that the knob sits inside the end of the fill.
+    let (start, end) = match origin {
+        Some(origin) => (
+            origin.min(knob) - KNOB_INSET,
+            origin.max(knob) + KNOB_INSET,
+        ),
+        None => (track.left(), knob + KNOB_INSET),
     };
     let fill = Rect::from_min_max(pos2(start, track.top()), pos2(end, track.bottom()));
     painter.rect_filled(fill, round, palette.brand);
 
-    // Snap points show on the empty track only, so that the dot alone
-    // marks the value in the fill.
+    // Snap points show on the empty track only.
     for &mark in marks {
         if mark < start - MARK || mark > end + MARK {
             painter.circle_filled(pos2(mark, y), MARK, palette.text_tertiary);
@@ -302,36 +298,13 @@ fn paint(ui: &Ui, response: &Response, track: Rect, knob: f32, origin: Option<f3
     }
 
     let active = response.hovered() || response.dragged();
-    let dot = if response.dragged() {
-        DOT + 1.5
-    } else if active {
-        DOT + 0.5
-    } else {
-        DOT
-    };
-    painter.circle_filled(
-        pos2(knob, y),
-        dot,
-        Color32::from_white_alpha(if active { 150 } else { 110 }),
-    );
-
-    let capsule = Rect::from_center_size(
-        pos2(capsule, y),
-        Vec2::new(CAPSULE_WIDTH, TRACK + 2.0 * CAPSULE_OVERHANG),
-    );
-    let capsule_round = CornerRadius::same((CAPSULE_WIDTH / 2.0) as u8);
-    let shadow = Shadow {
-        offset: [0, 1],
-        blur: 3,
-        spread: 0,
-        color: Color32::from_black_alpha(90),
-    };
-    painter.add(shadow.as_shape(capsule, capsule_round));
+    let size = if active { KNOB + Vec2::splat(1.0) } else { KNOB };
+    let capsule = Rect::from_center_size(pos2(knob, y), size);
     painter.rect(
         capsule,
-        capsule_round,
+        CornerRadius::same((size.x / 2.0) as u8),
         palette.brand,
-        Stroke::new(1.5, Color32::WHITE),
+        Stroke::new(if response.dragged() { 2.0 } else { 1.5 }, Color32::WHITE),
         StrokeKind::Inside,
     );
     if response.has_focus() {
