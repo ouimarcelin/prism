@@ -7,6 +7,7 @@
 
 - « augmente grave la valeur du ease-in, supprimes l'animation scale du logo »
 - Maquettes de curseur (deux images), « intègre cette nouvelle ui de parametre glissière », puis « tu n'as pas compris, voici le parametre glissière à intégrer… plusieurs états de la glissière »
+- « les calques doivent être organisable en drag & drop. les groupes doivent pouvoir se créer en drag & drop. » (ticket 90)
 - « listes moi les futures implémentations de features pour le logiciel. », puis « vas y » (groupes de couches)
 
 ## Résultat
@@ -14,6 +15,8 @@
 - Ticket 86 : démarrage en 2 s, ease-in marqué (sinusoïde de t³), logo fixe.
 - Tickets 87 et 88 : curseurs à piste arrondie et poignée en capsule blanche logée au bout du remplissage (ADR 0041 révisée).
 - Ticket 89 : groupes de couches en sous-mixage (ADR 0043) : modèle, rendu, contrôle, interface, tests du modèle et test GPU.
+
+- Ticket 90 : glisser-déposer des couches et des groupes par une poignée, zones de dépôt (au-dessus, en dessous, grouper), test egui_kittest qui glisse deux couches, capture « glisser ».
 
 ## Problèmes
 
