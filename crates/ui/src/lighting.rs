@@ -11,6 +11,19 @@ use crate::theme::{self, Emphasis};
 
 const SELECTED: Color32 = theme::DARK.brand;
 const OTHER: Color32 = theme::DARK.success_text;
+/// Control points of a curved fixture.
+const TANGENT: Color32 = theme::DARK.warning;
+/// Straight pieces a curved fixture is drawn and picked with.
+const PATH_SEGMENTS: usize = 48;
+
+/// Distance from `point` to the line of `fixture`, on the screen.
+fn path_distance(point: Pos2, image: Rect, fixture: &prism_core::Fixture) -> f32 {
+    fixture
+        .path(PATH_SEGMENTS)
+        .windows(2)
+        .map(|pair| segment_distance(point, to_screen(image, pair[0]), to_screen(image, pair[1])))
+        .fold(f32::INFINITY, f32::min)
+}
 
 fn to_screen(rect: Rect, point: Point) -> Pos2 {
     rect.min + Vec2::new(point.x * rect.width(), point.y * rect.height())
@@ -162,6 +175,20 @@ impl ControlPanel {
             ui.label("Luminosité");
             ui.add(Slider::new(&mut fixture.brightness, 0.0..=1.0).quarters());
             ui.end_row();
+            ui.label("Forme");
+            let mut curved = fixture.bend.is_some();
+            if ui
+                .checkbox(&mut curved, "Courbe (Bézier)")
+                .on_hover_text("La ligne devient une courbe : deux poignées jaunes la plient, les pixels restent également espacés le long de la courbe")
+                .changed()
+            {
+                if curved {
+                    fixture.bend_straight();
+                } else {
+                    fixture.bend = None;
+                }
+            }
+            ui.end_row();
             ui.label("Gamma");
             ui.add(Slider::new(&mut fixture.gamma, 1.0..=3.0).snaps([2.2]))
                 .on_hover_text("1 : valeurs de l'image telles quelles ; 2,2 environ pour des LED dont le contrôleur ne corrige pas (tons moyens trop clairs sinon)");
@@ -205,13 +232,18 @@ impl ControlPanel {
             } else {
                 OTHER.gamma_multiply(if fixture.enabled { 1.0 } else { 0.4 })
             };
-            let (a, b) = (to_screen(image, fixture.from), to_screen(image, fixture.to));
-            ui.painter().line_segment([a, b], Stroke::new(1.5, color));
+            let path = fixture.path(PATH_SEGMENTS);
+            ui.painter().add(egui::Shape::line(
+                path.into_iter()
+                    .map(|point| to_screen(image, point))
+                    .collect(),
+                Stroke::new(1.5, color),
+            ));
             // Pixels as dots, at most a few hundred drawn.
             let step = (usize::from(fixture.pixels) / 300).max(1);
-            for index in (0..fixture.pixels).step_by(step) {
-                let center = to_screen(image, fixture.pixel_point(index));
-                ui.painter().circle_filled(center, 2.0, color);
+            for point in fixture.pixel_points().into_iter().step_by(step) {
+                ui.painter()
+                    .circle_filled(to_screen(image, point), 2.0, color);
             }
         }
 
@@ -220,13 +252,11 @@ impl ControlPanel {
             && let Some(position) = ui.input(|input| input.pointer.interact_pos())
             && image.contains(position)
         {
-            let picked = lighting.fixtures().iter().rev().find(|fixture| {
-                segment_distance(
-                    position,
-                    to_screen(image, fixture.from),
-                    to_screen(image, fixture.to),
-                ) < 8.0
-            });
+            let picked = lighting
+                .fixtures()
+                .iter()
+                .rev()
+                .find(|fixture| path_distance(position, image, fixture) < 8.0);
             if let Some(fixture) = picked
                 && self.stage.fixture != Some(fixture.id())
             {
@@ -243,21 +273,61 @@ impl ControlPanel {
         };
         let base = ui.id().with(("fixture", id.0));
         // The line: drag to move the whole fixture.
-        let (a, b) = (to_screen(image, fixture.from), to_screen(image, fixture.to));
-        let line = Rect::from_two_pos(a, b).expand(6.0);
+        let path: Vec<Pos2> = fixture
+            .path(PATH_SEGMENTS)
+            .into_iter()
+            .map(|point| to_screen(image, point))
+            .collect();
+        let line = Rect::from_points(&path).expand(6.0);
         let moving = ui.interact(line, base.with("move"), Sense::drag());
         if moving.dragged()
             && moving.interact_pointer_pos().is_some_and(|position| {
-                segment_distance(position - moving.drag_delta(), a, b) < 8.0
+                path_distance(position - moving.drag_delta(), image, fixture) < 8.0
             })
         {
             let delta = moving.drag_delta();
-            for point in [&mut fixture.from, &mut fixture.to] {
+            let controls = fixture.bend.iter_mut().flatten();
+            for point in [&mut fixture.from, &mut fixture.to]
+                .into_iter()
+                .chain(controls)
+            {
                 point.x = (point.x + delta.x / image.width()).clamp(0.0, 1.0);
                 point.y = (point.y + delta.y / image.height()).clamp(0.0, 1.0);
             }
         }
-        // The ends: drag to place them.
+        // Curved: the control points, each tied to its end; drag to bend.
+        if let Some(bend) = &mut fixture.bend {
+            for (index, (control, end)) in
+                bend.iter_mut().zip([fixture.from, fixture.to]).enumerate()
+            {
+                let center = to_screen(image, *control);
+                ui.painter()
+                    .line_segment([to_screen(image, end), center], Stroke::new(1.0, TANGENT));
+                let rect = Rect::from_center_size(center, Vec2::splat(16.0));
+                let response = ui
+                    .interact(rect, base.with(("control", index)), Sense::drag())
+                    .on_hover_text("Poignée : glisser pour courber la bande");
+                let side = if response.hovered() || response.dragged() {
+                    11.0
+                } else {
+                    8.0
+                };
+                ui.painter().rect(
+                    Rect::from_center_size(center, Vec2::splat(side)),
+                    1.0,
+                    TANGENT.gamma_multiply(0.6),
+                    Stroke::new(1.5, TANGENT),
+                    egui::StrokeKind::Middle,
+                );
+                if response.dragged()
+                    && let Some(position) = response.interact_pointer_pos()
+                {
+                    *control = to_fraction(image, position);
+                }
+            }
+        }
+        // The ends: drag to place them; a curve's control point follows.
+        let mut moved = [None, None];
         for (index, point) in [&mut fixture.from, &mut fixture.to].into_iter().enumerate() {
             let center = to_screen(image, *point);
             let rect = Rect::from_center_size(center, Vec2::splat(16.0));
@@ -275,7 +345,17 @@ impl ControlPanel {
             if response.dragged()
                 && let Some(position) = response.interact_pointer_pos()
             {
-                *point = to_fraction(image, position);
+                let at = to_fraction(image, position);
+                moved[index] = Some(Point::new(at.x - point.x, at.y - point.y));
+                *point = at;
+            }
+        }
+        if let Some(bend) = &mut fixture.bend {
+            for (control, delta) in bend.iter_mut().zip(moved) {
+                if let Some(delta) = delta {
+                    control.x = (control.x + delta.x).clamp(0.0, 1.0);
+                    control.y = (control.y + delta.y).clamp(0.0, 1.0);
+                }
             }
         }
     }

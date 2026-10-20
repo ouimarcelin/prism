@@ -77,7 +77,11 @@ pub struct Fixture {
     pub from: Point,
     /// Where its last pixel takes its colour.
     pub to: Point,
-    /// Number of pixels, spread evenly from `from` to `to`.
+    /// When set, the line is a cubic Bézier curve from `from` to `to`, bent
+    /// towards these two control points (the first next to `from`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bend: Option<[Point; 2]>,
+    /// Number of pixels, spread evenly along the line from `from` to `to`.
     pub pixels: u16,
     /// Channels of each pixel.
     #[serde(default)]
@@ -111,16 +115,76 @@ impl Fixture {
         self.id
     }
 
-    /// Where pixel `index` takes its colour.
-    pub fn pixel_point(&self, index: u16) -> Point {
-        // One pixel: the middle of the line.
-        let t = if self.pixels > 1 {
-            f32::from(index) / f32::from(self.pixels - 1)
-        } else {
-            0.5
-        };
+    /// The point of the line at `t`, from 0 (`from`) to 1 (`to`): on the
+    /// straight segment, or on the Bézier curve when it is bent.
+    pub fn line_point(&self, t: f32) -> Point {
         let (from, to) = (self.from, self.to);
-        Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t)
+        match self.bend {
+            None => Point::new(from.x + (to.x - from.x) * t, from.y + (to.y - from.y) * t),
+            Some([a, b]) => {
+                let u = 1.0 - t;
+                let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+                let p = [from, a, b, to];
+                Point::new(
+                    p.iter().zip(w).map(|(p, w)| p.x * w).sum(),
+                    p.iter().zip(w).map(|(p, w)| p.y * w).sum(),
+                )
+            }
+        }
+    }
+
+    /// The line as `segments` straight pieces, for drawing and picking.
+    pub fn path(&self, segments: usize) -> Vec<Point> {
+        let segments = if self.bend.is_some() {
+            segments.max(1)
+        } else {
+            1
+        };
+        (0..=segments)
+            .map(|index| self.line_point(index as f32 / segments as f32))
+            .collect()
+    }
+
+    /// Where each pixel takes its colour: evenly spaced along the line,
+    /// curved or not; one pixel sits in the middle.
+    pub fn pixel_points(&self) -> Vec<Point> {
+        let count = usize::from(self.pixels);
+        if count <= 1 {
+            return vec![self.line_point(0.5); count];
+        }
+        if self.bend.is_none() {
+            return (0..count)
+                .map(|index| self.line_point(index as f32 / (count - 1) as f32))
+                .collect();
+        }
+        // Length along the curve, to space the pixels evenly on it.
+        let path = self.path(256);
+        let mut lengths = Vec::with_capacity(path.len());
+        let mut total = 0.0;
+        lengths.push(0.0);
+        for pair in path.windows(2) {
+            total += ((pair[1].x - pair[0].x).powi(2) + (pair[1].y - pair[0].y).powi(2)).sqrt();
+            lengths.push(total);
+        }
+        let mut segment = 0;
+        (0..count)
+            .map(|index| {
+                let wanted = total * index as f32 / (count - 1) as f32;
+                while segment + 2 < lengths.len() && lengths[segment + 1] < wanted {
+                    segment += 1;
+                }
+                let span = (lengths[segment + 1] - lengths[segment]).max(1e-9);
+                let t = ((wanted - lengths[segment]) / span).clamp(0.0, 1.0);
+                let (a, b) = (path[segment], path[segment + 1]);
+                Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+            })
+            .collect()
+    }
+
+    /// Bends the straight line into a curve that still looks straight:
+    /// control points at a third and two thirds of it.
+    pub fn bend_straight(&mut self) {
+        self.bend = Some([self.line_point(1.0 / 3.0), self.line_point(2.0 / 3.0)]);
     }
 }
 
@@ -189,6 +253,7 @@ impl Lighting {
             enabled: true,
             from: Point::new(0.05, 0.5),
             to: Point::new(0.95, 0.5),
+            bend: None,
             pixels: pixels.clamp(1, MAX_FIXTURE_PIXELS),
             order: ColorOrder::Rgb,
             universe,
@@ -236,11 +301,41 @@ mod tests {
         let strip = lighting.fixture_mut(id).unwrap();
         strip.from = Point::new(0.0, 0.0);
         strip.to = Point::new(1.0, 0.5);
-        assert_eq!(strip.pixel_point(0), Point::new(0.0, 0.0));
-        assert_eq!(strip.pixel_point(2), Point::new(0.5, 0.25));
-        assert_eq!(strip.pixel_point(4), Point::new(1.0, 0.5));
+        let points = strip.pixel_points();
+        assert_eq!(points[0], Point::new(0.0, 0.0));
+        assert_eq!(points[2], Point::new(0.5, 0.25));
+        assert_eq!(points[4], Point::new(1.0, 0.5));
         strip.pixels = 1;
-        assert_eq!(strip.pixel_point(0), Point::new(0.5, 0.25));
+        assert_eq!(strip.pixel_points(), [Point::new(0.5, 0.25)]);
+    }
+
+    #[test]
+    fn pixels_spread_evenly_along_a_curve() {
+        let mut lighting = Lighting::default();
+        let id = lighting.add_strip("Bande", 9);
+        let strip = lighting.fixture_mut(id).unwrap();
+        strip.from = Point::new(0.0, 0.5);
+        strip.to = Point::new(1.0, 0.5);
+        // Bent without moving: the pixels stay where they were.
+        let straight = strip.pixel_points();
+        strip.bend_straight();
+        for (a, b) in straight.iter().zip(strip.pixel_points()) {
+            assert!((a.x - b.x).abs() < 1e-3 && (a.y - b.y).abs() < 1e-3);
+        }
+        // An arch: ends in place, the middle pixel at its top, and equal
+        // gaps between neighbours.
+        strip.bend = Some([Point::new(0.0, 0.0), Point::new(1.0, 0.0)]);
+        let points = strip.pixel_points();
+        assert_eq!(points[0], Point::new(0.0, 0.5));
+        assert!((points[8].x - 1.0).abs() < 1e-4);
+        assert!((points[4].x - 0.5).abs() < 1e-3 && (points[4].y - 0.125).abs() < 1e-3);
+        let gap = |i: usize| {
+            ((points[i + 1].x - points[i].x).powi(2) + (points[i + 1].y - points[i].y).powi(2))
+                .sqrt()
+        };
+        for i in 1..8 {
+            assert!((gap(i) - gap(0)).abs() < 2e-3, "{i}");
+        }
     }
 
     #[test]
