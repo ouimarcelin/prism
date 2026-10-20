@@ -757,7 +757,7 @@ fn drop_zone(ui: &egui::Ui, rect: Rect, target: Target) -> Option<(Drag, Target,
 }
 
 /// The name of a layer or a group: a label, turned into a text field by a
-/// double click. Enter or a click elsewhere keeps the new name, Escape
+/// double click, with its whole text selected. Enter or a click elsewhere keeps the new name, Escape
 /// puts the old one back.
 fn name_field(
     ui: &mut egui::Ui,
@@ -770,13 +770,20 @@ fn name_field(
         .as_ref()
         .is_some_and(|(current, _)| *current == target)
     {
-        let response = ui.add(
-            egui::TextEdit::singleline(name)
-                .desired_width(110.0)
-                .font(TextStyle::Body),
-        );
+        let mut output = egui::TextEdit::singleline(name)
+            .desired_width(110.0)
+            .font(TextStyle::Body)
+            .show(ui);
+        let response = output.response.response.clone();
         if !response.has_focus() && !response.lost_focus() {
+            // First frame of the field: focused, its whole text selected.
             response.request_focus();
+            let all = egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(name.chars().count()),
+            );
+            output.state.cursor.set_char_range(Some(all));
+            output.state.store(ui.ctx(), response.id);
         }
         if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
             if let Some((_, original)) = renaming.take() {
