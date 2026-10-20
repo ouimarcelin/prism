@@ -31,9 +31,9 @@ enum Drag {
     Group(GroupId),
 }
 
-/// Where a drag is dropped: the row of a layer, or a group header.
+/// A layer or a group: where a drag is dropped, what is being renamed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Target {
+pub(crate) enum Target {
     Layer(LayerId),
     Group(GroupId),
 }
@@ -212,10 +212,16 @@ impl ControlPanel {
             } else {
                 name
             };
-            let label = ui.add(egui::Label::new(name).truncate().sense(Sense::click()));
+            let label = name_field(
+                ui,
+                &mut self.renaming,
+                Target::Group(group),
+                &mut entry.name,
+                name,
+            );
             select = label.clicked();
             label
-                .on_hover_text("Groupe : ses couches sont mélangées ensemble, puis passent par ses effets. Clic droit : renommer, dissoudre")
+                .on_hover_text("Groupe : ses couches sont mélangées ensemble, puis passent par ses effets. Double clic : renommer ; clic droit : dissoudre")
                 .context_menu(|ui| {
                     ui.label("Nom");
                     ui.text_edit_singleline(&mut entry.name);
@@ -391,10 +397,18 @@ impl ControlPanel {
                 } else {
                     name
                 };
-                let label = ui.add(egui::Label::new(name).truncate().sense(Sense::click()));
+                let label = name_field(
+                    ui,
+                    &mut self.renaming,
+                    Target::Layer(layer),
+                    &mut entry.name,
+                    name,
+                );
                 covers.push((label.rect, ControlTarget::LayerStop { layer }));
                 label
-                    .on_hover_text("Clic droit : renommer, arrêter, supprimer")
+                    .on_hover_text(
+                        "Double clic : renommer ; clic droit : arrêter, grouper, supprimer",
+                    )
                     .context_menu(|ui| {
                         ui.label("Nom");
                         ui.text_edit_singleline(&mut entry.name);
@@ -740,4 +754,48 @@ fn drop_zone(ui: &egui::Ui, rect: Rect, target: Target) -> Option<(Drag, Target,
     response
         .dnd_release_payload::<Drag>()
         .map(|_| (drag, target, place))
+}
+
+/// The name of a layer or a group: a label, turned into a text field by a
+/// double click. Enter or a click elsewhere keeps the new name, Escape
+/// puts the old one back.
+fn name_field(
+    ui: &mut egui::Ui,
+    renaming: &mut Option<(Target, String)>,
+    target: Target,
+    name: &mut String,
+    text: RichText,
+) -> egui::Response {
+    if renaming
+        .as_ref()
+        .is_some_and(|(current, _)| *current == target)
+    {
+        let response = ui.add(
+            egui::TextEdit::singleline(name)
+                .desired_width(110.0)
+                .font(TextStyle::Body),
+        );
+        if !response.has_focus() && !response.lost_focus() {
+            response.request_focus();
+        }
+        if ui.input(|input| input.key_pressed(egui::Key::Escape)) {
+            if let Some((_, original)) = renaming.take() {
+                *name = original;
+            }
+        } else if response.lost_focus() {
+            if name.trim().is_empty()
+                && let Some((_, original)) = renaming.as_ref()
+            {
+                name.clone_from(original);
+            }
+            *renaming = None;
+        }
+        return response;
+    }
+    let label = ui.add(egui::Label::new(text).truncate().sense(Sense::click()));
+
+    if label.double_clicked() {
+        *renaming = Some((target, name.clone()));
+    }
+    label
 }

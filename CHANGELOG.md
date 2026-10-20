@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Double clic sur le nom d'une couche ou d'un groupe : champ pour le renommer sur place ; Entrée ou clic ailleurs garde le nom, Échap rend l'ancien, un nom vide aussi.
 - Glisser-déposer dans la grille (ADR 0043) : couches et groupes déplacés par leur poignée ; une couche déposée au milieu d'une autre forme un groupe avec elle, sur l'en-tête d'un groupe elle le rejoint ; trait ou cadre bleu pour montrer où elle ira.
 - Groupes de couches (ADR 0043) : couches voisines mélangées dans une image à elles, qui passe par les effets du groupe puis se mélange au reste avec l'opacité et le mode de fusion du groupe ; bypass et solo du groupe ; en-tête repliable au-dessus de ses couches, « Grouper avec la couche du dessus » et « Retirer du groupe » dans le menu d'une couche, section « Groupe » dans l'inspecteur.
 - Fenêtre de démarrage animée : une grille carrée se déplie en 2 s (départ très lent, accélération tardive, arrivée en douceur) jusqu'au dessin de `assets/splash.svg`, puis la fenêtre principale s'ouvre ; elle se prépare, cachée, pendant l'animation. Dessin rendu à chaque image par `resvg`, sur un fil à part pendant que le démarrage bloque la boucle d'événements.
