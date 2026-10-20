@@ -63,7 +63,7 @@ impl LightingOutput {
             .fixtures()
             .iter()
             .filter(|fixture| fixture.enabled)
-            .flat_map(|fixture| (0..fixture.pixels).map(|index| fixture.pixel_point(index)))
+            .flat_map(prism_core::Fixture::pixel_points)
             .collect();
         self.sampler
             .sample(&gpu.device, &gpu.queue, encoder, program, &points);

@@ -105,6 +105,9 @@ fn main() {
     capture.get_by_label("Lumière (DMX)").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "lumiere-clair");
+    capture.get_by_label("Arche").click();
+    capture.run_steps(4);
+    save(&mut capture, &folder, "lumiere-courbe");
 }
 
 fn harness<'a>(size: Vec2, mut app: impl FnMut(&mut egui::Ui) + 'a) -> Harness<'a> {
@@ -191,5 +194,15 @@ fn demo() -> Composition {
         slice.warp = Some(warp);
     }
     let _ = composition.stage.add_screen("Écran LED", 1280, 720);
+    // A curved LED strip.
+    let strip = composition.lighting.add_strip("Arche", 60);
+    if let Some(strip) = composition.lighting.fixture_mut(strip) {
+        strip.from = prism_core::Point::new(0.15, 0.8);
+        strip.to = prism_core::Point::new(0.85, 0.8);
+        strip.bend = Some([
+            prism_core::Point::new(0.2, 0.1),
+            prism_core::Point::new(0.8, 0.1),
+        ]);
+    }
     composition
 }

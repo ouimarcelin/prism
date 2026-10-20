@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Bandes LED courbes (ADR 0044) : case « Courbe (Bézier) » d'un luminaire, deux poignées pour plier la bande sur l'image ; pixels également espacés le long de la courbe.
 - Déformation par Bézier (ADR 0044) : troisième tracé de la grille de déformation, en carreaux de Bézier ; le point choisi montre ses poignées, à tirer pour courber l'image ; passer en Bézier garde la forme.
 - Double clic sur le nom d'une couche ou d'un groupe : champ pour le renommer sur place, nom entier sélectionné ; Entrée ou clic ailleurs garde le nom, Échap rend l'ancien, un nom vide aussi.
 - Glisser-déposer dans la grille (ADR 0043) : couches et groupes déplacés par leur poignée ; une couche déposée au milieu d'une autre forme un groupe avec elle, sur l'en-tête d'un groupe elle le rejoint ; trait ou cadre bleu pour montrer où elle ira.

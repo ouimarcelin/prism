@@ -10,6 +10,7 @@
 - « les calques doivent être organisable en drag & drop. les groupes doivent pouvoir se créer en drag & drop. » (ticket 90)
 - « je veux pouvoir renommer les calques et les groupes quand je double clic sur leur nom. » (ticket 91)
 - « fais : Déformation par Bézier, avec des poignées réglables à la main » (ticket 93)
+- « fais en sorte que les led puissent être déplacés avec des courbes de béziers » (ticket 94)
 - « listes moi les futures implémentations de features pour le logiciel. », puis « vas y » (groupes de couches)
 
 ## Résultat
@@ -21,6 +22,7 @@
 - Ticket 90 : glisser-déposer des couches et des groupes par une poignée, zones de dépôt (au-dessus, en dessous, grouper), test egui_kittest qui glisse deux couches, capture « glisser ».
 - Ticket 91 : renommage sur place par double clic (couches et groupes), test egui_kittest (Entrée garde, Échap annule).
 - Ticket 93 : déformation par Bézier à poignées (ADR 0044), tests du modèle, captures « bezier-clair ».
+- Ticket 94 : bandes LED en courbe de Bézier, pixels espacés selon la longueur, test du modèle, capture « lumiere-courbe ».
 
 ## Problèmes
 

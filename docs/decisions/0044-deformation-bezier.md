@@ -20,3 +20,12 @@ Le cahier des charges demande une « déformation par grille et Bézier ». L'AD
 
 - Les projets existants ne changent pas (`handles` omis tant qu'il est vide).
 - Pas de poignées indépendantes de part et d'autre d'un point (cassure volontaire) ni de réglage de la torsion des carreaux.
+
+## Bandes LED courbes (ticket 94)
+
+Demande de @ouimarcelin : placer les bandes LED (pixel mapping, ADR 0033) avec des courbes de Bézier.
+
+- `Fixture::bend` : deux points de contrôle (absolus, en fractions de la composition) ; la ligne devient une courbe de Bézier cubique de `from` à `to`.
+- Les pixels sont espacés également **le long de la courbe** (longueur mesurée sur 256 segments), comme sur une vraie bande, et non au paramètre de la courbe.
+- Éditeur (onglet Lumière) : case « Courbe (Bézier) » ; à l'activation, les contrôles se posent au tiers et aux deux tiers : rien ne bouge. Poignées jaunes reliées à leur extrémité ; déplacer une extrémité emporte sa poignée ; déplacer la bande emporte tout ; un clic près de la courbe la choisit.
+
