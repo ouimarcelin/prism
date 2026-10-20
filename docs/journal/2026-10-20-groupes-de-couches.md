@@ -34,3 +34,9 @@
 - Ticket 91 : le test du double clic échouait, les images du harnais étant à 0,25 s d'écart (plus que le délai du double clic, 0,3 s, une fois deux passes comptées) : pas de 0,05 s pour ce harnais.
 - Ticket 93 : au redimensionnement, les poignées étaient d'abord calculées sur une grille invalide (nouvelles dimensions, anciens points), qui rendait l'identité : calcul sur l'ancienne forme, au pas de la nouvelle grille.
 - Ticket 95 : `common` et `shared` sont des mots réservés de WGSL (refusés par naga) ; fonction renommée `bank_setting`.
+
+## Ticket 96 : effets repliables et ordre par glisser-déposer
+
+Prompt : « chaque effet doit pouvoir se replier ; les effets peuvent changer d'ordre par drag&drop ».
+
+Résultat : champ `collapsed` dans `Effect` (absent du fichier quand faux, comme le repli des groupes) ; ligne de titre de l'effet avec poignée, flèche de repli, case d'activation et ×. Le glisser-déposer reste dans une même chaîne (même propriétaire) et montre un trait de dépôt au-dessus ou au-dessous du bloc visé ; il remplace les boutons ⏶ ⏷ (`ChainEdit::Move { from, to }`). Test unitaire du déplacement ; capture `clip` vérifiée.
