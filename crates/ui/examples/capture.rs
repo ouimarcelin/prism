@@ -93,6 +93,15 @@ fn main() {
         panel.stage_ui(ui, &frame);
     });
     save(&mut capture, &folder, "scene-clair");
+    // The middle point of the Bézier warp, picked: its handles show.
+    let point = egui::pos2(1016.0, 456.0);
+    capture.hover_at(point);
+    capture.run_steps(1);
+    capture.drag_at(point);
+    capture.run_steps(1);
+    capture.drop_at(point);
+    capture.run_steps(2);
+    save(&mut capture, &folder, "bezier-clair");
     capture.get_by_label("Lumière (DMX)").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "lumiere-clair");
@@ -168,7 +177,19 @@ fn demo() -> Composition {
         group.name = "Fond".into();
         group.effects.push(Effect::new("color"));
     }
-    let _ = composition.stage.add_screen("Façade", 1920, 1080);
+    if let Ok(screen) = composition.stage.add_screen("Façade", 1920, 1080)
+        && let Some(slice) = composition
+            .stage
+            .screen_mut(screen)
+            .and_then(|screen| screen.slices.first_mut())
+    {
+        // A Bézier warp, one handle pulled.
+        let mut warp = prism_core::Warp::from_quad(&slice.output, 2, 2);
+        warp.curve = prism_core::WarpCurve::Bezier;
+        warp.ensure_handles();
+        warp.handles_mut()[4].across = prism_core::Point::new(0.25, 0.12);
+        slice.warp = Some(warp);
+    }
     let _ = composition.stage.add_screen("Écran LED", 1280, 720);
     composition
 }
