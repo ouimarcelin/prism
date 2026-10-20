@@ -7,7 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
-- Fenêtre de démarrage animée : une grille carrée se déplie en 2,5 s (ralentissement à la fin ; la demi-seconde où l'accélération ne bougeait presque pas est sautée) jusqu'au dessin de `assets/splash.svg`, puis la fenêtre principale s'ouvre ; elle se prépare, cachée, pendant l'animation. Dessin rendu à chaque image par `resvg`, sur un fil à part pendant que le démarrage bloque la boucle d'événements.
+- Fenêtre de démarrage animée : une grille carrée se déplie en 2,5 s (départ et arrivée en douceur, courbe sinusoïdale), le logo grandit de 60 % à sa taille jusqu'au dessin de `assets/splash.svg`, puis la fenêtre principale s'ouvre ; elle se prépare, cachée, pendant l'animation. Dessin rendu à chaque image par `resvg`, sur un fil à part pendant que le démarrage bloque la boucle d'événements.
 - Mode clair (ADR 0042) : interrupteur « Mode clair » dans le menu Fichier, retenu dans les préférences ; palette claire du kit UI3.
 - Curseurs redessinés (ADR 0041) : piste en pilule, remplissage bleu depuis l'origine (zéro ou milieu pour les réglages centrés), poignée blanche ; points magnétiques là où c'est utile (25, 50, 75 % des opacités et volumes, valeur par défaut des réglages d'effet, vitesse 1 ×, rotation ±90°, gamma 2,2), Alt pour s'en affranchir ; flèches du clavier.
 - Charte graphique (ADR 0040) : thème sombre unique d'après le kit d'interface UI3 de Figma (surfaces grises, accent bleu, police Inter embarquée, contrôles de 24 points, coins arrondis), grille de clips en cartes avec le type de source, éditeur de scène, lumière et page de télécommande aux mêmes couleurs ; exemple `capture` qui dessine l'interface hors écran en PNG.

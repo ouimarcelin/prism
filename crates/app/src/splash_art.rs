@@ -4,7 +4,7 @@
 //!
 //! At the start, the vertices of the frame's facets sit on a regular grid
 //! and its outline is a square; they ease into their places in the image.
-//! The central band and the logo stay still.
+//! The central band stays still; the logo grows to its size.
 
 use std::fmt::Write as _;
 
@@ -13,13 +13,13 @@ use resvg::{tiny_skia, usvg};
 /// The image, drawn by the author of Prism.
 const SVG: &str = include_str!("../../../assets/splash.svg");
 
-/// Length of the easing curve, in seconds.
-const CURVE: f32 = 3.0;
-/// Part of the curve skipped at the start, where the cubic ease-in barely
-/// moves, in seconds.
-const SKIPPED: f32 = 0.5;
-/// Length of the animation on screen, in seconds.
-pub const DURATION: f32 = CURVE - SKIPPED;
+/// Length of the animation, in seconds.
+pub const DURATION: f32 = 2.5;
+
+/// Size of the logo at the start, against its size in the image.
+const LOGO_START: f32 = 0.6;
+/// Centre of the logo and its frame, the point it grows from.
+const LOGO_CENTRE: (f32, f32) = (257.75, 230.58);
 
 /// Start of the outer outline in the image: a path with rounded corners,
 /// replaced by a polygon whose corners can move.
@@ -199,7 +199,7 @@ impl Art {
 
     /// The image with every vertex at its place at `seconds`.
     fn svg(&self, seconds: f32, opacity: f32) -> String {
-        let t = ease_in_out(((seconds + SKIPPED) / CURVE).clamp(0.0, 1.0));
+        let t = ease_in_out((seconds / DURATION).clamp(0.0, 1.0));
         let mut svg = String::with_capacity(8192);
         for piece in &self.pieces {
             match piece {
@@ -210,6 +210,18 @@ impl Art {
                     let _ = write!(svg, "{x:.2} {y:.2} ");
                 }
             }
+        }
+        // The logo and its frame, the first group of the image, grow.
+        if let Some(at) = svg.find("<g>") {
+            let scale = LOGO_START + (1.0 - LOGO_START) * t;
+            let (cx, cy) = LOGO_CENTRE;
+            svg.replace_range(
+                at..at + 3,
+                &format!(
+                    "<g transform=\"translate({cx} {cy}) scale({scale:.4}) translate({} {})\">",
+                    -cx, -cy
+                ),
+            );
         }
         if opacity < 1.0 {
             // The whole drawing, faded.
@@ -259,13 +271,10 @@ fn start_of(x: f32, y: f32) -> (f32, f32) {
     }
 }
 
-/// Slow at both ends: cubic ease-in-out.
+/// Slow at both ends, sine ease-in-out: starts from rest without the
+/// long still start of a cubic curve.
 fn ease_in_out(t: f32) -> f32 {
-    if t < 0.5 {
-        4.0 * t * t * t
-    } else {
-        1.0 - (2.0 - 2.0 * t).powi(3) / 2.0
-    }
+    0.5 - 0.5 * (std::f32::consts::PI * t).cos()
 }
 
 #[cfg(test)]
