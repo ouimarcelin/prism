@@ -17,7 +17,8 @@ struct Batch {
     layers: array<Layer, 4>,
     // Layers of this pass, from the first.
     count: u32,
-    // 1 when the pass starts from opaque black instead of `below_texture`.
+    // 1 when the pass starts from opaque black, 2 from transparent black,
+    // 0 from `below_texture`.
     over_black: u32,
     _pad0: u32,
     _pad1: u32,
@@ -126,6 +127,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var result = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     if batch.over_black == 0u {
         result = textureLoad(below_texture, vec2<i32>(in.position.xy), 0);
+    } else if batch.over_black == 2u {
+        result = vec4<f32>(0.0);
     }
     // The current frame of each layer is mixed with the clip it replaces,
     // by the progress of the transition, before blending.

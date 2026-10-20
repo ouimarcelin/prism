@@ -17,6 +17,11 @@ pub struct LayerId(pub(crate) u32);
 #[serde(transparent)]
 pub struct ColumnId(pub(crate) u32);
 
+/// Stable identifier of a group of layers within a composition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct GroupId(pub(crate) u32);
+
 /// A cell of the clip grid: one layer, one column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Slot {
@@ -36,6 +41,12 @@ impl Slot {
 impl fmt::Display for LayerId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "layer #{}", self.0)
+    }
+}
+
+impl fmt::Display for GroupId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "group #{}", self.0)
     }
 }
 

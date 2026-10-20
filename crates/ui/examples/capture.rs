@@ -142,6 +142,13 @@ fn demo() -> Composition {
     if let (Some(&layer), Some(&column)) = (layers.first(), columns.get(1)) {
         let _ = composition.trigger_clip(Slot::new(layer, column));
     }
+    if let Some(&layer) = layers.first()
+        && let Ok(group) = composition.group_with_above(layer)
+        && let Some(group) = composition.group_mut(group)
+    {
+        group.name = "Fond".into();
+        group.effects.push(Effect::new("color"));
+    }
     let _ = composition.stage.add_screen("Façade", 1920, 1080);
     let _ = composition.stage.add_screen("Écran LED", 1280, 720);
     composition

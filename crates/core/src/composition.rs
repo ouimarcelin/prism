@@ -5,8 +5,8 @@ use std::collections::HashSet;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Layer, LayerId, Lighting, Mapping, Moment,
-    Slot, Stage, Timeline, Unit,
+    BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Group, GroupId, Layer, LayerId, Lighting,
+    Mapping, Moment, Slot, Stage, Timeline, Unit,
 };
 
 /// Largest width or height accepted for a composition, in pixels.
@@ -76,6 +76,9 @@ pub enum ModelError {
     /// The column is not in the composition.
     #[error("{0} does not exist")]
     UnknownColumn(ColumnId),
+    /// The group is not in the composition.
+    #[error("{0} does not exist")]
+    UnknownGroup(GroupId),
     /// A dimension is zero or larger than [`MAX_DIMENSION`].
     #[error("resolution {}x{} is outside 1..={}", .0.width, .0.height, MAX_DIMENSION)]
     InvalidResolution(Resolution),
@@ -123,6 +126,9 @@ pub struct Composition {
     frame_rate: FrameRate,
     columns: Vec<Column>,
     layers: Vec<Layer>,
+    /// Groups of neighbouring layers, in no particular order.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    groups: Vec<Group>,
     /// A/B crossfader.
     pub crossfader: Crossfader,
     /// Tempo, for everything that follows the beat.
@@ -152,6 +158,8 @@ struct CompositionRepr {
     frame_rate: FrameRate,
     columns: Vec<Column>,
     layers: Vec<Layer>,
+    #[serde(default)]
+    groups: Vec<Group>,
     #[serde(default)]
     crossfader: Crossfader,
     #[serde(default)]
@@ -201,10 +209,34 @@ impl TryFrom<CompositionRepr> for Composition {
             }
         }
 
+        let mut group_ids = HashSet::new();
+        for group in &repr.groups {
+            if !group_ids.insert(group.id()) {
+                return Err(ModelError::Inconsistent(format!(
+                    "duplicate {}",
+                    group.id()
+                )));
+            }
+        }
+        for layer in &repr.layers {
+            if let Some(group) = layer.group.filter(|group| !group_ids.contains(group)) {
+                return Err(ModelError::Inconsistent(format!(
+                    "{} belongs to unknown {group}",
+                    layer.id()
+                )));
+            }
+        }
+        if !groups_are_contiguous(&repr.layers) {
+            return Err(ModelError::Inconsistent(
+                "the layers of a group are not next to one another".into(),
+            ));
+        }
+
         let highest = column_ids
             .iter()
             .map(|id| id.0)
             .chain(layer_ids.iter().map(|id| id.0))
+            .chain(group_ids.iter().map(|id| id.0))
             .max();
         let next_free = match highest {
             Some(id) => id
@@ -219,6 +251,7 @@ impl TryFrom<CompositionRepr> for Composition {
             frame_rate: repr.frame_rate,
             columns: repr.columns,
             layers: repr.layers,
+            groups: repr.groups,
             crossfader: repr.crossfader,
             tempo: repr.tempo,
             effects: repr.effects,
@@ -227,7 +260,8 @@ impl TryFrom<CompositionRepr> for Composition {
             lighting: repr.lighting,
             timeline: repr.timeline,
             next_id: repr.next_id.max(next_free),
-        })
+        }
+        .with_groups_pruned())
     }
 }
 
@@ -259,6 +293,7 @@ impl Composition {
             frame_rate,
             columns: Vec::new(),
             layers: Vec::new(),
+            groups: Vec::new(),
             crossfader: Crossfader::default(),
             tempo: Bpm::DEFAULT,
             effects: Vec::new(),
@@ -359,19 +394,145 @@ impl Composition {
         id
     }
 
-    /// Removes a layer and its clips.
+    /// Removes a layer and its clips. A group left without layers goes too.
     pub fn remove_layer(&mut self, id: LayerId) -> Result<Layer, ModelError> {
         let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
-        Ok(self.layers.remove(index))
+        let layer = self.layers.remove(index);
+        self.prune_groups();
+        Ok(layer)
     }
 
-    /// Moves a layer to another stack position.
+    /// Moves a layer to another stack position. Moved between two layers of
+    /// a group, it joins the group; moved away from its group, it leaves it.
     pub fn move_layer(&mut self, id: LayerId, new_index: usize) -> Result<(), ModelError> {
         let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
         check_index(new_index, self.layers.len())?;
-        let layer = self.layers.remove(index);
+        let mut layer = self.layers.remove(index);
+        let below = new_index
+            .checked_sub(1)
+            .and_then(|below| self.layers.get(below))
+            .and_then(|layer| layer.group);
+        let above = self.layers.get(new_index).and_then(|layer| layer.group);
+        if below.is_some() && below == above {
+            layer.group = below;
+        }
         self.layers.insert(new_index, layer);
+        self.prune_groups();
         Ok(())
+    }
+
+    /// Groups of layers, in no particular order.
+    pub fn groups(&self) -> &[Group] {
+        &self.groups
+    }
+
+    /// Group with this identifier.
+    pub fn group(&self, id: GroupId) -> Option<&Group> {
+        self.groups.iter().find(|group| group.id() == id)
+    }
+
+    /// Mutable group with this identifier.
+    pub fn group_mut(&mut self, id: GroupId) -> Option<&mut Group> {
+        self.groups.iter_mut().find(|group| group.id() == id)
+    }
+
+    /// Layers of a group, bottom to top.
+    pub fn group_layers(&self, id: GroupId) -> Vec<LayerId> {
+        self.layers
+            .iter()
+            .filter(|layer| layer.group == Some(id))
+            .map(Layer::id)
+            .collect()
+    }
+
+    /// Groups a layer with the layer just above it: one joins the group of
+    /// the other, two groups merge into the group of the lower layer, and
+    /// two layers out of any group make a new group. Returns the group.
+    pub fn group_with_above(&mut self, id: LayerId) -> Result<GroupId, ModelError> {
+        let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
+        check_index(index + 1, self.layers.len())?;
+        let (lower, upper) = (self.layers[index].group, self.layers[index + 1].group);
+        let group = match (lower, upper) {
+            (Some(lower), Some(upper)) => {
+                for layer in &mut self.layers {
+                    if layer.group == Some(upper) {
+                        layer.group = Some(lower);
+                    }
+                }
+                lower
+            }
+            (Some(group), None) | (None, Some(group)) => group,
+            (None, None) => {
+                let group = GroupId(self.allocate_id());
+                let name = format!("Groupe {}", self.groups.len() + 1);
+                self.groups.push(Group::new(group, name));
+                group
+            }
+        };
+        self.layers[index].group = Some(group);
+        self.layers[index + 1].group = Some(group);
+        self.prune_groups();
+        Ok(group)
+    }
+
+    /// Takes a layer out of its group. A layer from the middle of the group
+    /// moves just above it, so that the group stays in one piece.
+    pub fn remove_from_group(&mut self, id: LayerId) -> Result<(), ModelError> {
+        let index = self.layer_index(id).ok_or(ModelError::UnknownLayer(id))?;
+        let Some(group) = self.layers[index].group else {
+            return Ok(());
+        };
+        let top = self
+            .layers
+            .iter()
+            .rposition(|layer| layer.group == Some(group))
+            .unwrap_or(index);
+        let mut layer = self.layers.remove(index);
+        layer.group = None;
+        self.layers.insert(top, layer);
+        self.prune_groups();
+        Ok(())
+    }
+
+    /// Removes a group; its layers stay, out of any group.
+    pub fn dissolve_group(&mut self, id: GroupId) -> Result<Group, ModelError> {
+        let index = self
+            .groups
+            .iter()
+            .position(|group| group.id() == id)
+            .ok_or(ModelError::UnknownGroup(id))?;
+        for layer in &mut self.layers {
+            if layer.group == Some(id) {
+                layer.group = None;
+            }
+        }
+        Ok(self.groups.remove(index))
+    }
+
+    /// Keeps each group in one piece, removing from it the layers cut off
+    /// from its first run, and removes the groups left without layers.
+    fn prune_groups(&mut self) {
+        let mut seen = HashSet::new();
+        let mut current = None;
+        for layer in &mut self.layers {
+            match layer.group {
+                Some(group) if current == Some(group) => {}
+                Some(group) if seen.insert(group) => current = Some(group),
+                Some(_) => {
+                    layer.group = None;
+                    current = None;
+                }
+                None => current = None,
+            }
+        }
+        let layers = &self.layers;
+        self.groups
+            .retain(|group| layers.iter().any(|layer| layer.group == Some(group.id())));
+    }
+
+    fn with_groups_pruned(mut self) -> Self {
+        self.prune_groups();
+        self
     }
 
     /// Adds an empty column on the right.
@@ -565,8 +726,12 @@ impl Composition {
 
     fn opacity_with(&self, id: LayerId, opacity: impl Fn(&Layer) -> f32) -> Option<f32> {
         let layer = self.layer(id)?;
-        let any_solo = self.layers.iter().any(|layer| layer.solo);
-        if layer.bypass || (any_solo && !layer.solo) {
+        let group = layer.group.and_then(|group| self.group(group));
+        let any_solo = self.layers.iter().any(|layer| layer.solo)
+            || self.groups.iter().any(|group| group.solo);
+        let solo = layer.solo || group.is_some_and(|group| group.solo);
+        let bypass = layer.bypass || group.is_some_and(|group| group.bypass);
+        if bypass || (any_solo && !solo) {
             return Some(0.0);
         }
         let gain = layer
@@ -600,6 +765,7 @@ impl Composition {
             && self.tempo == other.tempo
             && self.effects == other.effects
             && self.mappings == other.mappings
+            && self.groups == other.groups
             && self.layers.len() == other.layers.len()
             && self
                 .layers
@@ -627,8 +793,29 @@ impl Composition {
             });
             layer.effects.iter_mut().chain(clips)
         });
-        self.effects.iter_mut().chain(layers)
+        let groups = self
+            .groups
+            .iter_mut()
+            .flat_map(|group| group.effects.iter_mut());
+        self.effects.iter_mut().chain(groups).chain(layers)
     }
+}
+
+/// Whether the layers of each group sit next to one another.
+fn groups_are_contiguous(layers: &[Layer]) -> bool {
+    let mut seen = HashSet::new();
+    let mut current = None;
+    for layer in layers {
+        if layer.group != current {
+            current = layer.group;
+            if let Some(group) = current
+                && !seen.insert(group)
+            {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 fn check_resolution(resolution: Resolution) -> Result<(), ModelError> {
@@ -991,5 +1178,76 @@ mod tests {
         let new_layer = loaded.add_layer("new");
         assert!(comp.layers().iter().all(|layer| layer.id() != new_layer));
         assert!(new_layer.0 >= 4);
+    }
+
+    fn layer_ids(comp: &Composition) -> Vec<LayerId> {
+        comp.layers().iter().map(Layer::id).collect()
+    }
+
+    #[test]
+    fn grouping_neighbours_makes_and_merges_groups() {
+        let mut comp = grid(4, 1);
+        let ids = layer_ids(&comp);
+        let first = comp.group_with_above(ids[0]).unwrap();
+        assert_eq!(comp.group_layers(first), &ids[..2]);
+        // The next layer joins the group below it.
+        assert_eq!(comp.group_with_above(ids[1]).unwrap(), first);
+        assert_eq!(comp.group_layers(first), &ids[..3]);
+        assert!(comp.group_with_above(ids[3]).is_err());
+        assert_eq!(comp.groups().len(), 1);
+    }
+
+    #[test]
+    fn groups_stay_in_one_piece() {
+        let mut comp = grid(4, 1);
+        let ids = layer_ids(&comp);
+        let group = comp.group_with_above(ids[0]).unwrap();
+        comp.group_with_above(ids[1]).unwrap();
+        // A layer from the middle leaves above the group.
+        comp.remove_from_group(ids[1]).unwrap();
+        assert_eq!(layer_ids(&comp), [ids[0], ids[2], ids[1], ids[3]]);
+        assert_eq!(comp.group_layers(group), [ids[0], ids[2]]);
+        // Moved between two layers of the group, a layer joins it.
+        comp.move_layer(ids[3], 1).unwrap();
+        assert_eq!(comp.group_layers(group), [ids[0], ids[3], ids[2]]);
+        // Moved away, it leaves it; a group without layers goes.
+        comp.move_layer(ids[0], 3).unwrap();
+        assert_eq!(comp.group_layers(group), [ids[3], ids[2]]);
+        comp.remove_layer(ids[3]).unwrap();
+        comp.remove_layer(ids[2]).unwrap();
+        assert!(comp.groups().is_empty());
+    }
+
+    #[test]
+    fn group_bypass_and_solo_reach_its_layers() {
+        let mut comp = grid(3, 1);
+        let ids = layer_ids(&comp);
+        let group = comp.group_with_above(ids[0]).unwrap();
+        comp.group_mut(group).unwrap().bypass = true;
+        assert_eq!(comp.effective_opacity(ids[0]), Some(0.0));
+        assert_eq!(comp.effective_opacity(ids[2]), Some(1.0));
+        let settings = comp.group_mut(group).unwrap();
+        settings.bypass = false;
+        settings.solo = true;
+        assert_eq!(comp.effective_opacity(ids[1]), Some(1.0));
+        assert_eq!(comp.effective_opacity(ids[2]), Some(0.0));
+        comp.dissolve_group(group).unwrap();
+        assert!(comp.layers().iter().all(|layer| layer.group().is_none()));
+    }
+
+    #[test]
+    fn groups_are_saved_and_checked_on_load() {
+        let mut comp = grid(3, 1);
+        let ids = layer_ids(&comp);
+        let group = comp.group_with_above(ids[1]).unwrap();
+        let json = serde_json::to_value(&comp).unwrap();
+        let loaded: Composition = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(loaded.group_layers(group), &ids[1..]);
+        assert!(loaded.same_content(&comp));
+        // A group split in two pieces is refused.
+        let mut split = json;
+        split["layers"][0]["group"] = split["layers"][2]["group"].clone();
+        split["layers"][1].as_object_mut().unwrap().remove("group");
+        assert!(serde_json::from_value::<Composition>(split).is_err());
     }
 }

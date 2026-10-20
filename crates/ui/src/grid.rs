@@ -1,8 +1,9 @@
-//! The clip grid: one row per layer, top layer first, one cell per column.
+//! The clip grid: one row per layer, top layer first, one cell per column;
+//! a header row above the layers of each group.
 
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{Align2, Color32, FontId, Rect, RichText, Sense, Stroke, StrokeKind, TextStyle, Vec2};
-use prism_core::{ColumnId, ControlTarget, CrossfaderSide, LayerId, Slot, Unit};
+use prism_core::{ColumnId, ControlTarget, CrossfaderSide, GroupId, LayerId, Slot, Unit};
 use prism_engine::{ClipState, EngineStatus};
 
 use crate::labels;
@@ -12,6 +13,10 @@ use crate::theme::{self, Emphasis};
 
 const HEADER_WIDTH: f32 = 210.0;
 const CELL_SIZE: Vec2 = Vec2::new(116.0, 64.0);
+/// Width of the bar marking the layers of a group, in points.
+const GROUP_BAR: f32 = 3.0;
+/// Indent of the headers of the layers of a group, in points.
+const GROUP_INDENT: f32 = 14.0;
 
 impl ControlPanel {
     pub(crate) fn grid(&mut self, ui: &mut egui::Ui, status: &EngineStatus) {
@@ -19,16 +24,28 @@ impl ControlPanel {
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 self.column_headers(ui);
-                let layers: Vec<LayerId> = self
+                let layers: Vec<(LayerId, Option<GroupId>)> = self
                     .document
                     .composition()
                     .layers()
                     .iter()
                     .rev()
-                    .map(|layer| layer.id())
+                    .map(|layer| (layer.id(), layer.group()))
                     .collect();
-                for layer in layers {
-                    self.layer_row(ui, layer, status);
+                let mut current = None;
+                for (layer, group) in layers {
+                    if group != current {
+                        current = group;
+                        if let Some(group) = group {
+                            self.group_row(ui, group);
+                        }
+                    }
+                    let collapsed = group
+                        .and_then(|group| self.document.composition().group(group))
+                        .is_some_and(|group| group.collapsed);
+                    if !collapsed {
+                        self.layer_row(ui, layer, status);
+                    }
                 }
                 ui.add_space(theme::SPACE_2);
                 if ui
@@ -113,11 +130,104 @@ impl ControlPanel {
         }
     }
 
+    /// Header of a group: folding, name, bypass, solo, blend mode and
+    /// opacity of the mixed group. A click selects its top layer, which
+    /// shows the group in the inspector.
+    fn group_row(&mut self, ui: &mut egui::Ui, group: GroupId) {
+        let top = self
+            .document
+            .composition()
+            .group_layers(group)
+            .last()
+            .copied();
+        let column = self.selected.map(|slot| slot.column).or_else(|| {
+            self.document
+                .composition()
+                .columns()
+                .first()
+                .map(|c| c.id())
+        });
+        let selected_group = self
+            .selected
+            .and_then(|slot| self.document.composition().layer(slot.layer))
+            .is_some_and(|layer| layer.group() == Some(group));
+        let mut dissolve = false;
+        let mut select = false;
+        let Some(entry) = self.document.composition_mut().group_mut(group) else {
+            return;
+        };
+        let palette = theme::palette(ui);
+        ui.horizontal(|ui| {
+            ui.set_width(HEADER_WIDTH);
+            let arrow = if entry.collapsed { "▶" } else { "▼" };
+            if ui
+                .add(egui::Button::new(arrow).frame_when_inactive(false))
+                .on_hover_text(if entry.collapsed {
+                    "Montrer les couches du groupe"
+                } else {
+                    "Replier le groupe"
+                })
+                .clicked()
+            {
+                entry.collapsed = !entry.collapsed;
+            }
+            let name = RichText::new(entry.name.clone()).semibold();
+            let name = if selected_group {
+                name.color(palette.brand_text)
+            } else {
+                name
+            };
+            let label = ui.add(egui::Label::new(name).truncate().sense(Sense::click()));
+            select = label.clicked();
+            label
+                .on_hover_text("Groupe : ses couches sont mélangées ensemble, puis passent par ses effets. Clic droit : renommer, dissoudre")
+                .context_menu(|ui| {
+                    ui.label("Nom");
+                    ui.text_edit_singleline(&mut entry.name);
+                    ui.separator();
+                    if ui.button("Dissoudre le groupe").clicked() {
+                        dissolve = true;
+                        ui.close();
+                    }
+                });
+            ui.toggle_value(&mut entry.bypass, "B")
+                .on_hover_text("Bypass : groupe masqué");
+            ui.toggle_value(&mut entry.solo, "S")
+                .on_hover_text("Solo : seuls les groupes et couches en solo sont visibles");
+            let mut opacity = entry.opacity.get();
+            ui.spacing_mut().slider_width = ui.available_width().max(24.0);
+            ui.add(
+                Slider::new(&mut opacity, 0.0..=1.0)
+                    .show_value(false)
+                    .quarters(),
+            )
+            .on_hover_text(format!("Opacité du groupe {:.0} %", opacity * 100.0));
+            entry.opacity = Unit::new(opacity);
+        });
+        if select && let (Some(layer), Some(column)) = (top, column) {
+            self.selected = Some(Slot::new(layer, column));
+        }
+        if dissolve {
+            let _ = self.document.composition_mut().dissolve_group(group);
+        }
+    }
+
     fn layer_row(&mut self, ui: &mut egui::Ui, layer: LayerId, status: &EngineStatus) {
         let layer_status = status.layers.iter().find(|s| s.layer == Some(layer));
-        ui.horizontal(|ui| {
-            ui.allocate_ui(Vec2::new(HEADER_WIDTH, CELL_SIZE.y), |ui| {
-                ui.set_min_size(Vec2::new(HEADER_WIDTH, CELL_SIZE.y));
+        let grouped = self
+            .document
+            .composition()
+            .layer(layer)
+            .is_some_and(|layer| layer.group().is_some());
+        let indent = if grouped { GROUP_INDENT } else { 0.0 };
+        let row = ui.horizontal(|ui| {
+            let mut width = HEADER_WIDTH;
+            if grouped {
+                ui.add_space(indent);
+                width -= indent + ui.spacing().item_spacing.x;
+            }
+            ui.allocate_ui(Vec2::new(width, CELL_SIZE.y), |ui| {
+                ui.set_min_size(Vec2::new(width, CELL_SIZE.y));
                 self.layer_header(ui, layer, layer_status.map(|s| &s.state));
             });
             let columns: Vec<ColumnId> = self
@@ -135,12 +245,26 @@ impl ControlPanel {
                 self.clip_cell(ui, slot, progress);
             }
         });
+        if grouped {
+            // A bar along the layers of a group.
+            let rect = row.response.rect;
+            let bar = Rect::from_min_max(
+                rect.left_top() + Vec2::new(4.0, 2.0),
+                rect.left_bottom() + Vec2::new(4.0 + GROUP_BAR, -2.0),
+            );
+            ui.painter()
+                .rect_filled(bar, 1.0, theme::palette(ui).brand.gamma_multiply(0.6));
+        }
     }
 
     fn layer_header(&mut self, ui: &mut egui::Ui, layer: LayerId, state: Option<&ClipState>) {
         let selected_layer = self.selected.is_some_and(|slot| slot.layer == layer);
-        let removable = self.document.composition().layers().len() > 1;
-        let (mut stop, mut remove) = (false, false);
+        let composition = self.document.composition();
+        let removable = composition.layers().len() > 1;
+        let below_top = composition
+            .layer_index(layer)
+            .is_some_and(|index| index + 1 < composition.layers().len());
+        let (mut stop, mut remove, mut group, mut ungroup) = (false, false, false, false);
         let Some(entry) = self.document.composition_mut().layer_mut(layer) else {
             return;
         };
@@ -165,6 +289,22 @@ impl ControlPanel {
                             stop = true;
                             ui.close();
                         }
+                        ui.separator();
+                        if ui
+                            .add_enabled(
+                                below_top,
+                                egui::Button::new("Grouper avec la couche du dessus"),
+                            )
+                            .clicked()
+                        {
+                            group = true;
+                            ui.close();
+                        }
+                        if entry.group().is_some() && ui.button("Retirer du groupe").clicked() {
+                            ungroup = true;
+                            ui.close();
+                        }
+                        ui.separator();
                         if ui
                             .add_enabled(removable, egui::Button::new("Supprimer la couche"))
                             .clicked()
@@ -228,6 +368,12 @@ impl ControlPanel {
         });
         if stop {
             let _ = self.document.composition_mut().stop_layer(layer);
+        }
+        if group {
+            let _ = self.document.composition_mut().group_with_above(layer);
+        }
+        if ungroup {
+            let _ = self.document.composition_mut().remove_from_group(layer);
         }
         if remove {
             let _ = self.document.composition_mut().remove_layer(layer);

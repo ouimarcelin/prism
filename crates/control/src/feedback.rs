@@ -15,6 +15,7 @@ fn state(composition: &Composition, target: &ControlTarget) -> Option<u8> {
         match owner {
             EffectOwner::Composition => composition.effects.get(index),
             EffectOwner::Layer { layer } => composition.layer(*layer)?.effects.get(index),
+            EffectOwner::Group { group } => composition.group(*group)?.effects.get(index),
             EffectOwner::Clip { slot } => composition.clip(*slot)?.effects.get(index),
             EffectOwner::Generator { slot } => composition.clip(*slot)?.source.generator(),
         }

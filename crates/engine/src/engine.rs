@@ -1,6 +1,7 @@
 //! The render thread: plays the clips of a composition, mixes them and keeps
 //! the program image up to date, at the composition frame rate.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -9,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use prism_audio::{AudioLevels, VoiceCommand};
 use prism_clock::BeatClock;
-use prism_core::{Composition, Effect, LayerId, Resolution, ScreenId, Slot, Unit};
+use prism_core::{Composition, Effect, GroupId, LayerId, Resolution, ScreenId, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, SimulatedScreen, SimulationRenderer,
@@ -347,6 +348,8 @@ pub struct EngineState {
     composition_effects: EffectChain,
     /// Image the layers are mixed into when the composition has effects.
     mix: Option<(Resolution, wgpu::TextureView)>,
+    /// Images the layers of each group are mixed into.
+    groups: HashMap<GroupId, GroupMix>,
     started: Instant,
     clock: BeatClock,
     beat: f64,
@@ -396,6 +399,7 @@ impl EngineState {
             fx,
             composition_effects: EffectChain::default(),
             mix: None,
+            groups: HashMap::new(),
             started: Instant::now(),
             clock: BeatClock::new(composition.tempo.get(), Instant::now()),
             beat: 0.0,
@@ -762,7 +766,8 @@ impl EngineState {
         });
         let uploaded = Instant::now();
 
-        let mut inputs = Vec::with_capacity(self.layers.len());
+        // Layers to mix, bottom first, with their group.
+        let mut layers = Vec::with_capacity(self.layers.len());
         for runtime in &self.layers {
             // An opacity envelope starts with the clip playing on the layer.
             let (beat, seconds) = runtime
@@ -799,7 +804,54 @@ impl EngineState {
                 (Some(texture), None) => LayerInput::new(texture, opacity, layer.blend_mode),
                 (None, None) => continue,
             };
-            inputs.push(input);
+            layers.push((layer.group(), input));
+        }
+        // The layers of each group are mixed into an image of their own,
+        // which goes through the group's effects; their runs stay in one
+        // piece once the hidden layers are left out.
+        let composition = &self.composition;
+        self.groups
+            .retain(|id, mix| composition.group(*id).is_some() && mix.resolution == resolution);
+        let runs: Vec<(Option<GroupId>, std::ops::Range<usize>)> = runs(&layers);
+        for (group, range) in &runs {
+            let Some(settings) = group.and_then(|group| composition.group(group)) else {
+                continue;
+            };
+            let mix = self
+                .groups
+                .entry(settings.id())
+                .or_insert_with(|| GroupMix::new(&gpu.device, resolution));
+            let inputs: Vec<LayerInput<'_>> = layers[range.clone()]
+                .iter()
+                .map(|(_, input)| *input)
+                .collect();
+            mix.compositor
+                .encode(&gpu.device, &gpu.queue, &mut encoder, &inputs, &mix.view);
+            let effects: Vec<&Effect> = settings.effects.iter().collect();
+            mix.effects.apply(
+                &self.fx,
+                &gpu.device,
+                &gpu.queue,
+                &mut encoder,
+                &effects,
+                &mix.view,
+                (resolution.width, resolution.height),
+                time,
+            );
+        }
+        let mut inputs = Vec::with_capacity(layers.len());
+        for (group, range) in runs {
+            let settings = group.and_then(|group| composition.group(group));
+            match settings.zip(group.and_then(|group| self.groups.get(&group))) {
+                Some((settings, mix)) => {
+                    let opacity = settings.opacity.get();
+                    if opacity > 0.0 {
+                        let image = mix.effects.output().unwrap_or(&mix.view);
+                        inputs.push(LayerInput::new(image, opacity, settings.blend_mode));
+                    }
+                }
+                None => inputs.extend(layers[range].iter().map(|(_, input)| *input)),
+            }
         }
         let destination = mix.as_ref().map_or(&self.program.view, |(_, view)| view);
         self.compositor
@@ -971,6 +1023,37 @@ impl EngineState {
     pub fn screen_images(&self) -> Vec<(ScreenId, Arc<ProgramOutput>)> {
         self.screens.clone()
     }
+}
+
+/// Image and tools to mix the layers of one group.
+struct GroupMix {
+    compositor: Compositor,
+    view: wgpu::TextureView,
+    effects: EffectChain,
+    resolution: Resolution,
+}
+
+impl GroupMix {
+    fn new(device: &wgpu::Device, resolution: Resolution) -> Self {
+        Self {
+            compositor: Compositor::new(device, resolution).over_transparent(),
+            view: mix_texture(device, resolution),
+            effects: EffectChain::default(),
+            resolution,
+        }
+    }
+}
+
+/// Runs of neighbouring entries with the same group, as ranges of indices.
+fn runs<T>(entries: &[(Option<GroupId>, T)]) -> Vec<(Option<GroupId>, std::ops::Range<usize>)> {
+    let mut runs: Vec<(Option<GroupId>, std::ops::Range<usize>)> = Vec::new();
+    for (index, (group, _)) in entries.iter().enumerate() {
+        match runs.last_mut() {
+            Some((last, range)) if group.is_some() && last == group => range.end = index + 1,
+            _ => runs.push((*group, index..index + 1)),
+        }
+    }
+    runs
 }
 
 /// Image the layers are mixed into before the effects of the composition.

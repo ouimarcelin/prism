@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ColumnId, LayerId, Slot};
+use crate::{ColumnId, GroupId, LayerId, Slot};
 
 /// A message of a controller a mapping listens to.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -53,6 +53,11 @@ pub enum EffectOwner {
     Layer {
         /// The layer.
         layer: LayerId,
+    },
+    /// A group's effects.
+    Group {
+        /// The group.
+        group: GroupId,
     },
     /// A clip's effects; index 0 of a generated clip is not its generator.
     Clip {

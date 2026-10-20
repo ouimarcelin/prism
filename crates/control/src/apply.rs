@@ -73,6 +73,7 @@ fn effect_mut(
     match owner {
         EffectOwner::Composition => composition.effects.get_mut(index),
         EffectOwner::Layer { layer } => composition.layer_mut(layer)?.effects.get_mut(index),
+        EffectOwner::Group { group } => composition.group_mut(group)?.effects.get_mut(index),
         EffectOwner::Clip { slot } => composition.clip_mut(slot)?.effects.get_mut(index),
         EffectOwner::Generator { slot } => composition.clip_mut(slot)?.source.generator_mut(),
     }
