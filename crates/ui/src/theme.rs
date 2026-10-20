@@ -47,8 +47,6 @@ pub(crate) struct Palette {
 
     /// Accent: selection, toggles on, slider fill, primary buttons.
     pub(crate) brand: Color32,
-    /// Accent, pressed; marks over the accent.
-    pub(crate) brand_dark: Color32,
     /// Accent for text and thin lines.
     pub(crate) brand_text: Color32,
 
@@ -85,7 +83,6 @@ pub(crate) const DARK: Palette = Palette {
     text_secondary: rgb(0xbfbfbf),
     text_tertiary: rgb(0x808080),
     brand: rgb(0x0c8ce9),
-    brand_dark: rgb(0x0a6dc2),
     brand_text: rgb(0x7cc4f8),
     success: rgb(0x198f51),
     success_text: rgb(0x79d297),
@@ -110,7 +107,6 @@ pub(crate) const LIGHT: Palette = Palette {
     text_secondary: rgb(0x808080),
     text_tertiary: rgb(0xb3b3b3),
     brand: rgb(0x0d99ff),
-    brand_dark: rgb(0x007be5),
     brand_text: rgb(0x007be5),
     success: rgb(0x14ae5c),
     success_text: rgb(0x009951),
