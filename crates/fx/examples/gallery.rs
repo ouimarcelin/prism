@@ -5,8 +5,9 @@
 //! cargo run -p prism-fx --example gallery -- OUTPUT.png
 //! ```
 //!
-//! Tiles follow the order of the catalog, row by row, then the generators;
-//! the first tile is the pattern without effect.
+//! Tiles follow the order of the catalog, row by row, then the generators,
+//! then variants of the generators of the procedural bank (other modes and
+//! palettes); the first tile is the pattern without effect.
 
 use std::process::ExitCode;
 
@@ -45,6 +46,38 @@ fn pattern() -> Vec<[f32; 4]> {
     pixels
 }
 
+/// Generators of the procedural bank in other modes and palettes.
+fn bank_variants() -> Vec<Effect> {
+    let variant = |kind: &str, settings: &[(&str, f32)]| {
+        let mut effect = Effect::new(kind);
+        for (id, value) in settings {
+            effect.set_param(*id, *value);
+        }
+        effect
+    };
+    vec![
+        variant("fractal_noise", &[("mode", 1.0), ("palette", 2.0)]),
+        variant("fractal_noise", &[("mode", 2.0), ("palette", 3.0)]),
+        variant(
+            "fractal_noise",
+            &[("base", 0.0), ("mode", 3.0), ("palette", 6.0)],
+        ),
+        variant(
+            "fractal_noise",
+            &[("base", 1.0), ("palette", 1.0), ("levels", 6.0)],
+        ),
+        variant("cells", &[("mode", 1.0), ("palette", 5.0)]),
+        variant("cells", &[("mode", 2.0), ("palette", 1.0)]),
+        variant("cells", &[("metric", 1.0), ("palette", 4.0)]),
+        variant("cells", &[("mode", 4.0), ("metric", 2.0), ("palette", 2.0)]),
+        variant("domain_warp", &[("palette", 6.0)]),
+        variant(
+            "domain_warp",
+            &[("palette", 4.0), ("strength", 3.0), ("warp_levels", 3.0)],
+        ),
+    ]
+}
+
 fn main() -> ExitCode {
     let Some(path) = std::env::args().nth(1) else {
         eprintln!("usage: gallery OUTPUT.png");
@@ -61,23 +94,21 @@ fn main() -> ExitCode {
     let pattern = pattern();
     let input = pixels_texture(&gpu.device, &gpu.queue, WIDTH, HEIGHT, &pattern)
         .create_view(&wgpu::TextureViewDescriptor::default());
-    let tiles = (CATALOG.len() + GENERATORS.len()) as u32 + 1;
-    let rows = tiles.div_ceil(COLUMNS);
+    let mut tiles: Vec<Vec<Effect>> = vec![Vec::new()];
+    tiles.extend(
+        CATALOG
+            .iter()
+            .chain(GENERATORS)
+            .map(|info| vec![info.create()]),
+    );
+    tiles.extend(bank_variants().into_iter().map(|effect| vec![effect]));
+    let count = tiles.len() as u32;
+    let rows = count.div_ceil(COLUMNS);
     let (image_width, image_height) = (WIDTH * COLUMNS, HEIGHT * rows);
     let mut image = vec![0u8; (image_width * image_height * 4) as usize];
 
-    for tile in 0..tiles {
-        let effects: Vec<Effect> = match tile {
-            0 => Vec::new(),
-            index => {
-                let info = CATALOG
-                    .iter()
-                    .chain(GENERATORS)
-                    .nth(index as usize - 1)
-                    .expect("one tile per effect and generator");
-                vec![info.create()]
-            }
-        };
+    for (tile, effects) in tiles.iter().enumerate() {
+        let tile = tile as u32;
         let destination = gpu.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("tile"),
             size: wgpu::Extent3d {

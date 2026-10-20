@@ -6,7 +6,7 @@ use crate::FrameTime;
 use crate::text::TEXT_KIND;
 
 /// Parameters an effect can have at most.
-pub const MAX_PARAMS: usize = 16;
+pub const MAX_PARAMS: usize = 32;
 
 /// One setting of an effect.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,6 +59,12 @@ impl ParamInfo {
         }
     }
 
+    /// The same setting with another default value.
+    pub(crate) const fn with_default(mut self, default: f32) -> Self {
+        self.default = default;
+        self
+    }
+
     /// `value` brought within the range, rounded to an option for a choice.
     /// NaN gives the default.
     pub fn clamp(&self, value: f32) -> f32 {
@@ -72,6 +78,20 @@ impl ParamInfo {
             value.round()
         }
     }
+}
+
+/// The settings of a generator of the procedural bank: its own, then the
+/// shared ones of [`COMMON_PARAMS`].
+macro_rules! bank_params {
+    ($($param:expr),* $(,)?) => {
+        &[
+            $($param,)*
+            COMMON_PARAMS[0], COMMON_PARAMS[1], COMMON_PARAMS[2], COMMON_PARAMS[3],
+            COMMON_PARAMS[4], COMMON_PARAMS[5], COMMON_PARAMS[6], COMMON_PARAMS[7],
+            COMMON_PARAMS[8], COMMON_PARAMS[9], COMMON_PARAMS[10], COMMON_PARAMS[11],
+            COMMON_PARAMS[12], COMMON_PARAMS[13], COMMON_PARAMS[14], COMMON_PARAMS[15],
+        ]
+    };
 }
 
 /// Shader passes of an effect, by entry point, run one after the other.
@@ -90,6 +110,9 @@ pub struct EffectInfo {
     pub text: Option<&'static str>,
     pub(crate) source: &'static str,
     pub(crate) passes: Passes,
+    /// For generators of the procedural bank: index of the first of the
+    /// shared settings ([`COMMON_PARAMS`]), after the generator's own.
+    pub common: Option<usize>,
 }
 
 impl EffectInfo {
@@ -162,6 +185,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/color.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -170,6 +194,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("amount", "Quantité", 0.0, 1.0, 1.0)],
         source: include_str!("shaders/invert.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -183,6 +208,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/transform.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -191,6 +217,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::choice("mode", "Sens", MIRROR_CHOICES)],
         source: include_str!("shaders/mirror.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -203,6 +230,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/kaleidoscope.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -211,6 +239,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("radius", "Rayon", 0.0, 64.0, 8.0)],
         source: include_str!("shaders/blur.wgsl"),
         passes: &["fs_horizontal", "fs_vertical"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -219,6 +248,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("size", "Taille", 1.0, 128.0, 16.0)],
         source: include_str!("shaders/pixelate.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -227,6 +257,7 @@ pub const CATALOG: &[EffectInfo] = &[
         params: &[ParamInfo::range("levels", "Niveaux", 2.0, 32.0, 6.0)],
         source: include_str!("shaders/posterize.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -238,6 +269,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/threshold.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -249,6 +281,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/edges.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -260,6 +293,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/rgb_split.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -272,6 +306,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/glitch.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -285,6 +320,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/wave.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -296,6 +332,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/swirl.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -308,6 +345,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/tile.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -319,6 +357,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/vignette.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -331,6 +370,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/strobe.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -343,6 +383,7 @@ pub const CATALOG: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/colorize.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
 ];
@@ -367,6 +408,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/solid.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -381,6 +423,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/gradient.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -394,6 +437,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/lines.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -406,6 +450,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/rings.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -417,6 +462,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/checker.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -429,6 +475,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         ],
         source: include_str!("shaders/noise.wgsl"),
         passes: &["fs_main"],
+        common: None,
         text: None,
     },
     EffectInfo {
@@ -447,7 +494,104 @@ pub const GENERATORS: &[EffectInfo] = &[
         text: Some("Texte"),
         source: include_str!("shaders/text.wgsl"),
         passes: &["fs_main"],
+        common: None,
     },
+    EffectInfo {
+        kind: "fractal_noise",
+        label: "Bruit fractal",
+        params: bank_params!(
+            ParamInfo::choice("base", "Bruit de base", BASE_CHOICES).with_default(2.0),
+            ParamInfo::choice("mode", "Mode", FRACTAL_CHOICES),
+            ParamInfo::range("frequency", "Fréquence", 0.25, 32.0, 3.0),
+            ParamInfo::range("octaves", "Octaves", 1.0, 10.0, 5.0),
+            ParamInfo::range("lacunarity", "Lacunarité", 1.2, 4.0, 2.0),
+            ParamInfo::range("gain", "Gain", 0.1, 0.95, 0.5),
+            ParamInfo::range("evolution", "Évolution", 0.0, 4.0, 0.3),
+            ParamInfo::range("drift", "Dérive", 0.0, 4.0, 0.0),
+            ParamInfo::range("drift_angle", "Sens de la dérive", -180.0, 180.0, 0.0),
+            ParamInfo::range("sharpness", "Finesse des crêtes", 0.5, 4.0, 2.0),
+        ),
+        source: include_str!("shaders/bank/fractal_noise.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(10),
+    },
+    EffectInfo {
+        kind: "cells",
+        label: "Cellules",
+        params: bank_params!(
+            ParamInfo::choice("mode", "Mode", CELL_CHOICES),
+            ParamInfo::choice("metric", "Distance", METRIC_CHOICES),
+            ParamInfo::range("density", "Densité", 1.0, 40.0, 6.0),
+            ParamInfo::range("jitter", "Aléa", 0.0, 1.0, 1.0),
+            ParamInfo::range("motion", "Mouvement", 0.0, 8.0, 1.0),
+            ParamInfo::range("edge", "Épaisseur des bords", 0.0, 0.5, 0.08),
+        ),
+        source: include_str!("shaders/bank/cells.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(6),
+    },
+    EffectInfo {
+        kind: "domain_warp",
+        label: "Distorsion",
+        params: bank_params!(
+            ParamInfo::choice("base", "Bruit de base", BASE_CHOICES).with_default(2.0),
+            ParamInfo::range("frequency", "Fréquence", 0.25, 16.0, 2.0),
+            ParamInfo::range("octaves", "Octaves", 1.0, 8.0, 4.0),
+            ParamInfo::range("warp_levels", "Niveaux de distorsion", 1.0, 3.0, 2.0),
+            ParamInfo::range("strength", "Force", 0.0, 6.0, 1.5),
+            ParamInfo::range("warp_scale", "Échelle de la distorsion", 0.25, 4.0, 1.0),
+            ParamInfo::range("evolution", "Évolution", 0.0, 4.0, 0.2),
+        ),
+        source: include_str!("shaders/bank/domain_warp.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(7),
+    },
+];
+
+const BASE_CHOICES: &[&str] = &["Valeur", "Perlin", "Simplex"];
+const FRACTAL_CHOICES: &[&str] = &["fBm", "Turbulence", "Crêtes", "Gonflé"];
+const CELL_CHOICES: &[&str] = &[
+    "Plus proche (F1)",
+    "Bords",
+    "Pleines",
+    "Deuxième (F2)",
+    "Produit",
+];
+const METRIC_CHOICES: &[&str] = &["Euclidienne", "Manhattan", "Tchebychev"];
+const PALETTE_CHOICES: &[&str] = &[
+    "Gris",
+    "Arc-en-ciel",
+    "Feu",
+    "Glace",
+    "Océan",
+    "Néon",
+    "Coucher de soleil",
+];
+const TIME_CHOICES: &[&str] = &["Temps du tempo", "Secondes"];
+const NO_YES: &[&str] = &["Non", "Oui"];
+
+/// Settings shared by the generators of the procedural bank, after their
+/// own: space, time and colour. Their order matches generator.wgsl.
+pub const COMMON_PARAMS: [ParamInfo; 16] = [
+    ParamInfo::range("zoom", "Zoom", 0.05, 20.0, 1.0),
+    ParamInfo::range("offset_x", "Position X", -8.0, 8.0, 0.0),
+    ParamInfo::range("offset_y", "Position Y", -8.0, 8.0, 0.0),
+    ParamInfo::range("angle", "Rotation", -180.0, 180.0, 0.0),
+    ParamInfo::range("stretch", "Étirement", -3.0, 3.0, 0.0),
+    ParamInfo::range("speed", "Vitesse", 0.0, 8.0, 1.0),
+    ParamInfo::choice("time_unit", "Temps", TIME_CHOICES),
+    ParamInfo::range("seed", "Graine", 0.0, 100.0, 0.0),
+    ParamInfo::choice("palette", "Palette", PALETTE_CHOICES),
+    ParamInfo::range("hue", "Teinte", -180.0, 180.0, 0.0),
+    ParamInfo::range("saturation", "Saturation", 0.0, 2.0, 1.0),
+    ParamInfo::range("contrast", "Contraste", 0.0, 4.0, 1.0),
+    ParamInfo::range("brightness", "Luminosité", 0.0, 2.0, 1.0),
+    ParamInfo::choice("invert", "Inverser", NO_YES),
+    ParamInfo::range("levels", "Niveaux", 0.0, 16.0, 0.0),
+    ParamInfo::range("alpha", "Noir transparent", 0.0, 1.0, 0.0),
 ];
 
 const NOISE_CHOICES: &[&str] = &["Gris", "Couleur"];
@@ -502,6 +646,9 @@ mod tests {
         assert_eq!(find("unknown"), None);
         for info in GENERATORS {
             assert!(info.params.len() <= MAX_PARAMS, "{}", info.kind);
+            if let Some(common) = info.common {
+                assert_eq!(&info.params[common..], &COMMON_PARAMS, "{}", info.kind);
+            }
             assert_eq!(find_generator(info.kind), Some(info));
             assert_eq!(find(info.kind), None, "{} is also an effect", info.kind);
         }

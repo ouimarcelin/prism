@@ -12,7 +12,7 @@ publish.workspace = true
 ab_glyph_rasterizer = "0.1.10"
 bytemuck = { version = "1.25.2", features = ["derive"] }
 epaint_default_fonts = "0.36.2"
-naga = { version = "30.0.1", features = ["glsl-in", "wgsl-out"] }
+naga = { version = "30.0.1", features = ["glsl-in", "wgsl-in", "wgsl-out"] }
 prism-core = { path = "../core" }
 prism-render = { path = "../render" }
 serde_json.workspace = true
