@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Animation, Band, Clip, ColumnId, CrossfaderSide, Effect, LayerId, Unit};
+use crate::{Animation, Band, Clip, ColumnId, CrossfaderSide, Effect, GroupId, LayerId, Unit};
 
 /// How a layer is combined with the result of the layers below it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -83,6 +83,10 @@ pub struct Layer {
     /// 0 to 1; an animation goes first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity_audio: Option<Band>,
+    /// Group the layer belongs to, changed through the composition so that
+    /// the layers of a group stay together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) group: Option<GroupId>,
     /// One entry per column, in column order.
     pub(crate) clips: Vec<Option<Clip>>,
     /// Column of the clip currently playing. Runtime state, not saved.
@@ -107,6 +111,7 @@ impl Layer {
             effects: Vec::new(),
             opacity_animation: None,
             opacity_audio: None,
+            group: None,
             clips: vec![None; column_count],
             active: None,
             trigger_count: 0,
@@ -116,6 +121,11 @@ impl Layer {
     /// Stable identifier of the layer.
     pub fn id(&self) -> LayerId {
         self.id
+    }
+
+    /// Group the layer belongs to.
+    pub fn group(&self) -> Option<GroupId> {
+        self.group
     }
 
     /// Clips of this layer, one entry per column, in column order.
@@ -148,6 +158,7 @@ impl Layer {
             && self.effects == other.effects
             && self.opacity_animation == other.opacity_animation
             && self.opacity_audio == other.opacity_audio
+            && self.group == other.group
             && self.clips == other.clips
     }
 }

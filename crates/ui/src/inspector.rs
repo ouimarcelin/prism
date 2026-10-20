@@ -1,10 +1,10 @@
 //! Right panel: program preview, the effects of the composition, then the
-//! properties of the selected layer and clip.
+//! properties of the group of the selected layer, of the layer and of the clip.
 
 use egui::{RichText, Vec2};
 use prism_core::{
     Animation, CUE_POINT_COUNT, Clip, ControlTarget, CrossfaderSide, Direction, EffectOwner,
-    LoopMode, MAX_SPEED, Slot, Unit,
+    GroupId, LoopMode, MAX_SPEED, Slot, Unit,
 };
 use prism_engine::{Command, LayerStatus};
 use prism_fx::{GENERATORS, ISF_KIND, ParamInfo};
@@ -55,10 +55,70 @@ impl ControlPanel {
                     .layers
                     .iter()
                     .find(|s| s.layer == Some(slot.layer));
+                let group = self
+                    .document
+                    .composition()
+                    .layer(slot.layer)
+                    .and_then(|layer| layer.group());
+                if let Some(group) = group {
+                    self.group_properties(ui, group);
+                    ui.separator();
+                }
                 self.layer_properties(ui, slot);
                 ui.separator();
                 self.clip_properties(ui, slot, status);
             });
+    }
+
+    /// Settings and effects of the group of the selected layer.
+    fn group_properties(&mut self, ui: &mut egui::Ui, id: GroupId) {
+        let Some(group) = self.document.composition_mut().group_mut(id) else {
+            return;
+        };
+        ui.label(RichText::new("Groupe").heading().semibold());
+        egui::Grid::new("group properties")
+            .num_columns(2)
+            .spacing([12.0, 6.0])
+            .show(ui, |ui| {
+                ui.label("Nom");
+                ui.text_edit_singleline(&mut group.name);
+                ui.end_row();
+
+                ui.label("Opacité");
+                let mut opacity = group.opacity.get();
+                ui.add(Slider::new(&mut opacity, 0.0..=1.0).quarters());
+                group.opacity = Unit::new(opacity);
+                ui.end_row();
+
+                ui.label("Fusion");
+                egui::ComboBox::from_id_salt("inspector group blend")
+                    .selected_text(labels::blend(group.blend_mode))
+                    .show_ui(ui, |ui| {
+                        for mode in prism_core::BlendMode::ALL {
+                            ui.selectable_value(&mut group.blend_mode, mode, labels::blend(mode));
+                        }
+                    });
+                ui.end_row();
+
+                ui.label("");
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut group.bypass, "Bypass");
+                    ui.checkbox(&mut group.solo, "Solo");
+                });
+                ui.end_row();
+            });
+        effect_section(
+            ui,
+            "Effets du groupe",
+            EffectOwner::Group { group: id },
+            &mut group.effects,
+            false,
+            Tools {
+                presets: &mut self.presets,
+                plugins: &mut self.plugins,
+                learn: &mut self.learn,
+            },
+        );
     }
 
     fn layer_properties(&mut self, ui: &mut egui::Ui, slot: Slot) {

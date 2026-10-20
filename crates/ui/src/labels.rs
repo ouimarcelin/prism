@@ -89,8 +89,15 @@ pub(crate) fn target(
             |clip| format!("« {} »", clip.name),
         )
     };
+    let group_name = |id| {
+        composition.group(id).map_or_else(
+            || "groupe retiré".to_owned(),
+            |group| format!("« {} »", group.name),
+        )
+    };
     let owner_name = |owner: &EffectOwner| match owner {
         EffectOwner::Composition => "de la composition".to_owned(),
+        EffectOwner::Group { group } => format!("du groupe {}", group_name(*group)),
         EffectOwner::Layer { layer } => format!("de la couche {}", layer_name(*layer)),
         EffectOwner::Clip { slot } => format!("du clip {}", clip_name(*slot)),
         EffectOwner::Generator { slot } => format!("du générateur {}", clip_name(*slot)),

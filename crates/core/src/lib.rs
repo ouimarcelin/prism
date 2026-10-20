@@ -17,6 +17,7 @@ mod control;
 mod crossfader;
 mod cues;
 mod effect;
+mod group;
 mod ids;
 mod layer;
 mod lighting;
@@ -38,7 +39,8 @@ pub use control::{ControlSource, ControlTarget, EffectOwner, Mapping};
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
 pub use cues::{Cue, CueTarget, MAX_TIMECODE_STEP, TimecodeSource, Timeline};
 pub use effect::{Animation, BAND_COUNT, Band, Effect, MIN_PERIOD, Moment, Period, Shape};
-pub use ids::{ColumnId, LayerId, Slot};
+pub use group::Group;
+pub use ids::{ColumnId, GroupId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
 pub use lighting::{ColorOrder, DmxProtocol, Fixture, FixtureId, Lighting, MAX_FIXTURE_PIXELS};
 pub use preset::{

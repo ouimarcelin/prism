@@ -663,6 +663,47 @@ fn effects_of_clip_layer_and_composition_apply_in_order() {
 }
 
 #[test]
+fn a_group_mixes_its_layers_through_its_effects() {
+    let Some(gpu) = gpu() else { return };
+    let mut clip = Clip::from_generator("Couleur", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .set_param("saturation", 1.0);
+    let (mut comp, slot) = composition_with(clip);
+    // Red layer grouped with an empty layer above it.
+    comp.add_layer("dessus");
+    let group = comp.group_with_above(slot.layer).unwrap();
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp.clone());
+    driver.settle(|status| status.state == ClipState::Playing);
+    let program = driver.state.program();
+    let pixel = |driver: &mut Driver| {
+        driver.tick();
+        read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0]
+    };
+    let red = pixel(&mut driver);
+    assert!(red[0] > 0.99 && red[1] < 0.01, "{red:?}");
+
+    // The group's effect, then its opacity over black.
+    let settings = comp.group_mut(group).unwrap();
+    settings.effects.push(Effect::new("invert"));
+    settings.opacity = prism_core::Unit::new(0.5);
+    driver.state.set_composition(comp.clone());
+    let cyan = pixel(&mut driver);
+    assert!(
+        cyan[0] < 0.01 && (cyan[1] - 0.5).abs() < 0.02 && (cyan[2] - 0.5).abs() < 0.02,
+        "{cyan:?}"
+    );
+
+    // Bypassed, the group shows nothing.
+    comp.group_mut(group).unwrap().bypass = true;
+    driver.state.set_composition(comp);
+    let black = pixel(&mut driver);
+    assert!(black[0] < 0.01 && black[1] < 0.01, "{black:?}");
+}
+
+#[test]
 fn generated_clips_follow_their_settings_without_restarting() {
     let Some(gpu) = gpu() else { return };
     let mut clip = Clip::from_generator("Couleur", "solid");

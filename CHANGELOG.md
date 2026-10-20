@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Groupes de couches (ADR 0043) : couches voisines mélangées dans une image à elles, qui passe par les effets du groupe puis se mélange au reste avec l'opacité et le mode de fusion du groupe ; bypass et solo du groupe ; en-tête repliable au-dessus de ses couches, « Grouper avec la couche du dessus » et « Retirer du groupe » dans le menu d'une couche, section « Groupe » dans l'inspecteur.
 - Fenêtre de démarrage animée : une grille carrée se déplie en 2 s (départ très lent, accélération tardive, arrivée en douceur) jusqu'au dessin de `assets/splash.svg`, puis la fenêtre principale s'ouvre ; elle se prépare, cachée, pendant l'animation. Dessin rendu à chaque image par `resvg`, sur un fil à part pendant que le démarrage bloque la boucle d'événements.
 - Mode clair (ADR 0042) : interrupteur « Mode clair » dans le menu Fichier, retenu dans les préférences ; palette claire du kit UI3.
 - Curseurs redessinés (ADR 0041) : piste aux coins arrondis, remplissage bleu depuis l'origine (bord gauche, zéro ou milieu pour les réglages centrés), poignée en capsule blanche logée au bout du remplissage ; points magnétiques là où c'est utile (25, 50, 75 % des opacités et volumes, valeur par défaut des réglages d'effet, vitesse 1 ×, rotation ±90°, gamma 2,2), Alt pour s'en affranchir ; flèches du clavier.

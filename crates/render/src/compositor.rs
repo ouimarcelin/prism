@@ -91,10 +91,15 @@ fn blend_code(mode: BlendMode) -> u32 {
     }
 }
 
-fn pass_params(layers: &[LayerInput<'_>], first: bool) -> PassParams {
+/// Value of `over_black` for the first pass: start from opaque black, or
+/// from transparent black. Must match composite.wgsl.
+const OVER_BLACK: u32 = 1;
+const OVER_TRANSPARENT: u32 = 2;
+
+fn pass_params(layers: &[LayerInput<'_>], first: Option<u32>) -> PassParams {
     let mut params = PassParams {
         count: layers.len() as u32,
-        over_black: u32::from(first),
+        over_black: first.unwrap_or(0),
         ..PassParams::default()
     };
     for (slot, layer) in params.layers.iter_mut().zip(layers) {
@@ -136,7 +141,8 @@ impl Target {
     }
 }
 
-/// Composites layers, bottom to top, over opaque black.
+/// Composites layers, bottom to top, over opaque black, or over
+/// transparent black for [`Compositor::over_transparent`].
 ///
 /// One pass mixes up to four layers, keeping the result in 32-bit registers
 /// from one layer to the next, and the last pass writes straight into the
@@ -158,6 +164,8 @@ pub struct Compositor {
     /// Destination of [`Compositor::render`], created on first use.
     result: Option<Target>,
     resolution: Resolution,
+    /// `over_black` of the first pass.
+    base: u32,
 }
 
 impl Compositor {
@@ -269,7 +277,15 @@ impl Compositor {
             targets: None,
             result: None,
             resolution,
+            base: OVER_BLACK,
         }
+    }
+
+    /// The same compositor, starting from transparent black: the result
+    /// keeps the transparency of the layers, to be mixed in turn.
+    pub fn over_transparent(mut self) -> Self {
+        self.base = OVER_TRANSPARENT;
+        self
     }
 
     fn create_params_buffer(device: &wgpu::Device, capacity: usize, stride: u64) -> wgpu::Buffer {
@@ -444,7 +460,7 @@ impl Compositor {
                 .chunks(LAYERS_PER_PASS)
                 .nth(pass_index)
                 .unwrap_or_default();
-            let params = pass_params(batch, pass_index == 0);
+            let params = pass_params(batch, (pass_index == 0).then_some(self.base));
             if self.params_written.get(pass_index) == Some(&params) {
                 continue;
             }
