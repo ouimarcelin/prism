@@ -31,10 +31,9 @@ pub(crate) enum ChainEdit {
     Add(&'static str),
     /// Adds an effect read from this ISF file at the end.
     AddFile(PathBuf),
-    /// Moves the effect at this index one place earlier.
-    MoveUp(usize),
-    /// Moves the effect at this index one place later.
-    MoveDown(usize),
+    /// Moves the effect at index `from` so that it lands before the effect
+    /// now at index `to` (`to` may be the length: at the end).
+    Move { from: usize, to: usize },
     /// Removes the effect at this index.
     Remove(usize),
 }
@@ -48,11 +47,10 @@ pub(crate) fn apply_edit(effects: &mut Vec<Effect>, edit: &ChainEdit) {
             }
         }
         ChainEdit::AddFile(ref path) => effects.push(isf_effect(path)),
-        ChainEdit::MoveUp(index) if index > 0 && index < effects.len() => {
-            effects.swap(index - 1, index);
-        }
-        ChainEdit::MoveDown(index) if index + 1 < effects.len() => {
-            effects.swap(index, index + 1);
+        ChainEdit::Move { from, to } if from < effects.len() && to <= effects.len() => {
+            let effect = effects.remove(from);
+            let to = if to > from { to - 1 } else { to };
+            effects.insert(to, effect);
         }
         ChainEdit::Remove(index) if index < effects.len() => {
             effects.remove(index);
@@ -141,59 +139,70 @@ fn effect_chain(
 ) {
     let id = owner;
     let mut edits = Vec::new();
-    let count = effects.len();
     for (index, effect) in effects.iter_mut().enumerate() {
         ui.push_id(index, |ui| {
             let info = describe(effect);
-            ui.horizontal(|ui| {
-                let name = match (&info, &effect.file) {
-                    (Ok(info), _) => info.label.to_owned(),
-                    (Err(_), Some(path)) => path.file_stem().map_or_else(
-                        || "Shader".into(),
-                        |stem| stem.to_string_lossy().into_owned(),
-                    ),
-                    (Err(_), None) => "Effet inconnu".to_owned(),
-                };
-                let mut on = !effect.bypass;
-                let hover = file_hover(effect).map_or_else(String::new, |text| format!("{text}\n"));
-                let checkbox = ui
-                    .checkbox(&mut on, RichText::new(name).semibold())
-                    .on_hover_text(format!("{hover}Décocher pour passer l'effet (bypass)"));
-                effect.bypass = !on;
-                tools.learn.cover(
-                    ui,
-                    checkbox.rect,
-                    ControlTarget::EffectBypass { owner, index },
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let block = ui.scope(|ui| {
+                ui.horizontal(|ui| {
+                    effect_grip(ui, EffectDrag { owner, index });
+                    let (icon, hover) = if effect.collapsed {
+                        ("⏵", "Déplier l'effet")
+                    } else {
+                        ("⏷", "Replier l'effet")
+                    };
                     if ui
-                        .small_button("×")
-                        .on_hover_text("Retirer l'effet")
+                        .add(egui::Button::new(icon).small().frame(false))
+                        .on_hover_text(hover)
                         .clicked()
                     {
-                        edits.push(ChainEdit::Remove(index));
+                        effect.collapsed = !effect.collapsed;
                     }
-                    if ui
-                        .add_enabled(index + 1 < count, egui::Button::new("⏷").small())
-                        .on_hover_text("Plus tard dans la chaîne")
-                        .clicked()
-                    {
-                        edits.push(ChainEdit::MoveDown(index));
-                    }
-                    if ui
-                        .add_enabled(index > 0, egui::Button::new("⏶").small())
-                        .on_hover_text("Plus tôt dans la chaîne")
-                        .clicked()
-                    {
-                        edits.push(ChainEdit::MoveUp(index));
-                    }
+                    let name = match (&info, &effect.file) {
+                        (Ok(info), _) => info.label.to_owned(),
+                        (Err(_), Some(path)) => path.file_stem().map_or_else(
+                            || "Shader".into(),
+                            |stem| stem.to_string_lossy().into_owned(),
+                        ),
+                        (Err(_), None) => "Effet inconnu".to_owned(),
+                    };
+                    let mut on = !effect.bypass;
+                    let hover =
+                        file_hover(effect).map_or_else(String::new, |text| format!("{text}\n"));
+                    let checkbox = ui
+                        .checkbox(&mut on, RichText::new(name).semibold())
+                        .on_hover_text(format!("{hover}Décocher pour passer l'effet (bypass)"));
+                    effect.bypass = !on;
+                    tools.learn.cover(
+                        ui,
+                        checkbox.rect,
+                        ControlTarget::EffectBypass { owner, index },
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui
+                            .small_button("×")
+                            .on_hover_text("Retirer l'effet")
+                            .clicked()
+                        {
+                            edits.push(ChainEdit::Remove(index));
+                        }
+                    });
                 });
-            });
-            match info {
-                Ok(info) => settings(ui, info, effect, dashboard, tools.learn, (owner, index)),
-                Err(message) => {
-                    ui.label(RichText::new(message).weak());
+                if !effect.collapsed {
+                    match &info {
+                        Ok(info) => {
+                            settings(ui, info, effect, dashboard, tools.learn, (owner, index));
+                        }
+                        Err(message) => {
+                            ui.label(RichText::new(message).weak());
+                        }
+                    }
                 }
+            });
+            if let Some(to) = effect_drop(ui, block.response.rect, owner, index) {
+                edits.push(ChainEdit::Move {
+                    from: to.0,
+                    to: to.1,
+                });
             }
             ui.add_space(4.0);
         });
@@ -232,6 +241,66 @@ fn effect_chain(
     for edit in &edits {
         apply_edit(effects, edit);
     }
+}
+
+/// An effect being dragged in a chain editor.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct EffectDrag {
+    owner: EffectOwner,
+    index: usize,
+}
+
+/// Handle that drags an effect: two columns of dots.
+fn effect_grip(ui: &mut egui::Ui, drag: EffectDrag) {
+    let id = egui::Id::new(("effect grip", drag.owner, drag.index));
+    ui.dnd_drag_source(id, drag, |ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::Vec2::new(10.0, 16.0), egui::Sense::hover());
+        let color = crate::theme::palette(ui).text_tertiary;
+        for column in 0..2 {
+            for row in 0..3 {
+                let center = rect.left_top()
+                    + egui::Vec2::new(3.0 + 4.0 * column as f32, 4.0 + 4.0 * row as f32);
+                ui.painter().circle_filled(center, 1.1, color);
+            }
+        }
+    })
+    .response
+    .on_hover_text("Glisser pour changer l'ordre des effets");
+}
+
+/// Shows where an effect of the same chain held over the block of effect
+/// `index` would go, and returns `(from, to)` when it is released there.
+fn effect_drop(
+    ui: &egui::Ui,
+    rect: egui::Rect,
+    owner: EffectOwner,
+    index: usize,
+) -> Option<(usize, usize)> {
+    let response = ui.interact(
+        rect,
+        egui::Id::new(("effect drop", owner, index)),
+        egui::Sense::hover(),
+    );
+    let drag = *response.dnd_hover_payload::<EffectDrag>()?;
+    if drag.owner != owner || drag.index == index {
+        return None;
+    }
+    let pointer = ui.ctx().pointer_interact_pos()?;
+    let below = pointer.y > rect.center().y;
+    let gap = ui.spacing().item_spacing.y / 2.0;
+    let y = if below {
+        rect.bottom() + gap
+    } else {
+        rect.top() - gap
+    };
+    ui.painter().hline(
+        rect.x_range(),
+        y,
+        egui::Stroke::new(2.0, crate::theme::palette(ui).brand),
+    );
+    response
+        .dnd_release_payload::<EffectDrag>()
+        .map(|_| (drag.index, index + usize::from(below)))
 }
 
 /// One line per setting of an effect.
@@ -620,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn edits_add_move_and_remove() {
+    fn edits_add_drag_and_remove() {
         let mut effects = Vec::new();
         for kind in ["blur", "invert", "mirror"] {
             apply_edit(&mut effects, &ChainEdit::Add(kind));
@@ -628,21 +697,23 @@ mod tests {
         apply_edit(&mut effects, &ChainEdit::Add("unknown"));
         assert_eq!(kinds(&effects), ["blur", "invert", "mirror"]);
 
-        apply_edit(&mut effects, &ChainEdit::MoveUp(2));
-        assert_eq!(kinds(&effects), ["blur", "mirror", "invert"]);
-        apply_edit(&mut effects, &ChainEdit::MoveDown(0));
-        assert_eq!(kinds(&effects), ["mirror", "blur", "invert"]);
-        // At the ends, nothing moves.
-        apply_edit(&mut effects, &ChainEdit::MoveUp(0));
-        apply_edit(&mut effects, &ChainEdit::MoveDown(2));
-        assert_eq!(kinds(&effects), ["mirror", "blur", "invert"]);
+        // Dragged: before an effect further down, or to the end.
+        apply_edit(&mut effects, &ChainEdit::Move { from: 0, to: 2 });
+        assert_eq!(kinds(&effects), ["invert", "blur", "mirror"]);
+        apply_edit(&mut effects, &ChainEdit::Move { from: 2, to: 0 });
+        assert_eq!(kinds(&effects), ["mirror", "invert", "blur"]);
+        apply_edit(&mut effects, &ChainEdit::Move { from: 0, to: 3 });
+        assert_eq!(kinds(&effects), ["invert", "blur", "mirror"]);
+        // Out of range: nothing moves.
+        apply_edit(&mut effects, &ChainEdit::Move { from: 1, to: 9 });
+        assert_eq!(kinds(&effects), ["invert", "blur", "mirror"]);
 
         apply_edit(&mut effects, &ChainEdit::Remove(1));
         apply_edit(&mut effects, &ChainEdit::Remove(7));
-        assert_eq!(kinds(&effects), ["mirror", "invert"]);
+        assert_eq!(kinds(&effects), ["invert", "mirror"]);
 
         apply_edit(&mut effects, &ChainEdit::AddFile("/shaders/glow.fs".into()));
-        assert_eq!(kinds(&effects), ["mirror", "invert", ISF_KIND]);
+        assert_eq!(kinds(&effects), ["invert", "mirror", ISF_KIND]);
         assert_eq!(
             effects[2].file.as_deref(),
             Some(Path::new("/shaders/glow.fs"))

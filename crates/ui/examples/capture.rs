@@ -173,6 +173,9 @@ fn demo() -> Composition {
         if let (Some(&layer), Some(&column)) = (layers.get(layer), columns.get(column)) {
             let mut clip = Clip::from_generator(name, kind);
             clip.effects.push(Effect::new("kaleidoscope"));
+            let mut blur = Effect::new("blur");
+            blur.collapsed = true;
+            clip.effects.push(blur);
             let _ = composition.set_clip(Slot::new(layer, column), Some(clip));
         }
     }

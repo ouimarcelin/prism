@@ -42,6 +42,9 @@ pub struct Effect {
     /// (shaders in the ISF format).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<PathBuf>,
+    /// When set, the editor shows only the effect's title line.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub collapsed: bool,
 }
 
 impl Effect {
@@ -56,6 +59,7 @@ impl Effect {
             audio: BTreeMap::new(),
             text: String::new(),
             file: None,
+            collapsed: false,
         }
     }
 
