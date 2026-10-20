@@ -1,4 +1,5 @@
-//! Layers dragged by their grip in the clip grid.
+//! Layers of the clip grid: dragged by their grip, renamed by a double
+//! click.
 
 use egui::{Pos2, Vec2};
 use egui_kittest::Harness;
@@ -33,28 +34,21 @@ fn row_point(harness: &Harness<'_>, name: &str, height: f32) -> Pos2 {
     Pos2::new(rect.left() + 200.0, rect.top() - 4.0 + 64.0 * height)
 }
 
-#[test]
-fn layers_reorder_and_group_by_drag_and_drop() {
-    let status = EngineStatus::default();
-    let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
-    let ids: Vec<LayerId> = panel
-        .document()
-        .composition()
-        .layers()
-        .iter()
-        .map(|layer| layer.id())
-        .collect();
+/// The control panel of `panel`, themed, in a window of 1440 × 900.
+fn harness<'a>(panel: &'a mut ControlPanel, status: &'a EngineStatus) -> Harness<'a> {
     let mut themed = false;
     let mut harness = Harness::builder()
         .with_size(Vec2::new(1440.0, 900.0))
-        .build_ui(|ui| {
+        // Frames close enough for a double click.
+        .with_step_dt(0.05)
+        .build_ui(move |ui| {
             if !themed {
                 prism_ui::apply_theme(ui.ctx());
                 themed = true;
                 return;
             }
             let frame = FrameInfo {
-                status: &status,
+                status,
                 preview: None,
                 screens: &[],
                 output_screens: &[],
@@ -64,6 +58,24 @@ fn layers_reorder_and_group_by_drag_and_drop() {
             panel.ui(ui, &frame);
         });
     harness.run_steps(2);
+    harness
+}
+
+fn layer_ids(panel: &ControlPanel) -> Vec<LayerId> {
+    let composition = panel.document().composition();
+    composition
+        .layers()
+        .iter()
+        .map(|layer| layer.id())
+        .collect()
+}
+
+#[test]
+fn layers_reorder_and_group_by_drag_and_drop() {
+    let status = EngineStatus::default();
+    let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
+    let ids = layer_ids(&panel);
+    let mut harness = harness(&mut panel, &status);
 
     // Couche 1 dropped on the top edge of Couche 3: between 3 and 4.
     let from = grip(&harness, "Couche 1");
@@ -80,4 +92,40 @@ fn layers_reorder_and_group_by_drag_and_drop() {
     assert_eq!(order, [ids[2], ids[0], ids[3], ids[1]]);
     let group = composition.layer(ids[1]).unwrap().group().expect("grouped");
     assert_eq!(composition.group_layers(group), [ids[3], ids[1]]);
+}
+
+#[test]
+fn a_double_click_renames_a_layer() {
+    let status = EngineStatus::default();
+    let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
+    let ids = layer_ids(&panel);
+    let mut harness = harness(&mut panel, &status);
+
+    let rename = |harness: &mut Harness<'_>, name: &str, text: &str, key: egui::Key| {
+        let at = harness.get_by_label(name).rect().center();
+        harness.hover_at(at);
+        harness.run_steps(1);
+        for pressed in [true, false, true, false] {
+            harness.event(egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+        }
+        harness.run_steps(1);
+        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        harness.event(egui::Event::Text(text.into()));
+        harness.run_steps(1);
+        harness.key_press(key);
+        harness.run_steps(2);
+    };
+    rename(&mut harness, "Couche 2", "Lumières", egui::Key::Enter);
+    // Escape keeps the old name.
+    rename(&mut harness, "Couche 3", "Oublié", egui::Key::Escape);
+    drop(harness);
+
+    let composition = panel.document().composition();
+    assert_eq!(composition.layer(ids[1]).unwrap().name, "Lumières");
+    assert_eq!(composition.layer(ids[2]).unwrap().name, "Couche 3");
 }

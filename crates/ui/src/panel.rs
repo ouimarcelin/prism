@@ -133,6 +133,8 @@ pub(crate) struct Dialogs {
 pub struct ControlPanel {
     pub(crate) document: Document,
     pub(crate) selected: Option<Slot>,
+    /// Layer or group whose name is being edited, with its name before.
+    pub(crate) renaming: Option<(crate::grid::Target, String)>,
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
@@ -165,6 +167,7 @@ impl ControlPanel {
         Self {
             document,
             selected,
+            renaming: None,
             dialogs: Dialogs {
                 missing,
                 ..Dialogs::default()
