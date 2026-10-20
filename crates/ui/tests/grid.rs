@@ -101,6 +101,7 @@ fn a_double_click_renames_a_layer() {
     let ids = layer_ids(&panel);
     let mut harness = harness(&mut panel, &status);
 
+    // The whole name is selected: typing replaces it.
     let rename = |harness: &mut Harness<'_>, name: &str, text: &str, key: egui::Key| {
         let at = harness.get_by_label(name).rect().center();
         harness.hover_at(at);
@@ -113,8 +114,8 @@ fn a_double_click_renames_a_layer() {
                 modifiers: egui::Modifiers::NONE,
             });
         }
-        harness.run_steps(1);
-        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        // The clicks, then the field and its focus.
+        harness.run_steps(4);
         harness.event(egui::Event::Text(text.into()));
         harness.run_steps(1);
         harness.key_press(key);
