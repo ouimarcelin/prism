@@ -276,11 +276,36 @@ fn settings(
     learn: &mut Learn,
     place: (EffectOwner, usize),
 ) {
-    egui::Grid::new("settings")
+    // Generators of the procedural bank: their own settings, then the
+    // shared ones, folded.
+    let (own, shared) = info
+        .params
+        .split_at(info.common.unwrap_or(info.params.len()));
+    param_grid(ui, "settings", own, effect, dashboard, learn, &place);
+    if !shared.is_empty() {
+        egui::CollapsingHeader::new("Espace, temps et couleur")
+            .id_salt("shared settings")
+            .show(ui, |ui| {
+                param_grid(ui, "shared", shared, effect, dashboard, learn, &place);
+            });
+    }
+}
+
+/// One row per setting of `params`: value, animation, link.
+fn param_grid(
+    ui: &mut egui::Ui,
+    id: &str,
+    params: &[ParamInfo],
+    effect: &mut Effect,
+    dashboard: bool,
+    learn: &mut Learn,
+    place: &(EffectOwner, usize),
+) {
+    egui::Grid::new(id)
         .num_columns(2)
         .spacing([12.0, 4.0])
         .show(ui, |ui| {
-            for param in info.params {
+            for param in params {
                 let driven = effect.animations.contains_key(param.id)
                     || effect.audio.contains_key(param.id)
                     || (dashboard && effect.links.contains_key(param.id));

@@ -11,6 +11,7 @@
 - « je veux pouvoir renommer les calques et les groupes quand je double clic sur leur nom. » (ticket 91)
 - « fais : Déformation par Bézier, avec des poignées réglables à la main » (ticket 93)
 - « fais en sorte que les led puissent être déplacés avec des courbes de béziers » (ticket 94)
+- « je veux intégrer une banque de vidéo généré proceduralement… créé moi un tableau de toutes les vidéos à coder et par catégories. », puis « oui » (ticket 95)
 - « listes moi les futures implémentations de features pour le logiciel. », puis « vas y » (groupes de couches)
 
 ## Résultat
@@ -23,6 +24,7 @@
 - Ticket 91 : renommage sur place par double clic (couches et groupes), test egui_kittest (Entrée garde, Échap annule).
 - Ticket 93 : déformation par Bézier à poignées (ADR 0044), tests du modèle, captures « bezier-clair ».
 - Ticket 94 : bandes LED en courbe de Bézier, pixels espacés selon la longueur, test du modèle, capture « lumiere-courbe ».
+- Ticket 95 : feuille de route `docs/generateurs.md`, socle commun de la banque (ADR 0045), trois premiers générateurs, test de validation naga de tous les shaders, variantes dans `gallery`.
 
 ## Problèmes
 
@@ -31,3 +33,4 @@
 - Disque plein (1 Gio libre) : l'édition de liens a écrit un binaire tronqué de 3 Ko, installé dans Prism.app, qui ne s'ouvrait plus. `cargo clean --profile dev` (43 Gio), nouvelle édition de liens forcée.
 - Ticket 91 : le test du double clic échouait, les images du harnais étant à 0,25 s d'écart (plus que le délai du double clic, 0,3 s, une fois deux passes comptées) : pas de 0,05 s pour ce harnais.
 - Ticket 93 : au redimensionnement, les poignées étaient d'abord calculées sur une grille invalide (nouvelles dimensions, anciens points), qui rendait l'identité : calcul sur l'ancienne forme, au pas de la nouvelle grille.
+- Ticket 95 : `common` et `shared` sont des mots réservés de WGSL (refusés par naga) ; fonction renommée `bank_setting`.

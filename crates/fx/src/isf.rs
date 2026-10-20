@@ -346,7 +346,7 @@ fn params(inputs: &[Input]) -> Vec<ParamInfo> {
 /// Declarations before the ISF code. Bindings match `prelude.wgsl`.
 const WRAPPER_HEAD: &str = r"#version 450
 layout(set = 0, binding = 0) uniform PrismParams {
-    vec4 prism_values[4];
+    vec4 prism_values[8];
     vec2 prism_size;
     float prism_time;
     float prism_beat;
@@ -509,6 +509,7 @@ pub fn compile(source: &str, label: &str) -> Result<IsfShader, IsfError> {
         text: None,
         source: Box::leak(wgsl.into_boxed_str()),
         passes: &[ENTRY_POINT],
+        common: None,
     };
     Ok(IsfShader {
         info: Box::leak(Box::new(info)),
@@ -639,7 +640,8 @@ mod tests {
         assert!(matches!(compile(audio, "x"), Err(IsfError::Unsupported(_))));
         let many = format!(
             r#"/*{{ "INPUTS": [{}] }}*/ void main() {{}}"#,
-            (0..5)
+            // Four channels each: more than 32 settings.
+            (0..9)
                 .map(|i| format!(r#"{{ "NAME": "c{i}", "TYPE": "color" }}"#))
                 .collect::<Vec<_>>()
                 .join(",")

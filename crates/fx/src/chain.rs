@@ -12,6 +12,21 @@ use crate::isf::ISF_KIND;
 use crate::text::{Align, TEXT_KIND, TextCache};
 
 const PRELUDE: &str = include_str!("shaders/prelude.wgsl");
+/// Library of the generators of the procedural bank, after their field.
+const BANK: &str = include_str!("shaders/bank/generator.wgsl");
+
+/// WGSL of an effect of the catalog: the prelude, then its code; for a
+/// generator of the bank, the index of its shared settings and the bank's
+/// library too.
+fn shader_source(info: &EffectInfo) -> String {
+    match info.common {
+        Some(common) => format!(
+            "{PRELUDE}\nconst COMMON: u32 = {common}u;\n{BANK}\n{}",
+            info.source
+        ),
+        None => format!("{PRELUDE}\n{}", info.source),
+    }
+}
 
 /// Settings of one pass, laid out as `Params` in prelude.wgsl.
 #[repr(C)]
@@ -117,7 +132,7 @@ impl EffectRenderer {
             .map(|info| {
                 let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                     label: Some(info.kind),
-                    source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", info.source).into()),
+                    source: wgpu::ShaderSource::Wgsl(shader_source(info).into()),
                 });
                 info.passes
                     .iter()
@@ -531,6 +546,27 @@ impl EffectChain {
                 Some(written) => *written = params,
                 None => self.written.push(params),
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every shader of the catalog parses and validates, without a GPU.
+    #[test]
+    fn every_shader_of_the_catalog_is_valid() {
+        for info in CATALOG.iter().chain(GENERATORS) {
+            let source = shader_source(info);
+            let module = naga::front::wgsl::parse_str(&source)
+                .unwrap_or_else(|error| panic!("{}: {}", info.kind, error.emit_to_string(&source)));
+            naga::valid::Validator::new(
+                naga::valid::ValidationFlags::all(),
+                naga::valid::Capabilities::empty(),
+            )
+            .validate(&module)
+            .unwrap_or_else(|error| panic!("{}: {error:?}", info.kind));
         }
     }
 }

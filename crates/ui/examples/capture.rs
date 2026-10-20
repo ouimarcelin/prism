@@ -71,6 +71,11 @@ fn main() {
     capture.get_by_label("Dégradé").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "clip");
+    capture.get_by_label("Distorsion").click();
+    capture.run_steps(4);
+    save(&mut capture, &folder, "generateur");
+    capture.get_by_label("Dégradé").click();
+    capture.run_steps(4);
     capture.get_by_label("Fichier").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "menu");
@@ -162,6 +167,7 @@ fn demo() -> Composition {
         (1, 3, "Bruit", "noise"),
         (2, 1, "Aplat", "solid"),
         (2, 2, "Anneaux lents", "rings"),
+        (3, 3, "Distorsion", "domain_warp"),
     ];
     for (layer, column, name, kind) in clips {
         if let (Some(&layer), Some(&column)) = (layers.get(layer), columns.get(column)) {

@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Banque de générateurs procéduraux (ADR 0045, feuille de route `docs/generateurs.md`) : socle commun de 16 réglages (espace, temps, palette et couleur) et bibliothèque de bruits ; « Bruit fractal » (valeur, Perlin, simplex ; fBm, turbulence, crêtes, gonflé), « Cellules » (Worley, Voronoï) et « Distorsion » (distorsion de domaine). Les effets ont jusqu'à 32 réglages.
 - Bandes LED courbes (ADR 0044) : case « Courbe (Bézier) » d'un luminaire, deux poignées pour plier la bande sur l'image ; pixels également espacés le long de la courbe.
 - Déformation par Bézier (ADR 0044) : troisième tracé de la grille de déformation, en carreaux de Bézier ; le point choisi montre ses poignées, à tirer pour courber l'image ; passer en Bézier garde la forme.
 - Double clic sur le nom d'une couche ou d'un groupe : champ pour le renommer sur place, nom entier sélectionné ; Entrée ou clic ailleurs garde le nom, Échap rend l'ancien, un nom vide aussi.
