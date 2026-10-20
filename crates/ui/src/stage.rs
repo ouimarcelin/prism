@@ -23,6 +23,8 @@ const MIN_SIZE: f32 = 0.01;
 const SELECTED: Color32 = theme::DARK.brand;
 const OTHER: Color32 = theme::DARK.text_secondary;
 const MASK: Color32 = theme::DARK.assistive;
+/// Tangent handles of a Bézier warp.
+const TANGENT: Color32 = theme::DARK.warning;
 
 /// What the stage window shows besides the document.
 pub struct StageFrame<'a> {
@@ -200,6 +202,25 @@ fn warp_lines(warp: &Warp) -> Vec<Vec<Point>> {
 }
 
 /// Draws a corner handle and returns its drag response.
+/// End of a tangent handle of a Bézier warp: a small square.
+fn tangent_handle(ui: &egui::Ui, id: egui::Id, center: Pos2) -> egui::Response {
+    let rect = Rect::from_center_size(center, Vec2::splat(HANDLE * 2.5));
+    let response = ui.interact(rect, id, Sense::drag());
+    let side = if response.hovered() || response.dragged() {
+        HANDLE * 1.6
+    } else {
+        HANDLE * 1.2
+    };
+    ui.painter().rect(
+        Rect::from_center_size(center, Vec2::splat(side)),
+        1.0,
+        TANGENT.gamma_multiply(0.6),
+        Stroke::new(1.5, TANGENT),
+        egui::StrokeKind::Middle,
+    );
+    response.on_hover_text("Poignée : glisser pour courber l'image de part et d'autre du point")
+}
+
 fn handle(ui: &egui::Ui, id: egui::Id, center: Pos2, color: Color32) -> egui::Response {
     let rect = Rect::from_center_size(center, Vec2::splat(HANDLE * 2.5));
     let response = ui.interact(rect, id, Sense::click_and_drag());
@@ -682,9 +703,10 @@ impl ControlPanel {
         let mode = match &slice.warp {
             None => 0,
             Some(warp) if warp.curve == WarpCurve::Linear => 1,
-            Some(_) => 2,
+            Some(warp) if warp.curve == WarpCurve::Smooth => 2,
+            Some(_) => 3,
         };
-        let names = ["Aucune", "Grille droite", "Grille lissée"];
+        let names = ["Aucune", "Grille droite", "Grille lissée", "Bézier"];
         let mut chosen = mode;
         egui::ComboBox::from_id_salt("slice warp")
             .selected_text(names[mode])
@@ -694,7 +716,7 @@ impl ControlPanel {
                 }
             })
             .response
-            .on_hover_text("Une grille de points posée sur la découpe : déplacer un point déforme l'image autour de lui ; « lissée » fait passer des courbes par les points");
+            .on_hover_text("Une grille de points posée sur la découpe : déplacer un point déforme l'image autour de lui ; « lissée » fait passer des courbes par les points ; « Bézier » ajoute à chaque point des poignées qui courbent l'image à la main");
         if chosen != mode {
             slice.warp = match chosen {
                 0 => None,
@@ -703,10 +725,14 @@ impl ControlPanel {
                         .warp
                         .take()
                         .unwrap_or_else(|| Warp::from_quad(&slice.output, 4, 4));
-                    warp.curve = if chosen == 1 {
-                        WarpCurve::Linear
-                    } else {
-                        WarpCurve::Smooth
+                    warp.curve = match chosen {
+                        1 => WarpCurve::Linear,
+                        2 => WarpCurve::Smooth,
+                        _ => {
+                            // Handles on the shape as drawn so far.
+                            warp.ensure_handles();
+                            WarpCurve::Bezier
+                        }
                     };
                     Some(warp)
                 }
@@ -738,6 +764,9 @@ impl ControlPanel {
                 let curve = warp.curve;
                 *warp = Warp::from_quad(&slice.output, columns, rows);
                 warp.curve = curve;
+                if curve == WarpCurve::Bezier {
+                    warp.ensure_handles();
+                }
             }
         }
         ui.separator();
@@ -1027,6 +1056,34 @@ impl ControlPanel {
                     && let Some(position) = response.interact_pointer_pos()
                 {
                     *point = to_fraction(output, position);
+                }
+            }
+            // Bézier: the handles of the point last touched, in opposite
+            // pairs; dragging one end turns and stretches both.
+            if warp.curve == WarpCurve::Bezier
+                && let Some(Picked::Warp(index)) = self.stage.point
+                && let Some(&point) = warp.points().get(index)
+                && let Some(handles) = warp.handles_mut().get_mut(index)
+            {
+                let center = to_screen(output, point);
+                for (axis, offset) in [(0, &mut handles.across), (1, &mut handles.down)] {
+                    for (end, sign) in [(0, 1.0), (1, -1.0)] {
+                        let tip = Point::new(point.x + sign * offset.x, point.y + sign * offset.y);
+                        let tip_screen = to_screen(output, tip);
+                        ui.painter()
+                            .line_segment([center, tip_screen], Stroke::new(1.0, TANGENT));
+                        let response = tangent_handle(
+                            ui,
+                            base.with(("tangent", index, axis, end)),
+                            tip_screen,
+                        );
+                        if response.dragged()
+                            && let Some(position) = response.interact_pointer_pos()
+                        {
+                            let at = to_fraction(output, position);
+                            *offset = Point::new(sign * (at.x - point.x), sign * (at.y - point.y));
+                        }
+                    }
                 }
             }
         }

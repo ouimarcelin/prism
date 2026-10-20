@@ -55,4 +55,4 @@ pub use stage::{
     Simulation, Slice, SliceId, Stage,
 };
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
-pub use warp::{MAX_WARP_CELLS, Warp, WarpCurve};
+pub use warp::{Handles, MAX_WARP_CELLS, Warp, WarpCurve};
