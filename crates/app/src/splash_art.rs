@@ -4,7 +4,7 @@
 //!
 //! At the start, the vertices of the frame's facets sit on a regular grid
 //! and its outline is a square; they ease into their places in the image.
-//! The central band stays still; the logo grows to its size.
+//! The central band and the logo stay still.
 
 use std::fmt::Write as _;
 
@@ -14,12 +14,10 @@ use resvg::{tiny_skia, usvg};
 const SVG: &str = include_str!("../../../assets/splash.svg");
 
 /// Length of the animation, in seconds.
-pub const DURATION: f32 = 2.5;
+pub const DURATION: f32 = 2.0;
 
-/// Size of the logo at the start, against its size in the image.
-const LOGO_START: f32 = 0.6;
-/// Centre of the logo and its frame, the point it grows from.
-const LOGO_CENTRE: (f32, f32) = (257.75, 230.58);
+/// Strength of the ease-in: the higher, the slower the motion leaves rest.
+const EASE_IN: f32 = 3.0;
 
 /// Start of the outer outline in the image: a path with rounded corners,
 /// replaced by a polygon whose corners can move.
@@ -211,18 +209,6 @@ impl Art {
                 }
             }
         }
-        // The logo and its frame, the first group of the image, grow.
-        if let Some(at) = svg.find("<g>") {
-            let scale = LOGO_START + (1.0 - LOGO_START) * t;
-            let (cx, cy) = LOGO_CENTRE;
-            svg.replace_range(
-                at..at + 3,
-                &format!(
-                    "<g transform=\"translate({cx} {cy}) scale({scale:.4}) translate({} {})\">",
-                    -cx, -cy
-                ),
-            );
-        }
         if opacity < 1.0 {
             // The whole drawing, faded.
             if let (Some(open), Some(close)) = (svg.find("</defs>"), svg.rfind("</svg>")) {
@@ -271,10 +257,11 @@ fn start_of(x: f32, y: f32) -> (f32, f32) {
     }
 }
 
-/// Slow at both ends, sine ease-in-out: starts from rest without the
-/// long still start of a cubic curve.
+/// Slow at both ends, with a strong ease-in: a sine ease-in-out of
+/// `t` raised to [`EASE_IN`], so the motion leaves rest slowly and
+/// gathers speed late.
 fn ease_in_out(t: f32) -> f32 {
-    0.5 - 0.5 * (std::f32::consts::PI * t).cos()
+    0.5 - 0.5 * (std::f32::consts::PI * t.powf(EASE_IN)).cos()
 }
 
 #[cfg(test)]
@@ -317,6 +304,8 @@ mod tests {
         assert_ne!(first.data(), middle.data());
         assert_ne!(middle.data(), last.data());
         assert_eq!(last.data(), after.data());
-        assert!((ease_in_out(0.5) - 0.5).abs() < 1e-6);
+        assert!(ease_in_out(0.0).abs() < 1e-6);
+        assert!((ease_in_out(1.0) - 1.0).abs() < 1e-6);
+        assert!(ease_in_out(0.5) < 0.1);
     }
 }
