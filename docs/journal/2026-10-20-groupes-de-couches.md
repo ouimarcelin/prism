@@ -1,7 +1,7 @@
 # 2026-10-20 – Tickets 86 à 89 : démarrage, curseurs, groupes de couches
 
 - Rôles : @ouimarcelin observateur, Claude Code implémenteur
-- Transcription : voir l'empreinte ci-dessous
+- Transcription : `2026-10-20-9233d07a-0995-4568-8e6b-4782ab963c3a.jsonl`, sha256 `17e80530fd5b97a4d1ae663c1fa78b1b51beb528604c0f7d9f41a4d118b2b2bc`
 
 ## Prompts
 
