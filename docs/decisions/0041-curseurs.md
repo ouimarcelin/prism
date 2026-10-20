@@ -25,6 +25,8 @@ Avec le thème de l'ADR 0040, les curseurs d'egui gardaient une poignée grise c
 - Les fonctions d'egui non reprises (curseur vertical, formatage personnalisé, pas imposé) ne servent nulle part dans Prism ; à ajouter si un besoin vient.
 - Les points magnétiques sont dans l'interface seulement : MIDI, OSC, DMX et l'API réseau posent les valeurs telles qu'elles arrivent.
 
-## Révision (ticket 87)
+## Révision (tickets 87 et 88)
 
-Nouvelle maquette de @ouimarcelin : la poignée ronde disparaît. Piste aux coins arrondis de 3 points (plus de pilule), remplissage bleu aux mêmes coins depuis l'origine jusqu'à une demi-piste après la valeur, point blanc translucide (rayon 2 points) qui marque la valeur dans le bout du remplissage, capsule blanche verticale (6 × 22 points, intérieur bleu, ombre légère) sur l'origine : bord gauche, ou zéro et milieu pour les réglages centrés. Les points magnétiques ne s'affichent plus que sur la partie vide de la piste, pour que le point de valeur reste seul dans le remplissage. Le point grossit au survol et pendant le glissement ; le focus clavier entoure la piste.
+Nouvelle maquette de @ouimarcelin, montrée en plusieurs états : la poignée ronde disparaît. Piste aux coins arrondis de 3 points (plus de pilule), remplissage bleu aux mêmes coins depuis l'origine jusqu'à la poignée. La poignée est une capsule verticale (6 × 12 points) au contour blanc et à l'intérieur bleu, logée dans le bout du remplissage, à 5 points de sa fin ; à la valeur minimale, le remplissage n'entoure qu'elle. Pour un réglage centré, le remplissage part toujours du zéro ou du milieu. Les points magnétiques ne s'affichent plus que sur la partie vide de la piste. La capsule grossit au survol, son contour s'épaissit pendant le glissement ; le focus clavier entoure la piste.
+
+Le ticket 87 avait d'abord lu la capsule comme une marque d'origine, avec un point clair pour la valeur ; la deuxième maquette a corrigé cette lecture.
