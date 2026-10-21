@@ -492,8 +492,19 @@ impl ControlPanel {
         let grip =
             egui::Rect::from_x_y_ranges(edge.left() - 4.0..=edge.left() + 4.0, edge.y_range());
         let drag = ui.interact(grip, egui::Id::new("inspector edge"), egui::Sense::drag());
-        if drag.dragged() {
-            self.inspector_width = Some((width - drag.drag_delta().x).clamp(INSPECTOR_MIN, max));
+        // The width follows the pointer from where it was pressed, not a sum
+        // of its moves: the panel may be laid out more than once a frame.
+        if drag.drag_started() {
+            ui.data_mut(|data| data.insert_temp(drag.id, width));
+        }
+        if drag.dragged()
+            && let Some(pointer) = drag.interact_pointer_pos()
+            && let Some(origin) = ui.input(|input| input.pointer.press_origin())
+        {
+            let start = ui
+                .data(|data| data.get_temp::<f32>(drag.id))
+                .unwrap_or(width);
+            self.inspector_width = Some((start + origin.x - pointer.x).clamp(INSPECTOR_MIN, max));
         }
         let active = drag.hovered() || drag.dragged();
         if active {
