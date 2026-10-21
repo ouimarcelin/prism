@@ -66,3 +66,9 @@ Résultat : panneau haut redimensionnable (`egui::Panel::top("program")`, 80 px 
 Prompt : « la fenetre du visualisateur est à 100% lorsque l'app se lance. supprimes l'animation bizarre… quand je bouge la taille des fenetres ».
 
 Cause : le panneau `egui::Panel::top` prend la taille de son contenu ; l'image, qui remplissait la hauteur disponible, le faisait grandir jusqu'au maximum, et la boucle taille du panneau / taille de l'image faisait trembler le redimensionnement. Correctif : séparation faite à la main, hauteur gardée dans `ControlPanel::program_height` (240 px au lancement), poignée de 8 px tirée verticalement, sans animation.
+
+## Ticket 101 : tailles de l'inspecteur
+
+Prompt : capture de la taille voulue au lancement ; « le redimensionnement entre les fenetres gauches et droites bug ».
+
+Cause : l'image du programme était dessinée dans un `scope_builder` à `max_rect`, qui ramenait le curseur du parent sous le contenu réel au lieu du bas du volet ; la hauteur du volet ne tenait pas et la mise en page sautait. Correctif : volet dessiné dans un `new_child`, qui ne touche pas au curseur. Au lancement, l'inspecteur prend 42 % de la fenêtre et le volet du programme la hauteur de l'image à cette largeur, jusqu'à ce qu'on tire une séparation. La bordure grille / inspecteur est faite à la main (`exact_size`, bande de 8 px tirée de côté, curseur de redimensionnement, 260 px au minimum, 360 px laissés à la grille). Test kittest du glisser de la bordure.

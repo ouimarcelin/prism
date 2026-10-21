@@ -130,3 +130,16 @@ fn a_double_click_renames_a_layer() {
     assert_eq!(composition.layer(ids[1]).unwrap().name, "Lumières");
     assert_eq!(composition.layer(ids[2]).unwrap().name, "Couche 3");
 }
+
+#[test]
+fn the_inspector_edge_drags_sideways() {
+    let status = EngineStatus::default();
+    let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
+    let mut harness = harness(&mut panel, &status);
+    let before = harness.get_by_label("Programme").rect().left();
+    // The inspector takes 42 % of the 1440-point window at first.
+    let edge = Pos2::new(1440.0 * (1.0 - 0.42), 500.0);
+    drag(&mut harness, edge, edge - Vec2::new(100.0, 0.0));
+    let after = harness.get_by_label("Programme").rect().left();
+    assert!((before - after - 100.0).abs() < 2.0, "{before} → {after}");
+}
