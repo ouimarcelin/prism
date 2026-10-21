@@ -78,3 +78,9 @@ Cause : l'image du programme était dessinée dans un `scope_builder` à `max_re
 Prompt : « le redimensionnement gauche-droite déconne. il bouge plus vite que la sourie ».
 
 Cause : la largeur était mise à jour en ajoutant le déplacement de la souris à chaque passage ; l'interface peut être disposée plus d'une fois par image, le même déplacement comptait alors plusieurs fois. Correctif : au début du glisser, la largeur de départ est gardée ; ensuite largeur = départ + (point de pression − pointeur). Même chose pour la séparation du programme. Le test kittest vérifie qu'un glisser de 100 points déplace la bordure de 100 points.
+
+## Ticket 103 : bordure, départ du glisser gardé par pression
+
+Prompt : « si je bouge de 50 px vers la gauche, la fenêtre bouge de 70 px » (vidéo jointe, illisible : dossier temporaire de macOS refusé ; accès à Prism refusé).
+
+Hypothèse : le départ du glisser relu une seconde fois après un premier déplacement (deux passes d'egui), d'où un décalage égal au premier mouvement. Non reproduite dans les tests, même à 2 pixels par point, avec une image de programme et deux passes par image. Correctif défensif : `follow_drag` garde la valeur de départ avec le point de pression et ne la reprend qu'à une nouvelle pression ; `drag_offset` donne le chemin du pointeur depuis la pression. Le test de la bordure passe aussi avec deux passes et un premier pas de 20 points.
