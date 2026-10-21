@@ -72,3 +72,9 @@ Cause : le panneau `egui::Panel::top` prend la taille de son contenu ; l'image, 
 Prompt : capture de la taille voulue au lancement ; « le redimensionnement entre les fenetres gauches et droites bug ».
 
 Cause : l'image du programme était dessinée dans un `scope_builder` à `max_rect`, qui ramenait le curseur du parent sous le contenu réel au lieu du bas du volet ; la hauteur du volet ne tenait pas et la mise en page sautait. Correctif : volet dessiné dans un `new_child`, qui ne touche pas au curseur. Au lancement, l'inspecteur prend 42 % de la fenêtre et le volet du programme la hauteur de l'image à cette largeur, jusqu'à ce qu'on tire une séparation. La bordure grille / inspecteur est faite à la main (`exact_size`, bande de 8 px tirée de côté, curseur de redimensionnement, 260 px au minimum, 360 px laissés à la grille). Test kittest du glisser de la bordure.
+
+## Ticket 102 : la bordure suit la souris
+
+Prompt : « le redimensionnement gauche-droite déconne. il bouge plus vite que la sourie ».
+
+Cause : la largeur était mise à jour en ajoutant le déplacement de la souris à chaque passage ; l'interface peut être disposée plus d'une fois par image, le même déplacement comptait alors plusieurs fois. Correctif : au début du glisser, la largeur de départ est gardée ; ensuite largeur = départ + (point de pression − pointeur). Même chose pour la séparation du programme. Le test kittest vérifie qu'un glisser de 100 points déplace la bordure de 100 points.
