@@ -75,6 +75,64 @@ fn bank_variants() -> Vec<Effect> {
             "domain_warp",
             &[("palette", 4.0), ("strength", 3.0), ("warp_levels", 3.0)],
         ),
+        variant(
+            "plane_wave",
+            &[("shape", 2.0), ("direction", 30.0), ("palette", 6.0)],
+        ),
+        variant(
+            "plane_wave",
+            &[("shape", 1.0), ("duty", 0.8), ("palette", 2.0)],
+        ),
+        variant("ripples", &[("palette", 4.0)]),
+        variant(
+            "ripples",
+            &[("shape", 2.0), ("damping", 0.0), ("palette", 1.0)],
+        ),
+        variant("interference", &[("palette", 3.0)]),
+        variant(
+            "interference",
+            &[
+                ("sources", 5.0),
+                ("layout", 2.0),
+                ("render", 1.0),
+                ("palette", 6.0),
+            ],
+        ),
+        variant("plasma", &[("palette", 1.0)]),
+        variant(
+            "plasma",
+            &[("terms", 7.0), ("complexity", 2.5), ("palette", 5.0)],
+        ),
+        variant("moire", &[("palette", 2.0)]),
+        variant(
+            "moire",
+            &[
+                ("pattern", 1.0),
+                ("shift", 0.1),
+                ("sharpness", 0.8),
+                ("palette", 4.0),
+            ],
+        ),
+        variant("spiral", &[("palette", 1.0)]),
+        variant(
+            "spiral",
+            &[
+                ("curve", 1.0),
+                ("shape", 2.0),
+                ("arms", 6.0),
+                ("palette", 2.0),
+            ],
+        ),
+        variant("line_waves", &[("palette", 3.0)]),
+        variant(
+            "line_waves",
+            &[
+                ("perspective", 1.0),
+                ("noise", 0.7),
+                ("lines", 40.0),
+                ("palette", 3.0),
+            ],
+        ),
     ]
 }
 

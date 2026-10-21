@@ -19,3 +19,7 @@
 
 - Un générateur de la banque coûte un fichier WGSL court et une entrée de catalogue.
 - Les générateurs en couleur directe (pas une valeur passée dans une palette) demanderont une seconde forme de champ ; ceux à mémoire (◆) une mémoire par clip dans le moteur.
+
+## Complément (ticket 97) : vagues
+
+Les générateurs de vagues partagent `wave_shape(phase, forme, rapport cyclique, douceur)` dans `generator.wgsl` : sinus, triangle (montée sur le rapport cyclique), carré (allumé sur le rapport cyclique, bords adoucis) et dents de scie. Le temps fait avancer d'une longueur d'onde par unité (temps du tempo ou seconde, fois la vitesse). Les palettes cycliques (arc-en-ciel, néon, coucher de soleil) ne parcourent que 80 % de leur cycle : sinon 0 et 1 ont la même couleur et une forme à deux valeurs disparaît.

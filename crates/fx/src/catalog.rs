@@ -549,6 +549,115 @@ pub const GENERATORS: &[EffectInfo] = &[
         text: None,
         common: Some(7),
     },
+    EffectInfo {
+        kind: "plane_wave",
+        label: "Onde plane",
+        params: bank_params!(
+            ParamInfo::choice("shape", "Forme", WAVE_SHAPES),
+            ParamInfo::range("direction", "Direction", -180.0, 180.0, 0.0),
+            ParamInfo::range("wavelength", "Longueur d'onde", 0.01, 2.0, 0.2),
+            ParamInfo::range("duty", "Rapport cyclique", 0.05, 0.95, 0.5),
+            ParamInfo::range("softness", "Douceur des bords", 0.0, 1.0, 0.1),
+        ),
+        source: include_str!("shaders/bank/plane_wave.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(5),
+    },
+    EffectInfo {
+        kind: "ripples",
+        label: "Ondes concentriques",
+        params: bank_params!(
+            ParamInfo::choice("shape", "Forme", WAVE_SHAPES),
+            ParamInfo::range("center_x", "Centre X", -1.0, 1.0, 0.0),
+            ParamInfo::range("center_y", "Centre Y", -1.0, 1.0, 0.0),
+            ParamInfo::range("wavelength", "Longueur d'onde", 0.01, 2.0, 0.1),
+            ParamInfo::range("damping", "Amortissement", 0.0, 10.0, 1.0),
+            ParamInfo::range("duty", "Rapport cyclique", 0.05, 0.95, 0.5),
+        ),
+        source: include_str!("shaders/bank/ripples.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(6),
+    },
+    EffectInfo {
+        kind: "interference",
+        label: "Interférences",
+        params: bank_params!(
+            ParamInfo::range("sources", "Sources", 2.0, 8.0, 3.0),
+            ParamInfo::choice("layout", "Disposition", LAYOUT_CHOICES),
+            ParamInfo::range("spread", "Écart", 0.0, 1.0, 0.3),
+            ParamInfo::range("motion", "Mouvement", 0.0, 2.0, 0.3),
+            ParamInfo::range("wavelength", "Longueur d'onde", 0.01, 1.0, 0.06),
+            ParamInfo::range("phase", "Déphasage", 0.0, 1.0, 0.0),
+            ParamInfo::choice("render", "Rendu", INTERFERENCE_CHOICES),
+        ),
+        source: include_str!("shaders/bank/interference.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(7),
+    },
+    EffectInfo {
+        kind: "plasma",
+        label: "Plasma",
+        params: bank_params!(
+            ParamInfo::range("terms", "Termes", 1.0, 8.0, 4.0),
+            ParamInfo::range("frequency", "Fréquence", 0.5, 30.0, 6.0),
+            ParamInfo::range("complexity", "Complexité", 0.0, 3.0, 1.0),
+        ),
+        source: include_str!("shaders/bank/plasma.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(3),
+    },
+    EffectInfo {
+        kind: "moire",
+        label: "Moiré",
+        params: bank_params!(
+            ParamInfo::choice("pattern", "Trame", MOIRE_CHOICES),
+            ParamInfo::range("pitch", "Pas", 0.004, 0.2, 0.035),
+            ParamInfo::range("angle_gap", "Écart d'angle", -45.0, 45.0, 5.0),
+            ParamInfo::range("pitch_gap", "Écart de pas", -0.5, 0.5, 0.0),
+            ParamInfo::range("shift", "Décalage", -0.5, 0.5, 0.0),
+            ParamInfo::range("motion", "Rotation", -20.0, 20.0, 1.0),
+            ParamInfo::range("sharpness", "Netteté", 0.0, 1.0, 0.0),
+        ),
+        source: include_str!("shaders/bank/moire.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(7),
+    },
+    EffectInfo {
+        kind: "spiral",
+        label: "Spirale",
+        params: bank_params!(
+            ParamInfo::range("arms", "Bras", 1.0, 16.0, 3.0),
+            ParamInfo::range("twist", "Enroulement", -40.0, 40.0, 8.0),
+            ParamInfo::choice("curve", "Type", SPIRAL_CHOICES),
+            ParamInfo::choice("shape", "Forme", WAVE_SHAPES),
+            ParamInfo::range("duty", "Rapport cyclique", 0.05, 0.95, 0.5),
+        ),
+        source: include_str!("shaders/bank/spiral.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(5),
+    },
+    EffectInfo {
+        kind: "line_waves",
+        label: "Vagues de lignes",
+        params: bank_params!(
+            ParamInfo::range("lines", "Lignes", 2.0, 100.0, 24.0),
+            ParamInfo::range("amplitude", "Amplitude", 0.0, 0.5, 0.06),
+            ParamInfo::range("frequency", "Fréquence", 0.25, 20.0, 2.0),
+            ParamInfo::range("thickness", "Épaisseur", 0.02, 0.95, 0.2),
+            ParamInfo::range("perspective", "Perspective", 0.0, 1.0, 0.0),
+            ParamInfo::range("noise", "Bruit", 0.0, 1.0, 0.0),
+        ),
+        source: include_str!("shaders/bank/line_waves.wgsl"),
+        passes: &["fs_main"],
+        text: None,
+        common: Some(6),
+    },
 ];
 
 const BASE_CHOICES: &[&str] = &["Valeur", "Perlin", "Simplex"];
@@ -571,6 +680,11 @@ const PALETTE_CHOICES: &[&str] = &[
     "Coucher de soleil",
 ];
 const TIME_CHOICES: &[&str] = &["Temps du tempo", "Secondes"];
+const WAVE_SHAPES: &[&str] = &["Sinus", "Triangle", "Carré", "Dents de scie"];
+const LAYOUT_CHOICES: &[&str] = &["Cercle", "Ligne", "Au hasard"];
+const INTERFERENCE_CHOICES: &[&str] = &["Somme", "Intensité"];
+const MOIRE_CHOICES: &[&str] = &["Lignes", "Cercles", "Grille"];
+const SPIRAL_CHOICES: &[&str] = &["Archimède", "Logarithmique"];
 const NO_YES: &[&str] = &["Non", "Oui"];
 
 /// Settings shared by the generators of the procedural bank, after their

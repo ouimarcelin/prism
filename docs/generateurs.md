@@ -40,18 +40,18 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 16 | Onde plane | sinus dans une direction | forme, angle, longueur d'onde, rapport cyclique | ● | P1 | — |
-| 17 | Ondes concentriques | cercles qui s'éloignent | centre, longueur d'onde, amortissement, forme | ● | P1 | — |
-| 18 | Interférences | 2 à 8 sources d'ondes | sources, disposition, mouvement, phase | ● | P1 | — |
-| 19 | Plasma | somme de sinus | termes, fréquences, complexité | ● | P1 | — |
-| 20 | Moiré | deux trames superposées | type, écart d'angle, écart de pas | ● | P1 | — |
+| 16 | Onde plane | sinus dans une direction | forme, angle, longueur d'onde, rapport cyclique | ● | P1 | ✅ |
+| 17 | Ondes concentriques | cercles qui s'éloignent | centre, longueur d'onde, amortissement, forme | ● | P1 | ✅ |
+| 18 | Interférences | 2 à 8 sources d'ondes | sources, disposition, mouvement, phase | ● | P1 | ✅ |
+| 19 | Plasma | somme de sinus | termes, fréquences, complexité | ● | P1 | ✅ |
+| 20 | Moiré | deux trames superposées | type, écart d'angle, écart de pas | ● | P1 | ✅ |
 | 21 | Ondes stationnaires | figures de Chladni | modes n/m, forme, netteté | ● | P2 | — |
 | 22 | Lissajous | courbe de rapports de fréquences | rapports, déphasage, épaisseur, traînée | ● | P2 | — |
-| 23 | Spirale | bras qui tournent | bras, enroulement, type | ● | P1 | — |
+| 23 | Spirale | bras qui tournent | bras, enroulement, type | ● | P1 | ✅ |
 | 24 | Balayage radar | secteur tournant et rémanence | largeur, rémanence, anneaux | ● | P2 | — |
 | 25 | Océan | vagues de Gerstner | hauteur, vent, écume, perspective | ●● | P2 | — |
 | 26 | Oscilloscope | trace de signal | forme, fréquence, bruit, lueur | ● | P2 | — |
-| 27 | Vagues de lignes | lignes déplacées par une onde | lignes, amplitude, perspective | ● | P1 | — |
+| 27 | Vagues de lignes | lignes déplacées par une onde | lignes, amplitude, perspective | ● | P1 | ✅ |
 
 ## 3. Fluides et matières
 
@@ -109,6 +109,7 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 ## Ordre
 
 1. Socle commun et premiers bruits (fait).
-2. Les autres P1, catégorie par catégorie.
-3. Mémoire d'image par clip (◆).
-4. P2, puis P3.
+2. Vagues P1 (fait) : formes d'onde communes (sinus, triangle, carré, dents de scie) dans `generator.wgsl`.
+3. Les autres P1, catégorie par catégorie.
+4. Mémoire d'image par clip (◆).
+5. P2, puis P3.
