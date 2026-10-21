@@ -48,3 +48,9 @@ Prompt : « implémentes les effets dont on vient de parler », compris comme la
 Résultat : sept générateurs (n° 16, 17, 18, 19, 20, 23, 27 de `docs/generateurs.md`) et la fonction commune `wave_shape`. Vérifiés sur la planche de `gallery` (14 variantes) et par le test naga.
 
 Problème : sur la planche, l'onde carrée en palette néon paraissait unie. Les palettes cosinus reviennent à leur couleur de départ au bout d'un cycle ; corrigé en ne lisant que 80 % du cycle, ce qui change un peu les couleurs des bruits du ticket 95.
+
+## Ticket 98 : changer le générateur d'un clip
+
+Prompt : « fais en sorte qu'une fois un générateur choisi, on ai la possibilité de la modifier ».
+
+Résultat : le titre du générateur dans l'inspecteur devient un menu « Générateur » listant tous les générateurs intégrés. `switch_generator` remplace le générateur ; entre deux générateurs de la banque, il garde les 16 réglages communs avec leurs animations, liens au tableau de bord et bandes du son ; les réglages propres reprennent leur valeur par défaut. Le nom du clip suit s'il était encore celui de l'ancien générateur. Test unitaire ; capture `generateur` vérifiée.

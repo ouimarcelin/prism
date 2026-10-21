@@ -405,7 +405,16 @@ impl ControlPanel {
                     ui.end_row();
                 });
             if let Some(generator) = clip.source.generator_mut() {
+                let before = generator_label(generator);
                 generator_settings(ui, generator, &mut self.learn, slot);
+                let after = generator_label(generator);
+                // A clip still named after its generator follows the new one.
+                if before != after
+                    && let (Some(before), Some(after)) = (before, after)
+                    && clip.name == before
+                {
+                    clip.name = after.to_owned();
+                }
             }
             dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
             effect_section(
@@ -722,4 +731,9 @@ fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
         ))
         .weak(),
     );
+}
+
+/// Name of the generator of `effect` when it is a built-in one.
+fn generator_label(effect: &prism_core::Effect) -> Option<&'static str> {
+    prism_fx::find_generator(&effect.kind).map(|info| info.label)
 }

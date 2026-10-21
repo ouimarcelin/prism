@@ -9,7 +9,10 @@ use prism_core::{
     Animation, Band, ControlTarget, DASHBOARD_SIZE, Effect, EffectOwner, MIN_PERIOD, Period, Shape,
     Slot, Unit,
 };
-use prism_fx::{CATALOG, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of};
+use prism_fx::{
+    CATALOG, COMMON_PARAMS, EffectInfo, GENERATORS, ISF_KIND, ParamInfo, find, find_generator,
+    shader_of,
+};
 
 use crate::learn::Learn;
 use crate::presets::PresetStore;
@@ -303,6 +306,34 @@ fn effect_drop(
         .map(|_| (drag.index, index + usize::from(below)))
 }
 
+/// Turns `generator` into a new generator of kind `info`. Between two
+/// generators of the procedural bank, the shared settings (space, time and
+/// colour) are kept, with their animations and links; the others go back to
+/// their defaults.
+pub(crate) fn switch_generator(generator: &mut Effect, info: &EffectInfo) {
+    let mut next = info.create();
+    let shared = describe(generator).is_ok_and(|old| old.common.is_some()) && info.common.is_some();
+    if shared {
+        for param in &COMMON_PARAMS {
+            let id = param.id;
+            if let Some(value) = generator.params.get(id) {
+                next.params.insert(id.to_owned(), *value);
+            }
+            if let Some(animation) = generator.animations.remove(id) {
+                next.animations.insert(id.to_owned(), animation);
+            }
+            if let Some(link) = generator.links.get(id) {
+                next.links.insert(id.to_owned(), *link);
+            }
+            if let Some(band) = generator.audio.get(id) {
+                next.audio.insert(id.to_owned(), *band);
+            }
+        }
+    }
+    next.bypass = generator.bypass;
+    *generator = next;
+}
+
 /// One line per setting of an effect.
 /// Settings of the generator of a generated clip, animations included.
 pub(crate) fn generator_settings(
@@ -313,9 +344,31 @@ pub(crate) fn generator_settings(
 ) {
     match describe(generator) {
         Ok(info) => {
-            let title = ui.label(RichText::new(info.label).semibold());
-            if let Some(hover) = file_hover(generator) {
-                title.on_hover_text(hover);
+            let mut picked = None;
+            ui.horizontal(|ui| {
+                ui.label("Générateur");
+                let menu = egui::ComboBox::from_id_salt(("generator kind", slot))
+                    .selected_text(RichText::new(info.label).semibold())
+                    .height(480.0)
+                    .show_ui(ui, |ui| {
+                        for other in GENERATORS {
+                            if ui
+                                .selectable_label(other.kind == generator.kind, other.label)
+                                .clicked()
+                                && other.kind != generator.kind
+                            {
+                                picked = Some(other);
+                            }
+                        }
+                    });
+                let hover =
+                    file_hover(generator).map_or_else(String::new, |text| format!("{text}\n"));
+                menu.response
+                    .on_hover_text(format!("{hover}Changer de générateur"));
+            });
+            if let Some(other) = picked {
+                switch_generator(generator, other);
+                return;
             }
             if info.text.is_some() {
                 ui.add(
@@ -721,5 +774,24 @@ mod tests {
         // A missing file: said so, with its path.
         let message = describe(&effects[2]).unwrap_err();
         assert!(message.starts_with("/shaders/glow.fs : "), "{message}");
+    }
+
+    #[test]
+    fn switching_generator_keeps_the_shared_settings() {
+        let mut generator = Effect::new("fractal_noise");
+        generator.set_param("palette", 3.0);
+        generator.set_param("octaves", 7.0);
+        generator.links.insert("zoom".into(), 2);
+        let spiral = find_generator("spiral").unwrap();
+        switch_generator(&mut generator, spiral);
+        assert_eq!(generator.kind, "spiral");
+        assert_eq!(generator.param("palette"), Some(3.0));
+        assert_eq!(generator.param("octaves"), None);
+        assert_eq!(generator.links.get("zoom"), Some(&2));
+
+        // Out of the bank: nothing kept.
+        switch_generator(&mut generator, find_generator("gradient").unwrap());
+        assert_eq!(generator.kind, "gradient");
+        assert!(generator.params.is_empty() && generator.links.is_empty());
     }
 }
