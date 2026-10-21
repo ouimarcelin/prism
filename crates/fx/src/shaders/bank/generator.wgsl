@@ -8,6 +8,7 @@
 //
 // Noises: integer hash (pcg3d), value noise, Perlin and simplex noise in
 // three dimensions (time is the third), fractal sums, Worley cells.
+// Waves: one cycle of a sine, triangle, square or sawtooth.
 
 const C_ZOOM: u32 = 0u;
 const C_OFFSET_X: u32 = 1u;
@@ -242,6 +243,32 @@ fn worley(p: vec2<f32>, t: f32, jitter: f32, motion: f32, metric: u32) -> vec3<f
     return vec3<f32>(f1, f2, id);
 }
 
+// ---- Waves ----
+
+// One cycle of a wave at `phase` (in cycles), from 0 to 1. Shapes: 0 sine,
+// 1 triangle (rising for `duty` of the cycle), 2 square (on for `duty` of
+// the cycle, edges blurred by `soft`), 3 sawtooth.
+fn wave_shape(phase: f32, shape: u32, duty: f32, soft: f32) -> f32 {
+    let x = fract(phase);
+    let d = clamp(duty, 0.01, 0.99);
+    switch shape {
+        case 1u: {
+            return select((1.0 - x) / (1.0 - d), x / d, x < d);
+        }
+        case 2u: {
+            let edge = max(soft, 1e-3) * 0.5 * min(d, 1.0 - d);
+            let from_centre = abs(fract(phase - d * 0.5 + 0.5) - 0.5);
+            return 1.0 - smoothstep(d * 0.5 - edge, d * 0.5 + edge, from_centre);
+        }
+        case 3u: {
+            return x;
+        }
+        default: {
+            return 0.5 - 0.5 * cos(2.0 * PI * x);
+        }
+    }
+}
+
 // ---- Space, time, colour ----
 
 // The point of the generator's plane under `uv`: centred, square pixels,
@@ -271,10 +298,13 @@ fn cosine(x: f32, a: vec3<f32>, b: vec3<f32>, c: vec3<f32>, d: vec3<f32>) -> vec
 // Colour of value `x` (0 to 1) in palette `index`.
 fn palette(x: f32, index: u32) -> vec3<f32> {
     let half = vec3<f32>(0.5);
+    // Cosine palettes come back to their first colour after a whole cycle:
+    // read them over 80 % of it, so that 0 and 1 stay apart.
+    let y = x * 0.8;
     switch index {
         // Rainbow.
         case 1u: {
-            return cosine(x, half, half, vec3<f32>(1.0), vec3<f32>(0.0, 0.33, 0.67));
+            return cosine(y, half, half, vec3<f32>(1.0), vec3<f32>(0.0, 0.33, 0.67));
         }
         // Fire: black, red, yellow, white.
         case 2u: {
@@ -291,11 +321,11 @@ fn palette(x: f32, index: u32) -> vec3<f32> {
         }
         // Neon.
         case 5u: {
-            return cosine(x, half, half, vec3<f32>(2.0, 1.0, 0.0), vec3<f32>(0.5, 0.2, 0.25));
+            return cosine(y, half, half, vec3<f32>(2.0, 1.0, 0.0), vec3<f32>(0.5, 0.2, 0.25));
         }
         // Sunset.
         case 6u: {
-            return cosine(x, vec3<f32>(0.8, 0.5, 0.4), vec3<f32>(0.2, 0.4, 0.2), vec3<f32>(2.0, 1.0, 1.0), vec3<f32>(0.0, 0.25, 0.25));
+            return cosine(y, vec3<f32>(0.8, 0.5, 0.4), vec3<f32>(0.2, 0.4, 0.2), vec3<f32>(2.0, 1.0, 1.0), vec3<f32>(0.0, 0.25, 0.25));
         }
         default: {
             return vec3<f32>(x);

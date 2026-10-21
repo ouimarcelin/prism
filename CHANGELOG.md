@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Banque de générateurs, vagues : « Onde plane », « Ondes concentriques », « Interférences » (2 à 8 sources), « Plasma », « Moiré » (lignes, cercles, grille), « Spirale » (Archimède, logarithmique) et « Vagues de lignes » (sinus ou bruit, perspective) ; formes sinus, triangle, carré et dents de scie avec rapport cyclique.
 - Chaîne d'effets : chaque effet se replie par sa flèche (état gardé dans le projet) et change de place par glisser-déposer sur sa poignée ; les boutons monter et descendre disparaissent.
 - Banque de générateurs procéduraux (ADR 0045, feuille de route `docs/generateurs.md`) : socle commun de 16 réglages (espace, temps, palette et couleur) et bibliothèque de bruits ; « Bruit fractal » (valeur, Perlin, simplex ; fBm, turbulence, crêtes, gonflé), « Cellules » (Worley, Voronoï) et « Distorsion » (distorsion de domaine). Les effets ont jusqu'à 32 réglages.
 - Bandes LED courbes (ADR 0044) : case « Courbe (Bézier) » d'un luminaire, deux poignées pour plier la bande sur l'image ; pixels également espacés le long de la courbe.
@@ -47,6 +48,10 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 - `cargo-deny` ne vérifie que les plateformes livrées (macOS, Windows).
 - wgpu 30 au lieu de 26, Rust 1.95 minimum, en vue de l'interface egui 0.36 (ADR 0005).
 - CI : seules les exécutions de pull request remplacées sont annulées ; chaque push sur `main` garde sa propre exécution complète.
+
+### Corrigé
+
+- Palettes arc-en-ciel, néon et coucher de soleil de la banque : 0 et 1 donnaient la même couleur, une onde carrée devenait unie ; elles ne parcourent plus que 80 % de leur cycle.
 
 ### Ajouté
 

@@ -40,3 +40,11 @@
 Prompt : « chaque effet doit pouvoir se replier ; les effets peuvent changer d'ordre par drag&drop ».
 
 Résultat : champ `collapsed` dans `Effect` (absent du fichier quand faux, comme le repli des groupes) ; ligne de titre de l'effet avec poignée, flèche de repli, case d'activation et ×. Le glisser-déposer reste dans une même chaîne (même propriétaire) et montre un trait de dépôt au-dessus ou au-dessous du bloc visé ; il remplace les boutons ⏶ ⏷ (`ChainEdit::Move { from, to }`). Test unitaire du déplacement ; capture `clip` vérifiée.
+
+## Ticket 97 : générateurs de vagues (2026-10-21)
+
+Prompt : « implémentes les effets dont on vient de parler », compris comme la catégorie « Vagues » proposée à la fin du ticket 95.
+
+Résultat : sept générateurs (n° 16, 17, 18, 19, 20, 23, 27 de `docs/generateurs.md`) et la fonction commune `wave_shape`. Vérifiés sur la planche de `gallery` (14 variantes) et par le test naga.
+
+Problème : sur la planche, l'onde carrée en palette néon paraissait unie. Les palettes cosinus reviennent à leur couleur de départ au bout d'un cycle ; corrigé en ne lisant que 80 % du cycle, ce qui change un peu les couleurs des bruits du ticket 95.
