@@ -29,10 +29,18 @@ use crate::theme::{self, Emphasis};
 
 impl ControlPanel {
     pub(crate) fn inspector(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
+        // The program on top, its height set by dragging the line under it;
+        // the settings scroll below without moving it.
+        egui::Panel::top("program")
+            .frame(egui::Frame::NONE)
+            .resizable(true)
+            .default_size(240.0)
+            .min_size(80.0)
+            .max_size((ui.available_height() - 120.0).max(80.0))
+            .show(ui, |ui| preview(ui, frame));
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                preview(ui, frame);
                 effect_section(
                     ui,
                     "Effets de la composition",
@@ -705,32 +713,39 @@ impl ControlPanel {
     }
 }
 
-/// The program image, as wide as the panel.
+/// The program image, as large as its pane allows without distortion,
+/// centred, with its size and outputs under it.
 fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
     ui.label(RichText::new("Programme").semibold());
     let Some((texture, resolution)) = frame.preview else {
         ui.label(RichText::new("Aperçu indisponible").weak());
         return;
     };
-    let width = ui.available_width();
-    let height = width * resolution.height as f32 / resolution.width.max(1) as f32;
-    ui.add(egui::Image::from_texture(egui::load::SizedTexture::new(
-        texture,
-        Vec2::new(width, height),
-    )));
-    ui.label(
-        RichText::new(format!(
-            "{} × {}{}",
-            resolution.width,
-            resolution.height,
-            match frame.output_screens.len() {
-                0 => String::new(),
-                1 => " · sortie ouverte".to_owned(),
-                count => format!(" · {count} sorties ouvertes"),
-            }
-        ))
-        .weak(),
+    let caption = format!(
+        "{} × {}{}",
+        resolution.width,
+        resolution.height,
+        match frame.output_screens.len() {
+            0 => String::new(),
+            1 => " · sortie ouverte".to_owned(),
+            count => format!(" · {count} sorties ouvertes"),
+        }
     );
+    let caption_height = ui.text_style_height(&egui::TextStyle::Body) + ui.spacing().item_spacing.y;
+    let room = Vec2::new(
+        ui.available_width(),
+        (ui.available_height() - caption_height - 4.0).max(16.0),
+    );
+    let aspect = resolution.width.max(1) as f32 / resolution.height.max(1) as f32;
+    let size = if room.x / room.y > aspect {
+        Vec2::new(room.y * aspect, room.y)
+    } else {
+        Vec2::new(room.x, room.x / aspect)
+    };
+    let (area, _) = ui.allocate_exact_size(Vec2::new(room.x, size.y), egui::Sense::hover());
+    let image = egui::Rect::from_center_size(area.center(), size);
+    egui::Image::from_texture(egui::load::SizedTexture::new(texture, size)).paint_at(ui, image);
+    ui.label(RichText::new(caption).weak());
 }
 
 /// Name of the generator of `effect` when it is a built-in one.

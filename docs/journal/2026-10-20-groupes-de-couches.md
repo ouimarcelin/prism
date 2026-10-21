@@ -54,3 +54,9 @@ Problème : sur la planche, l'onde carrée en palette néon paraissait unie. Les
 Prompt : « fais en sorte qu'une fois un générateur choisi, on ai la possibilité de la modifier ».
 
 Résultat : le titre du générateur dans l'inspecteur devient un menu « Générateur » listant tous les générateurs intégrés. `switch_generator` remplace le générateur ; entre deux générateurs de la banque, il garde les 16 réglages communs avec leurs animations, liens au tableau de bord et bandes du son ; les réglages propres reprennent leur valeur par défaut. Le nom du clip suit s'il était encore celui de l'ancien générateur. Test unitaire ; capture `generateur` vérifiée.
+
+## Ticket 99 : programme séparé des réglages
+
+Prompt : « scindes la fenêtre programme en deux… c'est moi qui décide de la taille de la fenetre avec un drag entre les fenetres ».
+
+Résultat : panneau haut redimensionnable (`egui::Panel::top("program")`, 80 px au minimum, 120 px laissés aux réglages) dans l'inspecteur ; l'image du programme y tient en entier, centrée, à son rapport largeur sur hauteur ; les réglages ont leur propre défilement dessous. Capture vérifiée (sans image du programme dans le harnais de test).
