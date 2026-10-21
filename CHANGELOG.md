@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Changer le générateur d'un clip : menu « Générateur » de l'inspecteur ; entre générateurs de la banque, les réglages d'espace, de temps et de couleur sont gardés (avec animations et liens) ; un clip encore nommé d'après son générateur prend le nom du nouveau.
 - Banque de générateurs, vagues : « Onde plane », « Ondes concentriques », « Interférences » (2 à 8 sources), « Plasma », « Moiré » (lignes, cercles, grille), « Spirale » (Archimède, logarithmique) et « Vagues de lignes » (sinus ou bruit, perspective) ; formes sinus, triangle, carré et dents de scie avec rapport cyclique.
 - Chaîne d'effets : chaque effet se replie par sa flèche (état gardé dans le projet) et change de place par glisser-déposer sur sa poignée ; les boutons monter et descendre disparaissent.
 - Banque de générateurs procéduraux (ADR 0045, feuille de route `docs/generateurs.md`) : socle commun de 16 réglages (espace, temps, palette et couleur) et bibliothèque de bruits ; « Bruit fractal » (valeur, Perlin, simplex ; fBm, turbulence, crêtes, gonflé), « Cellules » (Worley, Voronoï) et « Distorsion » (distorsion de domaine). Les effets ont jusqu'à 32 réglages.
