@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Banque de générateurs, tous ceux sans mémoire d'image (33) : bruit tourbillonnant, grain, bruit rose / brun, bruit de Gabor ; ondes stationnaires, Lissajous, balayage radar, océan, oscilloscope ; caustiques, fumée, feu, aurore, nuages, marbre / bois, métaballes ; tunnel, vortex, Truchet, pavage, rayons, grille déformée, polygones répétés ; Mandelbrot, Julia, pli fractal, Sierpinski ; mire, signal analogique, blocs numériques ; champ d'étoiles, pluie / neige, points en grille.
 - Inspecteur scindé : l'inspecteur occupe 42 % de la fenêtre au lancement et l'image du programme toute sa largeur ; bordure avec la grille tirée à la souris, qu'elle suit exactement ; l'image reste en haut, à la taille choisie en tirant la ligne qui la sépare des réglages ; les réglages défilent dessous sans la déplacer ; l'image s'adapte à la place sans se déformer.
 - Changer le générateur d'un clip : menu « Générateur » de l'inspecteur ; entre générateurs de la banque, les réglages d'espace, de temps et de couleur sont gardés (avec animations et liens) ; un clip encore nommé d'après son générateur prend le nom du nouveau.
 - Banque de générateurs, vagues : « Onde plane », « Ondes concentriques », « Interférences » (2 à 8 sources), « Plasma », « Moiré » (lignes, cercles, grille), « Spirale » (Archimède, logarithmique) et « Vagues de lignes » (sinus ou bruit, perspective) ; formes sinus, triangle, carré et dents de scie avec rapport cyclique.

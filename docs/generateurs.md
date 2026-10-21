@@ -31,10 +31,10 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 | 9 | Worley F1 | distance au point le plus proche | densité, aléa, métrique | ● | P1 | ✅ (Cellules, mode « F1 ») |
 | 10 | Worley F2−F1 | bords de cellules | épaisseur, métrique, mode | ● | P1 | ✅ (Cellules, mode « bords ») |
 | 11 | Voronoï plein | cellules à couleur unie | densité, bordure, mouvement | ● | P1 | ✅ (Cellules, mode « plein ») |
-| 12 | Curl noise | champ tourbillonnant | échelle, force, octaves | ●● | P2 | — |
-| 13 | Bruit blanc / grain | neige TV | taille du grain, cadence, couleur/mono | ● | P1 | — |
-| 14 | Bruit rose / brun | grain filtré | pente spectrale, taille | ● | P3 | — |
-| 15 | Bruit de Gabor | bruit orienté, fibreux | orientation, fréquence, dispersion | ●● | P3 | — |
+| 12 | Curl noise | champ tourbillonnant | échelle, force, octaves | ●● | P2 | ✅ |
+| 13 | Bruit blanc / grain | neige TV | taille du grain, cadence, couleur/mono | ● | P1 | ✅ |
+| 14 | Bruit rose / brun | grain filtré | pente spectrale, taille | ● | P3 | ✅ |
+| 15 | Bruit de Gabor | bruit orienté, fibreux | orientation, fréquence, dispersion | ●● | P3 | ✅ |
 
 ## 2. Vagues et oscillations
 
@@ -45,25 +45,25 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 | 18 | Interférences | 2 à 8 sources d'ondes | sources, disposition, mouvement, phase | ● | P1 | ✅ |
 | 19 | Plasma | somme de sinus | termes, fréquences, complexité | ● | P1 | ✅ |
 | 20 | Moiré | deux trames superposées | type, écart d'angle, écart de pas | ● | P1 | ✅ |
-| 21 | Ondes stationnaires | figures de Chladni | modes n/m, forme, netteté | ● | P2 | — |
-| 22 | Lissajous | courbe de rapports de fréquences | rapports, déphasage, épaisseur, traînée | ● | P2 | — |
+| 21 | Ondes stationnaires | figures de Chladni | modes n/m, forme, netteté | ● | P2 | ✅ |
+| 22 | Lissajous | courbe de rapports de fréquences | rapports, déphasage, épaisseur, traînée | ● | P2 | ✅ |
 | 23 | Spirale | bras qui tournent | bras, enroulement, type | ● | P1 | ✅ |
-| 24 | Balayage radar | secteur tournant et rémanence | largeur, rémanence, anneaux | ● | P2 | — |
-| 25 | Océan | vagues de Gerstner | hauteur, vent, écume, perspective | ●● | P2 | — |
-| 26 | Oscilloscope | trace de signal | forme, fréquence, bruit, lueur | ● | P2 | — |
+| 24 | Balayage radar | secteur tournant et rémanence | largeur, rémanence, anneaux | ● | P2 | ✅ |
+| 25 | Océan | vagues de Gerstner | hauteur, vent, écume, perspective | ●● | P2 | ✅ |
+| 26 | Oscilloscope | trace de signal | forme, fréquence, bruit, lueur | ● | P2 | ✅ |
 | 27 | Vagues de lignes | lignes déplacées par une onde | lignes, amplitude, perspective | ● | P1 | ✅ |
 
 ## 3. Fluides et matières
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 28 | Caustiques | lumière sous l'eau | profondeur, netteté, dispersion | ●● | P1 | — |
-| 29 | Fumée | fBm qui monte | densité, montée, turbulence | ●● | P1 | — |
-| 30 | Feu | turbulence étirée | hauteur, intensité, vent | ●● | P1 | — |
-| 31 | Aurore | rideaux ondulants | rideaux, ondulation, scintillement | ●● | P2 | — |
-| 32 | Nuages | fBm à seuil, éclairé | couverture, densité, vent | ●● | P2 | — |
-| 33 | Marbre / bois | sinus perturbé | type, veines, turbulence | ● | P2 | — |
-| 34 | Métaballes / lave | champs additionnés à seuil | boules, taille, seuil | ● | P1 | — |
+| 28 | Caustiques | lumière sous l'eau | profondeur, netteté, dispersion | ●● | P1 | ✅ |
+| 29 | Fumée | fBm qui monte | densité, montée, turbulence | ●● | P1 | ✅ |
+| 30 | Feu | turbulence étirée | hauteur, intensité, vent | ●● | P1 | ✅ |
+| 31 | Aurore | rideaux ondulants | rideaux, ondulation, scintillement | ●● | P2 | ✅ |
+| 32 | Nuages | fBm à seuil, éclairé | couverture, densité, vent | ●● | P2 | ✅ |
+| 33 | Marbre / bois | sinus perturbé | type, veines, turbulence | ● | P2 | ✅ |
+| 34 | Métaballes / lave | champs additionnés à seuil | boules, taille, seuil | ● | P1 | ✅ |
 | 35 | Réaction-diffusion | Gray-Scott | f, k, diffusion, ensemencer | ◆ | P2 | — |
 | 36 | Fluide 2D | advection de couleur | viscosité, injection | ◆ | P3 | — |
 
@@ -71,38 +71,38 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 37 | Tunnel | coordonnées polaires inversées | forme, vitesse, torsion, motif | ● | P1 | — |
-| 38 | Vortex | rotation selon le rayon | torsion, bras | ● | P2 | — |
-| 39 | Truchet | tuiles aléatoires | type, taille, épaisseur | ● | P1 | — |
-| 40 | Hexagones / triangles | pavage pulsé | pavage, espacement, pulsation | ● | P1 | — |
-| 41 | Rayons | secteurs alternés | rayons, rotation, douceur | ● | P2 | — |
-| 42 | Grille déformée | grille perturbée par du bruit | pas, épaisseur, déformation | ● | P2 | — |
-| 43 | Polygones répétés | formes emboîtées | côtés, répétitions, décalage | ● | P2 | — |
+| 37 | Tunnel | coordonnées polaires inversées | forme, vitesse, torsion, motif | ● | P1 | ✅ |
+| 38 | Vortex | rotation selon le rayon | torsion, bras | ● | P2 | ✅ |
+| 39 | Truchet | tuiles aléatoires | type, taille, épaisseur | ● | P1 | ✅ |
+| 40 | Hexagones / triangles | pavage pulsé | pavage, espacement, pulsation | ● | P1 | ✅ |
+| 41 | Rayons | secteurs alternés | rayons, rotation, douceur | ● | P2 | ✅ |
+| 42 | Grille déformée | grille perturbée par du bruit | pas, épaisseur, déformation | ● | P2 | ✅ |
+| 43 | Polygones répétés | formes emboîtées | côtés, répétitions, décalage | ● | P2 | ✅ |
 
 ## 5. Fractales
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 44 | Mandelbrot | zoom fractal | centre, zoom, itérations | ●● | P2 | — |
-| 45 | Julia | ensemble de Julia animé | constante c, itérations | ●● | P1 | — |
-| 46 | Pli fractal | repliements répétés | plis, angle, échelle | ●● | P2 | — |
-| 47 | Sierpinski | fractale géométrique | niveaux, forme | ● | P3 | — |
+| 44 | Mandelbrot | zoom fractal | centre, zoom, itérations | ●● | P2 | ✅ |
+| 45 | Julia | ensemble de Julia animé | constante c, itérations | ●● | P1 | ✅ |
+| 46 | Pli fractal | repliements répétés | plis, angle, échelle | ●● | P2 | ✅ |
+| 47 | Sierpinski | fractale géométrique | niveaux, forme | ● | P3 | ✅ |
 
 ## 6. Signal et glitch
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 48 | Mire et barres | barres de test | type, dérive | ● | P2 | — |
-| 49 | Signal analogique | balayage, décrochage | décrochage, bruit de ligne | ● | P2 | — |
-| 50 | Blocs numériques | macroblocs aléatoires | taille, densité, cadence | ● | P2 | — |
+| 48 | Mire et barres | barres de test | type, dérive | ● | P2 | ✅ |
+| 49 | Signal analogique | balayage, décrochage | décrochage, bruit de ligne | ● | P2 | ✅ |
+| 50 | Blocs numériques | macroblocs aléatoires | taille, densité, cadence | ● | P2 | ✅ |
 
 ## 7. Particules et champs
 
 | # | Générateur | Principe | Paramètres propres | Coût | Prio | État |
 |---|---|---|---|---|---|---|
-| 51 | Champ d'étoiles | vitesse lumière | densité, vitesse, traînées | ● | P1 | — |
-| 52 | Pluie / neige | chute par couches | densité, angle, vitesse | ● | P2 | — |
-| 53 | Points en grille | points suivant un bruit | pas, taille, bruit | ● | P1 | — |
+| 51 | Champ d'étoiles | vitesse lumière | densité, vitesse, traînées | ● | P1 | ✅ |
+| 52 | Pluie / neige | chute par couches | densité, angle, vitesse | ● | P2 | ✅ |
+| 53 | Points en grille | points suivant un bruit | pas, taille, bruit | ● | P1 | ✅ |
 | 54 | Particules dans un flux | traînées sur un curl noise | nombre, durée de vie | ◆ | P3 | — |
 | 55 | Feux d'artifice | gerbes au tempo | gerbes, taille, gravité | ◆ | P3 | — |
 
@@ -110,6 +110,6 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 
 1. Socle commun et premiers bruits (fait).
 2. Vagues P1 (fait) : formes d'onde communes (sinus, triangle, carré, dents de scie) dans `generator.wgsl`.
-3. Les autres P1, catégorie par catégorie.
+3. Tous les générateurs sans mémoire d'image, P1 à P3 (fait, ticket 104).
 4. Mémoire d'image par clip (◆).
 5. P2, puis P3.
