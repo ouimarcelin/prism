@@ -284,6 +284,11 @@ fn bank_point(uv: vec2<f32>) -> vec2<f32> {
     return q + vec2<f32>(bank_setting(C_OFFSET_X), bank_setting(C_OFFSET_Y)) + vec2<f32>(seed * 7.31, seed * -3.17);
 }
 
+// Size of one pixel in the generator's plane, for soft edges.
+fn bank_pixel() -> f32 {
+    return 1.0 / max(params.size.y, 1.0) / max(bank_setting(C_ZOOM), 1e-3);
+}
+
 // Time of the generator: beats of the tempo, or seconds, times the speed.
 fn bank_time() -> f32 {
     let clock = select(params.beat, params.time, bank_setting(C_TIME_UNIT) > 0.5);

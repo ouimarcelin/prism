@@ -23,3 +23,7 @@
 ## Complément (ticket 97) : vagues
 
 Les générateurs de vagues partagent `wave_shape(phase, forme, rapport cyclique, douceur)` dans `generator.wgsl` : sinus, triangle (montée sur le rapport cyclique), carré (allumé sur le rapport cyclique, bords adoucis) et dents de scie. Le temps fait avancer d'une longueur d'onde par unité (temps du tempo ou seconde, fois la vitesse). Les palettes cycliques (arc-en-ciel, néon, coucher de soleil) ne parcourent que 80 % de leur cycle : sinon 0 et 1 ont la même couleur et une forme à deux valeurs disparaît.
+
+## Complément (ticket 104) : générateurs sans mémoire
+
+Les 33 générateurs restants qui ne gardent rien d'une image à l'autre sont faits, sur le même modèle (`field(p, t)`, réglages propres puis communs). `bank_pixel()` donne la taille d'un pixel dans le plan du générateur, pour adoucir les bords des traits sans dérivées. Restent les quatre générateurs à mémoire (réaction-diffusion, fluide 2D, particules dans un flux, feux d'artifice), qui attendent une mémoire d'image par clip dans le moteur.

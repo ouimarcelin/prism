@@ -84,3 +84,13 @@ Cause : la largeur était mise à jour en ajoutant le déplacement de la souris 
 Prompt : « si je bouge de 50 px vers la gauche, la fenêtre bouge de 70 px » (vidéo jointe, illisible : dossier temporaire de macOS refusé ; accès à Prism refusé).
 
 Hypothèse : le départ du glisser relu une seconde fois après un premier déplacement (deux passes d'egui), d'où un décalage égal au premier mouvement. Non reproduite dans les tests, même à 2 pixels par point, avec une image de programme et deux passes par image. Correctif défensif : `follow_drag` garde la valeur de départ avec le point de pression et ne la reprend qu'à une nouvelle pression ; `drag_offset` donne le chemin du pointeur depuis la pression. Le test de la bordure passe aussi avec deux passes et un premier pas de 20 points.
+
+## Ticket 104 : générateurs sans mémoire d'image (2026-10-21)
+
+Prompt : « créé tous les effets qui ne demande pas de memoire d'image, ne fais pas de pause ».
+
+Résultat : 33 générateurs (n° 12 à 53 de `docs/generateurs.md`, hors ◆), chacun un fichier WGSL dans `crates/fx/src/shaders/bank/` et une entrée du catalogue ; `bank_pixel()` ajouté au socle. Tous validés par naga, vérifiés sur la planche de `gallery` (une variante chacun, deux pour marbre / bois).
+
+Corrections après la planche : Lissajous en pointillés (240 échantillons, passés à 600) ; hexagones rayés (identifiant de tuile arrondi au lieu de tronqué) ; Julia réduite à de la poussière (c par défaut à 170°, l'ensemble connexe classique) ; Mandelbrot centré sur l'ensemble entier ; pli fractal replié avant la rotation.
+
+Limites : océan simple (pas de vraies vagues de Gerstner, pas de reflets) ; mire en valeurs, colorée seulement par la palette.
