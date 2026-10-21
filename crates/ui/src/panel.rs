@@ -129,14 +129,25 @@ pub(crate) struct Dialogs {
     pub(crate) timecode: bool,
 }
 
+/// Narrowest the inspector gets.
+const INSPECTOR_MIN: f32 = 260.0;
+/// Width always left to the grid beside the inspector.
+const INSPECTOR_MIN_GRID: f32 = 360.0;
+/// Share of the window the inspector takes until its edge is dragged.
+const INSPECTOR_SHARE: f32 = 0.42;
+
 /// State of the control window around the document being edited.
 pub struct ControlPanel {
     pub(crate) document: Document,
     pub(crate) selected: Option<Slot>,
     /// Layer or group whose name is being edited, with its name before.
     pub(crate) renaming: Option<(crate::grid::Target, String)>,
-    /// Height of the program image pane, at the top of the inspector.
-    pub(crate) program_height: f32,
+    /// Height of the program image pane, at the top of the inspector, once
+    /// set by dragging; until then the image fills the inspector's width.
+    pub(crate) program_height: Option<f32>,
+    /// Width of the inspector, once set by dragging its edge; until then a
+    /// share of the window.
+    pub(crate) inspector_width: Option<f32>,
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
@@ -170,7 +181,8 @@ impl ControlPanel {
             document,
             selected,
             renaming: None,
-            program_height: 240.0,
+            program_height: None,
+            inspector_width: None,
             dialogs: Dialogs {
                 missing,
                 ..Dialogs::default()
@@ -463,12 +475,43 @@ impl ControlPanel {
             .frame(theme::bar_frame(&style))
             .resizable(false)
             .show(ui, |ui| self.transport(ui, frame.status, &frame.audio));
-        egui::Panel::right("inspector")
+        let window = ui.available_width();
+        let max = (window - INSPECTOR_MIN_GRID).max(INSPECTOR_MIN);
+        let width = self
+            .inspector_width
+            .unwrap_or(window * INSPECTOR_SHARE)
+            .clamp(INSPECTOR_MIN, max);
+        let inspector = egui::Panel::right("inspector")
             .frame(theme::side_frame(&style))
-            .resizable(true)
-            .default_size(340.0)
-            .min_size(260.0)
+            .resizable(false)
+            .show_separator_line(false)
+            .exact_size(width)
             .show(ui, |ui| self.inspector(ui, frame));
+        // The edge between the grid and the inspector, dragged sideways.
+        let edge = inspector.response.rect;
+        let grip =
+            egui::Rect::from_x_y_ranges(edge.left() - 4.0..=edge.left() + 4.0, edge.y_range());
+        let drag = ui.interact(grip, egui::Id::new("inspector edge"), egui::Sense::drag());
+        if drag.dragged() {
+            self.inspector_width = Some((width - drag.drag_delta().x).clamp(INSPECTOR_MIN, max));
+        }
+        let active = drag.hovered() || drag.dragged();
+        if active {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        let palette = theme::palette(ui);
+        ui.painter().vline(
+            edge.left(),
+            edge.y_range(),
+            egui::Stroke::new(
+                if active { 2.0 } else { 1.0 },
+                if active {
+                    palette.brand
+                } else {
+                    ui.visuals().widgets.noninteractive.bg_stroke.color
+                },
+            ),
+        );
         egui::CentralPanel::default()
             .frame(theme::canvas_frame(&style))
             .show(ui, |ui| self.grid(ui, frame.status));

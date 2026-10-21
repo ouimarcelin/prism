@@ -32,16 +32,23 @@ impl ControlPanel {
         // The program on top, its height set by dragging the line under it;
         // the settings scroll below without moving it.
         let max = (ui.available_height() - 120.0).max(80.0);
-        self.program_height = self.program_height.clamp(80.0, max);
         let width = ui.available_width();
-        let (pane, _) =
-            ui.allocate_exact_size(Vec2::new(width, self.program_height), egui::Sense::hover());
-        ui.scope_builder(egui::UiBuilder::new().max_rect(pane), |ui| {
-            preview(ui, frame);
-        });
+        // Until dragged, the pane fits the image at the inspector's width.
+        let fit = frame.preview.map_or(width * 9.0 / 16.0, |(_, resolution)| {
+            width * resolution.height as f32 / resolution.width.max(1) as f32
+        }) + 2.0 * ui.text_style_height(&egui::TextStyle::Body)
+            + 3.0 * ui.spacing().item_spacing.y
+            + 4.0;
+        let height = self.program_height.unwrap_or(fit).clamp(80.0, max);
+        let (pane, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
+        // A child that leaves the parent's cursor under the whole pane.
+        preview(
+            &mut ui.new_child(egui::UiBuilder::new().max_rect(pane)),
+            frame,
+        );
         let (line, drag) = ui.allocate_exact_size(Vec2::new(width, 8.0), egui::Sense::drag());
         if drag.dragged() {
-            self.program_height = (self.program_height + drag.drag_delta().y).clamp(80.0, max);
+            self.program_height = Some((height + drag.drag_delta().y).clamp(80.0, max));
         }
         let active = drag.hovered() || drag.dragged();
         if active {
