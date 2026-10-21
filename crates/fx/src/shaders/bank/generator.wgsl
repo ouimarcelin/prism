@@ -275,7 +275,8 @@ fn wave_shape(phase: f32, shape: u32, duty: f32, soft: f32) -> f32 {
 // then the shared settings of space.
 fn bank_point(uv: vec2<f32>) -> vec2<f32> {
     let aspect = params.size.x / max(params.size.y, 1.0);
-    var q = (uv - vec2<f32>(0.5)) * vec2<f32>(aspect, 1.0);
+    // y up: uv runs down the image.
+    var q = (uv - vec2<f32>(0.5)) * vec2<f32>(aspect, -1.0);
     q = rotate(q, -radians(bank_setting(C_ANGLE)));
     let stretch = exp2(bank_setting(C_STRETCH));
     q = q * vec2<f32>(1.0 / stretch, stretch);
@@ -366,7 +367,17 @@ fn bank_color(v: f32) -> vec4<f32> {
     return vec4<f32>(rgb, alpha);
 }
 
+// Texture coordinates of the pixel being drawn, for generators with memory:
+// their `field` reads the image they keep there.
+var<private> bank_uv: vec2<f32>;
+
+// Size of one texel of the image read, for generators with memory.
+fn bank_texel() -> vec2<f32> {
+    return 1.0 / vec2<f32>(textureDimensions(source));
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    bank_uv = in.uv;
     return bank_color(field(bank_point(in.uv), bank_time()));
 }

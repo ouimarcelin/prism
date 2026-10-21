@@ -167,6 +167,13 @@ fn bank_variants() -> Vec<Effect> {
         variant("starfield", &[]),
         variant("rain", &[]),
         variant("dot_grid", &[("palette", 2.0)]),
+        variant(
+            "reaction_diffusion",
+            &[("resolution", 0.0), ("palette", 4.0)],
+        ),
+        variant("fluid", &[("resolution", 0.0), ("palette", 5.0)]),
+        variant("flow_particles", &[("resolution", 0.0), ("palette", 3.0)]),
+        variant("fireworks", &[("resolution", 0.0), ("palette", 2.0)]),
     ]
 }
 
@@ -217,24 +224,41 @@ fn main() -> ExitCode {
         });
         let references: Vec<&Effect> = effects.iter().collect();
         let mut chain = EffectChain::default();
-        let mut encoder = gpu.device.create_command_encoder(&Default::default());
-        let time = FrameTime {
-            seconds: 1.0,
-            beat: 0.3,
-            ..FrameTime::default()
-        };
-        let written = chain.apply_into(
-            &renderer,
-            &gpu.device,
-            &gpu.queue,
-            &mut encoder,
-            &references,
-            &input,
-            (WIDTH, HEIGHT),
-            time,
-            &destination.create_view(&wgpu::TextureViewDescriptor::default()),
-        );
-        gpu.queue.submit([encoder.finish()]);
+        // Generators with memory are played for four seconds first.
+        let memory = effects
+            .iter()
+            .any(|effect| prism_fx::find_generator(&effect.kind).is_some_and(|info| info.memory));
+        let frames = if memory { 240 } else { 1 };
+        let mut written = false;
+        for frame in 0..frames {
+            let time = if memory {
+                let seconds = f64::from(frame) / 60.0;
+                FrameTime {
+                    seconds,
+                    beat: seconds * 2.0,
+                    ..FrameTime::default()
+                }
+            } else {
+                FrameTime {
+                    seconds: 1.0,
+                    beat: 0.3,
+                    ..FrameTime::default()
+                }
+            };
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            written = chain.apply_into(
+                &renderer,
+                &gpu.device,
+                &gpu.queue,
+                &mut encoder,
+                &references,
+                &input,
+                (WIDTH, HEIGHT),
+                time,
+                &destination.create_view(&wgpu::TextureViewDescriptor::default()),
+            );
+            gpu.queue.submit([encoder.finish()]);
+        }
         let pixels = if written {
             match read_texture(&gpu.device, &gpu.queue, &destination) {
                 Ok(pixels) => pixels,

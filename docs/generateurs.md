@@ -64,8 +64,8 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 | 32 | Nuages | fBm à seuil, éclairé | couverture, densité, vent | ●● | P2 | ✅ |
 | 33 | Marbre / bois | sinus perturbé | type, veines, turbulence | ● | P2 | ✅ |
 | 34 | Métaballes / lave | champs additionnés à seuil | boules, taille, seuil | ● | P1 | ✅ |
-| 35 | Réaction-diffusion | Gray-Scott | f, k, diffusion, ensemencer | ◆ | P2 | — |
-| 36 | Fluide 2D | advection de couleur | viscosité, injection | ◆ | P3 | — |
+| 35 | Réaction-diffusion | Gray-Scott | f, k, diffusion, ensemencer | ◆ | P2 | ✅ |
+| 36 | Fluide 2D | advection de couleur | viscosité, injection | ◆ | P3 | ✅ |
 
 ## 4. Motifs géométriques
 
@@ -103,13 +103,13 @@ Bibliothèque WGSL (`generator.wgsl`) : hachage entier, bruit de valeur, Perlin 
 | 51 | Champ d'étoiles | vitesse lumière | densité, vitesse, traînées | ● | P1 | ✅ |
 | 52 | Pluie / neige | chute par couches | densité, angle, vitesse | ● | P2 | ✅ |
 | 53 | Points en grille | points suivant un bruit | pas, taille, bruit | ● | P1 | ✅ |
-| 54 | Particules dans un flux | traînées sur un curl noise | nombre, durée de vie | ◆ | P3 | — |
-| 55 | Feux d'artifice | gerbes au tempo | gerbes, taille, gravité | ◆ | P3 | — |
+| 54 | Particules dans un flux | traînées sur un curl noise | nombre, durée de vie | ◆ | P3 | ✅ |
+| 55 | Feux d'artifice | gerbes au tempo | gerbes, taille, gravité | ◆ | P3 | ✅ |
 
 ## Ordre
 
 1. Socle commun et premiers bruits (fait).
 2. Vagues P1 (fait) : formes d'onde communes (sinus, triangle, carré, dents de scie) dans `generator.wgsl`.
 3. Tous les générateurs sans mémoire d'image, P1 à P3 (fait, ticket 104).
-4. Mémoire d'image par clip (◆).
-5. P2, puis P3.
+4. Mémoire d'image par clip (◆) et ses quatre générateurs (fait, ADR 0046).
+5. Toute la feuille de route est faite.

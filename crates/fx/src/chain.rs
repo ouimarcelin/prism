@@ -7,12 +7,15 @@ use std::sync::Mutex;
 use prism_core::{BAND_COUNT, DASHBOARD_SIZE, Effect, Moment};
 use prism_render::{WORKING_FORMAT, wgpu};
 
-use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, info_for};
+use crate::catalog::{CATALOG, EffectInfo, GENERATORS, MAX_PARAMS, MEMORY_RESOLUTIONS, info_for};
 use crate::isf::ISF_KIND;
 use crate::text::{Align, TEXT_KIND, TextCache};
 
 const PRELUDE: &str = include_str!("shaders/prelude.wgsl");
 /// Library of the generators of the procedural bank, after their field.
+/// Most steps a generator with memory runs in one frame.
+const MAX_STEPS: f32 = 32.0;
+
 const BANK: &str = include_str!("shaders/bank/generator.wgsl");
 
 /// WGSL of an effect of the catalog: the prelude, then its code; for a
@@ -287,6 +290,19 @@ pub struct EffectChain {
     written: Vec<PassParams>,
     output: Option<usize>,
     text: TextCache,
+    /// The image kept by a generator with memory, if the chain has one.
+    memory: Option<Memory>,
+}
+
+/// The image a generator with memory keeps between frames: two copies in
+/// turn, one read while the other is written. Made when the generator
+/// first runs, dropped with the chain (when the clip stops).
+struct Memory {
+    kind: &'static str,
+    size: (u32, u32),
+    targets: [Target; 2],
+    /// Index of the copy holding the latest state.
+    current: usize,
 }
 
 /// One pass to run.
@@ -434,19 +450,33 @@ impl EffectChain {
         while self.targets.len() < needed {
             self.targets.push(Target::new(device, size));
         }
-        let Some(params) = &self.params else {
+        // A handle of its own: the step of a memory borrows the chain.
+        let Some(params) = self.params.clone() else {
             return false;
         };
+        let params = &params;
 
         let last = passes.len() - 1;
         for (index, pass) in passes.iter().enumerate() {
             let Some(pipeline) = renderer.pipeline(device, pass.info, pass.index) else {
                 continue;
             };
-            let source = match (&pass.mask, index) {
-                (Some((mask, _)), _) => mask,
-                (None, 0) => input,
-                (None, _) => &self.targets[(index - 1) % 2].view,
+            if pass.info.memory && pass.index == 0 {
+                self.step_memory(
+                    renderer, device, encoder, &pipeline, pass, params, index, size,
+                );
+                continue;
+            }
+            let memory = self
+                .memory
+                .as_ref()
+                .filter(|_| pass.info.memory)
+                .map(|memory| &memory.targets[memory.current].view);
+            let source = match (&pass.mask, memory, index) {
+                (Some((mask, _)), _, _) => mask,
+                (None, Some(memory), _) => memory,
+                (None, None, 0) => input,
+                (None, None, _) => &self.targets[(index - 1) % 2].view,
             };
             let target = match destination {
                 Some(destination) if index == last => destination,
@@ -500,6 +530,98 @@ impl EffectChain {
             self.output = Some(last % 2);
         }
         true
+    }
+
+    /// Runs the step of a generator with memory as many times as its first
+    /// setting says, from one copy of its image to the other. The image is
+    /// made (cleared) when there is none yet, or when the generator, the
+    /// clip's size or the chosen resolution changed.
+    #[allow(clippy::too_many_arguments)]
+    fn step_memory(
+        &mut self,
+        renderer: &EffectRenderer,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        pipeline: &wgpu::RenderPipeline,
+        pass: &Pass,
+        params: &wgpu::Buffer,
+        index: usize,
+        size: (u32, u32),
+    ) {
+        let divisor = MEMORY_RESOLUTIONS
+            .get(pass.values[1].max(0.0) as usize)
+            .copied()
+            .unwrap_or(1);
+        let state_size = ((size.0 / divisor).max(1), (size.1 / divisor).max(1));
+        let fresh = !self
+            .memory
+            .as_ref()
+            .is_some_and(|memory| memory.kind == pass.info.kind && memory.size == state_size);
+        if fresh {
+            // New textures start cleared: the step seeds where alpha is 0.
+            self.memory = Some(Memory {
+                kind: pass.info.kind,
+                size: state_size,
+                targets: [
+                    Target::new(device, state_size),
+                    Target::new(device, state_size),
+                ],
+                current: 0,
+            });
+        }
+        let Some(memory) = &mut self.memory else {
+            return;
+        };
+        let steps = pass.values[0].round().clamp(1.0, MAX_STEPS) as usize;
+        let offset = u32::try_from(index as u64 * renderer.params_stride)
+            .expect("effect settings exceed the uniform offset range");
+        for _ in 0..steps {
+            let source = &memory.targets[memory.current].view;
+            let target = &memory.targets[1 - memory.current].view;
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some(pass.info.kind),
+                layout: &renderer.bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: params,
+                            offset: 0,
+                            size: NonZeroU64::new(PARAMS_SIZE),
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(source),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(&renderer.sampler),
+                    },
+                ],
+            });
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(pass.info.kind),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &bind_group, &[offset]);
+            render_pass.draw(0..3, 0..1);
+            drop(render_pass);
+            memory.current = 1 - memory.current;
+        }
     }
 
     /// Writes the settings of each pass that changed since the last frame.
