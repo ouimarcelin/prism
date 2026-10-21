@@ -135,6 +135,8 @@ pub struct ControlPanel {
     pub(crate) selected: Option<Slot>,
     /// Layer or group whose name is being edited, with its name before.
     pub(crate) renaming: Option<(crate::grid::Target, String)>,
+    /// Height of the program image pane, at the top of the inspector.
+    pub(crate) program_height: f32,
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
@@ -168,6 +170,7 @@ impl ControlPanel {
             document,
             selected,
             renaming: None,
+            program_height: 240.0,
             dialogs: Dialogs {
                 missing,
                 ..Dialogs::default()

@@ -60,3 +60,9 @@ Résultat : le titre du générateur dans l'inspecteur devient un menu « Géné
 Prompt : « scindes la fenêtre programme en deux… c'est moi qui décide de la taille de la fenetre avec un drag entre les fenetres ».
 
 Résultat : panneau haut redimensionnable (`egui::Panel::top("program")`, 80 px au minimum, 120 px laissés aux réglages) dans l'inspecteur ; l'image du programme y tient en entier, centrée, à son rapport largeur sur hauteur ; les réglages ont leur propre défilement dessous. Capture vérifiée (sans image du programme dans le harnais de test).
+
+## Ticket 100 : séparation du programme, correctifs
+
+Prompt : « la fenetre du visualisateur est à 100% lorsque l'app se lance. supprimes l'animation bizarre… quand je bouge la taille des fenetres ».
+
+Cause : le panneau `egui::Panel::top` prend la taille de son contenu ; l'image, qui remplissait la hauteur disponible, le faisait grandir jusqu'au maximum, et la boucle taille du panneau / taille de l'image faisait trembler le redimensionnement. Correctif : séparation faite à la main, hauteur gardée dans `ControlPanel::program_height` (240 px au lancement), poignée de 8 px tirée verticalement, sans animation.
