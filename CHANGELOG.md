@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Inspecteur scindé : l'image du programme reste en haut, à la taille choisie en tirant la ligne qui la sépare des réglages ; les réglages défilent dessous sans la déplacer ; l'image s'adapte à la place sans se déformer.
 - Changer le générateur d'un clip : menu « Générateur » de l'inspecteur ; entre générateurs de la banque, les réglages d'espace, de temps et de couleur sont gardés (avec animations et liens) ; un clip encore nommé d'après son générateur prend le nom du nouveau.
 - Banque de générateurs, vagues : « Onde plane », « Ondes concentriques », « Interférences » (2 à 8 sources), « Plasma », « Moiré » (lignes, cercles, grille), « Spirale » (Archimède, logarithmique) et « Vagues de lignes » (sinus ou bruit, perspective) ; formes sinus, triangle, carré et dents de scie avec rapport cyclique.
 - Chaîne d'effets : chaque effet se replie par sa flèche (état gardé dans le projet) et change de place par glisser-déposer sur sa poignée ; les boutons monter et descendre disparaissent.
