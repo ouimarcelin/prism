@@ -113,7 +113,16 @@ pub struct EffectInfo {
     /// For generators of the procedural bank: index of the first of the
     /// shared settings ([`COMMON_PARAMS`]), after the generator's own.
     pub common: Option<usize>,
+    /// For generators that keep an image from one frame to the next: their
+    /// first pass (`fs_step`) moves that image on, as many times a frame as
+    /// their first setting says, at the size their second setting picks
+    /// ([`MEMORY_RESOLUTIONS`]); their second pass shows it.
+    pub memory: bool,
 }
+
+/// Size of the image a generator with memory keeps, as a divisor of the
+/// clip's size, by the value of its second setting.
+pub const MEMORY_RESOLUTIONS: [u32; 3] = [1, 2, 4];
 
 impl EffectInfo {
     /// Values of the parameters of `effect`, in the order of
@@ -186,6 +195,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/color.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -195,6 +205,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/invert.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -209,6 +220,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/transform.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -218,6 +230,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/mirror.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -231,6 +244,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/kaleidoscope.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -240,6 +254,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/blur.wgsl"),
         passes: &["fs_horizontal", "fs_vertical"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -249,6 +264,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/pixelate.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -258,6 +274,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/posterize.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -270,6 +287,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/threshold.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -282,6 +300,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/edges.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -294,6 +313,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/rgb_split.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -307,6 +327,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/glitch.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -321,6 +342,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/wave.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -333,6 +355,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/swirl.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -346,6 +369,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/tile.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -358,6 +382,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/vignette.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -371,6 +396,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/strobe.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -384,6 +410,7 @@ pub const CATALOG: &[EffectInfo] = &[
         source: include_str!("shaders/colorize.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
 ];
@@ -409,6 +436,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/solid.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -424,6 +452,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/gradient.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -438,6 +467,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/lines.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -451,6 +481,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/rings.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -463,6 +494,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/checker.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -476,6 +508,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/noise.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
         text: None,
     },
     EffectInfo {
@@ -495,6 +528,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         source: include_str!("shaders/text.wgsl"),
         passes: &["fs_main"],
         common: None,
+        memory: false,
     },
     EffectInfo {
         kind: "fractal_noise",
@@ -515,6 +549,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(10),
+        memory: false,
     },
     EffectInfo {
         kind: "cells",
@@ -531,6 +566,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "domain_warp",
@@ -548,6 +584,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(7),
+        memory: false,
     },
     EffectInfo {
         kind: "plane_wave",
@@ -563,6 +600,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "ripples",
@@ -579,6 +617,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "interference",
@@ -596,6 +635,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(7),
+        memory: false,
     },
     EffectInfo {
         kind: "plasma",
@@ -609,6 +649,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(3),
+        memory: false,
     },
     EffectInfo {
         kind: "moire",
@@ -626,6 +667,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(7),
+        memory: false,
     },
     EffectInfo {
         kind: "spiral",
@@ -641,6 +683,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "line_waves",
@@ -657,6 +700,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "curl_noise",
@@ -672,6 +716,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "grain",
@@ -685,6 +730,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(3),
+        memory: false,
     },
     EffectInfo {
         kind: "colored_noise",
@@ -698,6 +744,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(3),
+        memory: false,
     },
     EffectInfo {
         kind: "gabor",
@@ -714,6 +761,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "chladni",
@@ -729,6 +777,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "lissajous",
@@ -745,6 +794,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "radar",
@@ -758,6 +808,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(3),
+        memory: false,
     },
     EffectInfo {
         kind: "ocean",
@@ -774,6 +825,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "oscilloscope",
@@ -791,6 +843,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(7),
+        memory: false,
     },
     EffectInfo {
         kind: "caustics",
@@ -805,6 +858,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(4),
+        memory: false,
     },
     EffectInfo {
         kind: "smoke",
@@ -820,6 +874,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "fire",
@@ -836,6 +891,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "aurora",
@@ -851,6 +907,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "clouds",
@@ -867,6 +924,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "marble",
@@ -882,6 +940,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "metaballs",
@@ -897,6 +956,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "tunnel",
@@ -912,6 +972,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "vortex",
@@ -927,6 +988,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "truchet",
@@ -941,6 +1003,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(4),
+        memory: false,
     },
     EffectInfo {
         kind: "tiling",
@@ -956,6 +1019,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "rays",
@@ -972,6 +1036,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "warped_grid",
@@ -987,6 +1052,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "polygons",
@@ -1001,6 +1067,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(4),
+        memory: false,
     },
     EffectInfo {
         kind: "mandelbrot",
@@ -1016,6 +1083,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "julia",
@@ -1031,6 +1099,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "fold",
@@ -1046,6 +1115,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(5),
+        memory: false,
     },
     EffectInfo {
         kind: "sierpinski",
@@ -1058,6 +1128,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(2),
+        memory: false,
     },
     EffectInfo {
         kind: "test_bars",
@@ -1071,6 +1142,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(3),
+        memory: false,
     },
     EffectInfo {
         kind: "analog",
@@ -1087,6 +1159,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "blocks",
@@ -1101,6 +1174,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(4),
+        memory: false,
     },
     EffectInfo {
         kind: "starfield",
@@ -1115,6 +1189,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(4),
+        memory: false,
     },
     EffectInfo {
         kind: "rain",
@@ -1131,6 +1206,7 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
     },
     EffectInfo {
         kind: "dot_grid",
@@ -1147,6 +1223,78 @@ pub const GENERATORS: &[EffectInfo] = &[
         passes: &["fs_main"],
         text: None,
         common: Some(6),
+        memory: false,
+    },
+    EffectInfo {
+        kind: "reaction_diffusion",
+        label: "Réaction-diffusion",
+        params: bank_params!(
+            ParamInfo::range("steps", "Pas par image", 1.0, 32.0, 8.0),
+            ParamInfo::choice("resolution", "Résolution", RESOLUTION_CHOICES).with_default(1.0),
+            ParamInfo::range("feed", "Apport (f)", 0.01, 0.1, 0.037),
+            ParamInfo::range("kill", "Disparition (k)", 0.04, 0.07, 0.06),
+            ParamInfo::range("diffusion", "Diffusion", 0.2, 1.0, 1.0),
+            ParamInfo::range("seeds", "Graines", 0.0, 1.0, 0.3),
+            ParamInfo::range("injection", "Injection", 0.0, 1.0, 0.0),
+        ),
+        source: include_str!("shaders/bank/reaction_diffusion.wgsl"),
+        passes: &["fs_step", "fs_main"],
+        text: None,
+        common: Some(7),
+        memory: true,
+    },
+    EffectInfo {
+        kind: "fluid",
+        label: "Fluide 2D",
+        params: bank_params!(
+            ParamInfo::range("steps", "Pas par image", 1.0, 16.0, 2.0),
+            ParamInfo::choice("resolution", "Résolution", RESOLUTION_CHOICES).with_default(1.0),
+            ParamInfo::range("viscosity", "Viscosité", 0.0, 1.0, 0.1),
+            ParamInfo::range("force", "Remous", 0.0, 2.0, 0.6),
+            ParamInfo::range("injection", "Couleur versée", 0.0, 1.0, 0.5),
+            ParamInfo::range("dissipation", "Dissipation", 0.0, 1.0, 0.1),
+            ParamInfo::range("scale", "Échelle des remous", 0.5, 8.0, 2.0),
+        ),
+        source: include_str!("shaders/bank/fluid.wgsl"),
+        passes: &["fs_step", "fs_main"],
+        text: None,
+        common: Some(7),
+        memory: true,
+    },
+    EffectInfo {
+        kind: "flow_particles",
+        label: "Particules dans un flux",
+        params: bank_params!(
+            ParamInfo::range("steps", "Pas par image", 1.0, 8.0, 1.0),
+            ParamInfo::choice("resolution", "Résolution", RESOLUTION_CHOICES).with_default(1.0),
+            ParamInfo::range("density", "Particules", 0.0, 1.0, 0.5),
+            ParamInfo::range("trail", "Traînée", 0.0, 0.995, 0.97),
+            ParamInfo::range("flow_speed", "Vitesse du flux", 0.0, 4.0, 1.5),
+            ParamInfo::range("scale", "Échelle du flux", 0.5, 8.0, 2.0),
+        ),
+        source: include_str!("shaders/bank/flow_particles.wgsl"),
+        passes: &["fs_step", "fs_main"],
+        text: None,
+        common: Some(6),
+        memory: true,
+    },
+    EffectInfo {
+        kind: "fireworks",
+        label: "Feux d'artifice",
+        params: bank_params!(
+            ParamInfo::range("steps", "Pas par image", 1.0, 4.0, 1.0),
+            ParamInfo::choice("resolution", "Résolution", RESOLUTION_CHOICES).with_default(1.0),
+            ParamInfo::range("rate", "Gerbes par temps", 0.25, 4.0, 1.0),
+            ParamInfo::range("size", "Taille", 0.1, 1.0, 0.4),
+            ParamInfo::range("gravity", "Gravité", 0.0, 2.0, 0.6),
+            ParamInfo::range("trail", "Traînée", 0.0, 0.99, 0.9),
+            ParamInfo::range("sparks", "Étincelles", 8.0, 64.0, 32.0),
+        ),
+        source: include_str!("shaders/bank/fireworks.wgsl"),
+        passes: &["fs_step", "fs_main"],
+        text: None,
+        common: Some(7),
+        memory: true,
     },
 ];
 
@@ -1189,6 +1337,7 @@ const ANALOG_CHOICES: &[&str] = &["Barres", "Rampe", "Bruit"];
 const RAIN_CHOICES: &[&str] = &["Pluie", "Neige"];
 const DOT_CHOICES: &[&str] = &["Ronds", "Carrés"];
 const FOLLOW_CHOICES: &[&str] = &["Taille", "Luminosité", "Les deux"];
+const RESOLUTION_CHOICES: &[&str] = &["Pleine", "Demie", "Quart"];
 const NO_YES: &[&str] = &["Non", "Oui"];
 
 /// Settings shared by the generators of the procedural bank, after their

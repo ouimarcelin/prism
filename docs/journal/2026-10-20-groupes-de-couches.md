@@ -94,3 +94,13 @@ Résultat : 33 générateurs (n° 12 à 53 de `docs/generateurs.md`, hors ◆), 
 Corrections après la planche : Lissajous en pointillés (240 échantillons, passés à 600) ; hexagones rayés (identifiant de tuile arrondi au lieu de tronqué) ; Julia réduite à de la poussière (c par défaut à 170°, l'ensemble connexe classique) ; Mandelbrot centré sur l'ensemble entier ; pli fractal replié avant la rotation.
 
 Limites : océan simple (pas de vraies vagues de Gerstner, pas de reflets) ; mire en valeurs, colorée seulement par la palette.
+
+## Ticket 105 : mémoire d'image et générateurs à mémoire
+
+Prompt : « fais la mémoire d'image et les 4 générateurs restants ».
+
+Résultat : ADR 0046. `EffectChain` garde, pour un générateur marqué `memory`, deux textures 16 bits en alternance ; `fs_step` tourne « Pas par image » fois, `fs_main` affiche. Réaction-diffusion (Gray-Scott, laplacien 3 × 3, graines et injection), fluide 2D (advection semi-lagrangienne, viscosité, remous par rotationnel de bruit, couleur versée en trois points), particules dans un flux (image transportée le long d'un rotationnel, étincelles semées, traînées), feux d'artifice (gerbes au tempo dessinées, traînées qui retombent). Test GPU `generators_with_memory_build_on_their_last_image` ; planche de `gallery` après 240 images pour ces quatre.
+
+Problème trouvé en route : `bank_point` avait l'axe y vers le bas ; feu, fumée, aurore, océan, vagues de lignes en perspective et Sierpinski étaient à l'envers. Corrigé dans le socle (y vers le haut).
+
+Premier essai du test de réaction-diffusion raté : à 32 × 18 texels, les graines (1,5 texel) mouraient ; le test tourne en 192 × 108, pleine résolution.

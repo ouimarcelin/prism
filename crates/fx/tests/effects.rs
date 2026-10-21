@@ -605,3 +605,105 @@ fn example_isf_shaders_compile() {
         assert_eq!(shader.filter, filter, "{name}");
     }
 }
+
+/// Runs `effect` for `frames` frames of 1/60 s on one chain, as a clip
+/// playing does, and returns the image of each frame.
+fn play(gpu: &Gpu, effect: &Effect, width: u32, height: u32, frames: usize) -> Vec<Vec<[f32; 4]>> {
+    let renderer = EffectRenderer::new(&gpu.device);
+    let input = pixels_texture(
+        &gpu.device,
+        &gpu.queue,
+        width,
+        height,
+        &vec![[0.0; 4]; (width * height) as usize],
+    )
+    .create_view(&wgpu::TextureViewDescriptor::default());
+    let destination = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("result"),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: WORKING_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = destination.create_view(&wgpu::TextureViewDescriptor::default());
+    let mut chain = EffectChain::default();
+    (0..frames)
+        .map(|frame| {
+            let seconds = frame as f64 / 60.0;
+            let time = FrameTime {
+                seconds,
+                beat: seconds * 2.0,
+                ..FrameTime::default()
+            };
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            chain.apply_into(
+                &renderer,
+                &gpu.device,
+                &gpu.queue,
+                &mut encoder,
+                &[effect],
+                &input,
+                (width, height),
+                time,
+                &view,
+            );
+            gpu.queue.submit([encoder.finish()]);
+            read_texture(&gpu.device, &gpu.queue, &destination).unwrap()
+        })
+        .collect()
+}
+
+fn mean(image: &[[f32; 4]]) -> f32 {
+    image.iter().map(|pixel| pixel[0]).sum::<f32>() / image.len() as f32
+}
+
+#[test]
+fn generators_with_memory_build_on_their_last_image() {
+    let Some(gpu) = gpu() else { return };
+    // Sparks carried along a flow leave trails: more and more light.
+    let flow = play(
+        &gpu,
+        &generator("flow_particles", &[("resolution", 0.0)]),
+        64,
+        36,
+        60,
+    );
+    assert!(
+        mean(&flow[59]) > 3.0 * mean(&flow[0]),
+        "no trails: {} then {}",
+        mean(&flow[0]),
+        mean(&flow[59])
+    );
+
+    // Reaction-diffusion: the seeds live on and spread (features need
+    // some ten texels: a full-size image).
+    let growth = play(
+        &gpu,
+        &generator("reaction_diffusion", &[("resolution", 0.0), ("seeds", 1.0)]),
+        192,
+        108,
+        120,
+    );
+    let last = &growth[119];
+    let lit = last.iter().filter(|pixel| pixel[0] > 0.3).count();
+    assert!(
+        lit > last.len() / 10 && lit < last.len() * 9 / 10,
+        "no pattern: {lit} of {} lit",
+        last.len()
+    );
+
+    // Fireworks: a burst on the first beat, its trail still lit later.
+    let bursts = play(&gpu, &generator("fireworks", &[]), 64, 36, 30);
+    assert!(mean(&bursts[29]) > 0.0);
+
+    // Fluid: colour poured in spreads.
+    let fluid = play(&gpu, &generator("fluid", &[]), 64, 36, 60);
+    assert!(mean(&fluid[59]) > mean(&fluid[1]), "no colour poured");
+}

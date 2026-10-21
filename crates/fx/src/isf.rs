@@ -510,6 +510,7 @@ pub fn compile(source: &str, label: &str) -> Result<IsfShader, IsfError> {
         source: Box::leak(wgsl.into_boxed_str()),
         passes: &[ENTRY_POINT],
         common: None,
+        memory: false,
     };
     Ok(IsfShader {
         info: Box::leak(Box::new(info)),
