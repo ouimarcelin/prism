@@ -47,19 +47,9 @@ impl ControlPanel {
             frame,
         );
         let (line, drag) = ui.allocate_exact_size(Vec2::new(width, 8.0), egui::Sense::drag());
-        // The height follows the pointer from where it was pressed, like the
-        // inspector's width.
-        if drag.drag_started() {
-            ui.data_mut(|data| data.insert_temp(drag.id, height));
-        }
-        if drag.dragged()
-            && let Some(pointer) = drag.interact_pointer_pos()
-            && let Some(origin) = ui.input(|input| input.pointer.press_origin())
-        {
-            let start = ui
-                .data(|data| data.get_temp::<f32>(drag.id))
-                .unwrap_or(height);
-            self.program_height = Some((start + pointer.y - origin.y).clamp(80.0, max));
+        if let Some(start) = crate::panel::follow_drag(ui, &drag, height) {
+            let moved = start + crate::panel::drag_offset(ui).y;
+            self.program_height = Some(moved.clamp(80.0, max));
         }
         let active = drag.hovered() || drag.dragged();
         if active {

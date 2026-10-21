@@ -129,6 +129,38 @@ pub(crate) struct Dialogs {
     pub(crate) timecode: bool,
 }
 
+/// While `response` is dragged: `value` as it was when the button went
+/// down. The pointer's way since then is [`drag_offset`].
+///
+/// Kept per press, not taken again on later passes: egui may lay out a
+/// frame twice, and the second pass would start from the value the first
+/// one has already moved.
+pub(crate) fn follow_drag(ui: &egui::Ui, response: &egui::Response, value: f32) -> Option<f32> {
+    if !response.dragged() {
+        ui.data_mut(|data| data.remove::<(egui::Pos2, f32)>(response.id));
+        return None;
+    }
+    let origin = ui.input(|input| input.pointer.press_origin())?;
+    let start = ui.data_mut(|data| {
+        let kept = data.get_temp_mut_or(response.id, (origin, value));
+        if kept.0 != origin {
+            *kept = (origin, value);
+        }
+        kept.1
+    });
+    Some(start)
+}
+
+/// The pointer's way since its button went down.
+pub(crate) fn drag_offset(ui: &egui::Ui) -> egui::Vec2 {
+    ui.input(
+        |input| match (input.pointer.press_origin(), input.pointer.interact_pos()) {
+            (Some(origin), Some(pointer)) => pointer - origin,
+            _ => egui::Vec2::ZERO,
+        },
+    )
+}
+
 /// Narrowest the inspector gets.
 const INSPECTOR_MIN: f32 = 260.0;
 /// Width always left to the grid beside the inspector.
@@ -492,19 +524,8 @@ impl ControlPanel {
         let grip =
             egui::Rect::from_x_y_ranges(edge.left() - 4.0..=edge.left() + 4.0, edge.y_range());
         let drag = ui.interact(grip, egui::Id::new("inspector edge"), egui::Sense::drag());
-        // The width follows the pointer from where it was pressed, not a sum
-        // of its moves: the panel may be laid out more than once a frame.
-        if drag.drag_started() {
-            ui.data_mut(|data| data.insert_temp(drag.id, width));
-        }
-        if drag.dragged()
-            && let Some(pointer) = drag.interact_pointer_pos()
-            && let Some(origin) = ui.input(|input| input.pointer.press_origin())
-        {
-            let start = ui
-                .data(|data| data.get_temp::<f32>(drag.id))
-                .unwrap_or(width);
-            self.inspector_width = Some((start + origin.x - pointer.x).clamp(INSPECTOR_MIN, max));
+        if let Some(start) = follow_drag(ui, &drag, width) {
+            self.inspector_width = Some((start - drag_offset(ui).x).clamp(INSPECTOR_MIN, max));
         }
         let active = drag.hovered() || drag.dragged();
         if active {

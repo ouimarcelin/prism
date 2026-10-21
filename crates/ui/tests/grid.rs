@@ -36,9 +36,20 @@ fn row_point(harness: &Harness<'_>, name: &str, height: f32) -> Pos2 {
 
 /// The control panel of `panel`, themed, in a window of 1440 × 900.
 fn harness<'a>(panel: &'a mut ControlPanel, status: &'a EngineStatus) -> Harness<'a> {
+    harness_with(panel, status, false)
+}
+
+/// Like [`harness`]; with `twice`, every frame is laid out two times, as
+/// egui does when a widget asks for it.
+fn harness_with<'a>(
+    panel: &'a mut ControlPanel,
+    status: &'a EngineStatus,
+    twice: bool,
+) -> Harness<'a> {
     let mut themed = false;
     let mut harness = Harness::builder()
         .with_size(Vec2::new(1440.0, 900.0))
+        .with_pixels_per_point(2.0)
         // Frames close enough for a double click.
         .with_step_dt(0.05)
         .build_ui(move |ui| {
@@ -49,13 +60,22 @@ fn harness<'a>(panel: &'a mut ControlPanel, status: &'a EngineStatus) -> Harness
             }
             let frame = FrameInfo {
                 status,
-                preview: None,
+                preview: Some((
+                    egui::TextureId::Managed(0),
+                    prism_core::Resolution {
+                        width: 1920,
+                        height: 1080,
+                    },
+                )),
                 screens: &[],
                 output_screens: &[],
                 audio: AudioStatus::default(),
                 midi: MidiStatus::default(),
             };
             panel.ui(ui, &frame);
+            if twice && ui.ctx().current_pass_index() == 0 {
+                ui.ctx().request_discard("test: two passes");
+            }
         });
     harness.run_steps(2);
     harness
@@ -132,14 +152,30 @@ fn a_double_click_renames_a_layer() {
 }
 
 #[test]
-fn the_inspector_edge_drags_sideways() {
-    let status = EngineStatus::default();
-    let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
-    let mut harness = harness(&mut panel, &status);
-    let before = harness.get_by_label("Programme").rect().left();
-    // The inspector takes 42 % of the 1440-point window at first.
-    let edge = Pos2::new(1440.0 * (1.0 - 0.42), 500.0);
-    drag(&mut harness, edge, edge - Vec2::new(100.0, 0.0));
-    let after = harness.get_by_label("Programme").rect().left();
-    assert!((before - after - 100.0).abs() < 2.0, "{before} → {after}");
+fn the_inspector_edge_follows_the_pointer() {
+    for twice in [false, true] {
+        let status = EngineStatus::default();
+        let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
+        let mut harness = harness_with(&mut panel, &status, twice);
+        let before = harness.get_by_label("Programme").rect().left();
+        // The inspector takes 42 % of the 1440-point window at first.
+        let edge = Pos2::new(1440.0 * (1.0 - 0.42), 500.0);
+        // A quick hand: already 20 points away on the first frame of the
+        // drag.
+        harness.hover_at(edge);
+        harness.run_steps(1);
+        harness.drag_at(edge);
+        harness.run_steps(1);
+        for x in [20.0, 35.0, 50.0] {
+            harness.hover_at(edge - Vec2::new(x, 0.0));
+            harness.run_steps(1);
+        }
+        harness.drop_at(edge - Vec2::new(50.0, 0.0));
+        harness.run_steps(2);
+        let after = harness.get_by_label("Programme").rect().left();
+        assert!(
+            (before - after - 50.0).abs() < 2.0,
+            "two passes: {twice}, {before} → {after}"
+        );
+    }
 }
