@@ -189,6 +189,7 @@ fn main() -> ExitCode {
     let info = FrameInfo {
         status: &status,
         preview: None,
+        generator_previews: None,
         screens: &screens,
         output_screens: &[],
         audio: prism_ui::AudioStatus {

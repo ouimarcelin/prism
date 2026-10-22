@@ -10,8 +10,7 @@ use prism_core::{
     Slot, Unit,
 };
 use prism_fx::{
-    CATALOG, COMMON_PARAMS, EffectInfo, GENERATORS, ISF_KIND, ParamInfo, find, find_generator,
-    shader_of,
+    CATALOG, COMMON_PARAMS, EffectInfo, ISF_KIND, ParamInfo, find, find_generator, shader_of,
 };
 
 use crate::learn::Learn;
@@ -336,40 +335,27 @@ pub(crate) fn switch_generator(generator: &mut Effect, info: &EffectInfo) {
 
 /// One line per setting of an effect.
 /// Settings of the generator of a generated clip, animations included.
+/// Returns whether the button to change generator was clicked.
 pub(crate) fn generator_settings(
     ui: &mut egui::Ui,
     generator: &mut Effect,
     learn: &mut Learn,
     slot: Slot,
-) {
+) -> bool {
+    let mut browse = false;
     match describe(generator) {
         Ok(info) => {
-            let mut picked = None;
             ui.horizontal(|ui| {
                 ui.label("Générateur");
-                let menu = egui::ComboBox::from_id_salt(("generator kind", slot))
-                    .selected_text(RichText::new(info.label).semibold())
-                    .height(480.0)
-                    .show_ui(ui, |ui| {
-                        for other in GENERATORS {
-                            if ui
-                                .selectable_label(other.kind == generator.kind, other.label)
-                                .clicked()
-                                && other.kind != generator.kind
-                            {
-                                picked = Some(other);
-                            }
-                        }
-                    });
                 let hover =
                     file_hover(generator).map_or_else(String::new, |text| format!("{text}\n"));
-                menu.response
-                    .on_hover_text(format!("{hover}Changer de générateur"));
+                browse = ui
+                    .button(RichText::new(format!("{} ▸", info.label)).semibold())
+                    .on_hover_text(format!(
+                        "{hover}Changer de générateur : familles et aperçus"
+                    ))
+                    .clicked();
             });
-            if let Some(other) = picked {
-                switch_generator(generator, other);
-                return;
-            }
             if info.text.is_some() {
                 ui.add(
                     egui::TextEdit::multiline(&mut generator.text)
@@ -387,6 +373,7 @@ pub(crate) fn generator_settings(
             ui.label(RichText::new(message).weak());
         }
     }
+    browse
 }
 
 /// `place` is the chain and index of the effect, for mappings.

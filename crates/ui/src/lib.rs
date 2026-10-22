@@ -11,6 +11,7 @@
 //! Every egui context that draws the interface must first receive
 //! [`apply_theme`]: it loads the fonts the interface uses.
 
+mod browser;
 mod crossfade;
 mod dialogs;
 mod document;

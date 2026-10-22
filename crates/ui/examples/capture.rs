@@ -37,10 +37,22 @@ fn main() {
     let status = EngineStatus::default();
     let mut panel = ControlPanel::new(Document::new(demo()), Vec::new());
 
+    let previews = generator_previews();
+    let mut previews_texture: Option<egui::TextureHandle> = None;
     let mut capture = harness(Vec2::new(1440.0, 900.0), |ui| {
+        if previews_texture.is_none()
+            && let Some(image) = &previews
+        {
+            previews_texture = Some(ui.ctx().load_texture(
+                "generator previews",
+                image.clone(),
+                Default::default(),
+            ));
+        }
         let frame = FrameInfo {
             status: &status,
             preview: None,
+            generator_previews: previews_texture.as_ref().map(egui::TextureHandle::id),
             screens: &screens,
             output_screens: &[],
             audio: AudioStatus::default(),
@@ -74,6 +86,21 @@ fn main() {
     capture.get_by_label("Distorsion").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "generateur");
+    // The generator browser, its previews drawn by the engine.
+    capture.get_by_label("Distorsion ▸").click();
+    capture.run_steps(6);
+    capture.get_by_label("Fluides et matières (9)").click();
+    capture.run_steps(4);
+    let tile = capture.get_by_label("Générateurs").rect().center();
+    capture.hover_at(tile + Vec2::new(-100.0, 120.0));
+    capture.run_steps(4);
+    save(&mut capture, &folder, "selecteur");
+    capture.key_press(egui::Key::Escape);
+    capture.run_steps(2);
+    if let Some(close) = capture.query_by_label("Close window") {
+        close.click();
+    }
+    capture.run_steps(4);
     capture.get_by_label("Dégradé").click();
     capture.run_steps(4);
     capture.get_by_label("Fichier").click();
@@ -214,4 +241,33 @@ fn demo() -> Composition {
         ]);
     }
     composition
+}
+
+/// Moving previews of the generators as the engine draws them, after a
+/// second of play, read back as an image; `None` without a GPU.
+fn generator_previews() -> Option<egui::ColorImage> {
+    let gpu = std::sync::Arc::new(prism_render::Gpu::headless().ok()?);
+    let mut state = prism_engine::EngineState::new(gpu.clone(), Composition::default());
+    state.apply(prism_engine::Command::ShowGeneratorPreviews(true));
+    let mut now = std::time::Instant::now();
+    for _ in 0..60 {
+        state.tick(now);
+        let _ = gpu
+            .device
+            .poll(prism_render::wgpu::PollType::wait_indefinitely());
+        now += std::time::Duration::from_secs_f64(1.0 / 60.0);
+    }
+    let image = state.generator_previews()?;
+    let pixels = prism_render::read_texture(&gpu.device, &gpu.queue, image.texture()).ok()?;
+    let size = image.resolution();
+    let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    Some(egui::ColorImage::new(
+        [size.width as usize, size.height as usize],
+        pixels
+            .iter()
+            .map(|[r, g, b, a]| {
+                egui::Color32::from_rgba_premultiplied(byte(*r), byte(*g), byte(*b), byte(*a))
+            })
+            .collect(),
+    ))
 }

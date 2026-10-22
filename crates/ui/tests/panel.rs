@@ -58,6 +58,7 @@ fn frame(
     let info = FrameInfo {
         status,
         preview: None,
+        generator_previews: None,
         screens: &screens,
         output_screens: &[1],
         audio: Default::default(),
@@ -330,6 +331,7 @@ fn click_button(
     let info = FrameInfo {
         status,
         preview: None,
+        generator_previews: None,
         screens: &screens,
         output_screens: &[],
         audio: Default::default(),
