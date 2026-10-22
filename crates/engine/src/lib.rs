@@ -14,6 +14,7 @@ mod engine;
 mod lighting;
 mod live;
 mod playhead;
+mod previews;
 mod priority;
 mod random;
 mod sound;
@@ -23,4 +24,5 @@ mod worker;
 
 pub use engine::{Command, Engine, EngineState, Output, OutputImages, ProgramOutput};
 pub use live::{cameras, ndi_sources, ndi_status, spout_senders, syphon_servers};
+pub use previews::{PREVIEW_COLUMNS, PREVIEW_TILE, preview_rect};
 pub use status::{ClipState, EngineStatus, FrameSteps, Hitch, LayerStatus};

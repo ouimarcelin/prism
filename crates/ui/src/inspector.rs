@@ -7,7 +7,7 @@ use prism_core::{
     GroupId, LoopMode, MAX_SPEED, Slot, Unit,
 };
 use prism_engine::{Command, LayerStatus};
-use prism_fx::{GENERATORS, ISF_KIND, ParamInfo};
+use prism_fx::{ISF_KIND, ParamInfo};
 
 /// The opacity of a layer, described as a setting for its animation.
 const OPACITY: ParamInfo = ParamInfo {
@@ -270,23 +270,21 @@ impl ControlPanel {
         let missing = self.is_missing(slot);
         if self.document.composition().clip(slot).is_none() {
             ui.label(RichText::new("Case vide.").weak());
-            ui.horizontal(|ui| {
+            // Wrapped: the sources would make the inspector wider than its pane.
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("Importer des médias…").clicked() {
                     self.import_dialog(Some(slot));
                 }
+                if ui
+                    .button("Générateur…")
+                    .on_hover_text("Choisir parmi les générateurs, par famille, avec un aperçu")
+                    .clicked()
+                {
+                    self.open_generator_browser(slot);
+                }
                 egui::ComboBox::from_id_salt("new generator")
-                    .selected_text("Générateur…")
+                    .selected_text("Shader…")
                     .show_ui(ui, |ui| {
-                        for info in GENERATORS {
-                            if ui.selectable_label(false, info.label).clicked() {
-                                let mut clip = Clip::from_generator(info.label, info.kind);
-                                if let Some(generator) = clip.source.generator_mut() {
-                                    *generator = info.create();
-                                }
-                                let _ = self.document.composition_mut().set_clip(slot, Some(clip));
-                            }
-                        }
-                        ui.separator();
                         let plugin = self.plugins.menu_items(ui, false);
                         ui.separator();
                         let picked = ui
@@ -309,6 +307,8 @@ impl ControlPanel {
                     })
                     .response
                     .on_hover_text("Une image dessinée par le GPU, sans fichier");
+                // Live sources on a line of their own.
+                ui.end_row();
                 egui::ComboBox::from_id_salt("new camera")
                     .selected_text("Caméra…")
                     .show_ui(ui, |ui| {
@@ -431,6 +431,7 @@ impl ControlPanel {
             );
             return;
         }
+        let mut browse = false;
         if let Some(clip) = self.document.composition_mut().clip_mut(slot)
             && clip.source.generator().is_some()
         {
@@ -443,16 +444,7 @@ impl ControlPanel {
                     ui.end_row();
                 });
             if let Some(generator) = clip.source.generator_mut() {
-                let before = generator_label(generator);
-                generator_settings(ui, generator, &mut self.learn, slot);
-                let after = generator_label(generator);
-                // A clip still named after its generator follows the new one.
-                if before != after
-                    && let (Some(before), Some(after)) = (before, after)
-                    && clip.name == before
-                {
-                    clip.name = after.to_owned();
-                }
+                browse = generator_settings(ui, generator, &mut self.learn, slot);
             }
             dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
             effect_section(
@@ -467,6 +459,9 @@ impl ControlPanel {
                     learn: &mut self.learn,
                 },
             );
+            if browse {
+                self.open_generator_browser(slot);
+            }
             return;
         }
         let playing = status.filter(|status| status.slot == Some(slot));
@@ -776,9 +771,4 @@ fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
     let image = egui::Rect::from_center_size(area.center(), size);
     egui::Image::from_texture(egui::load::SizedTexture::new(texture, size)).paint_at(ui, image);
     ui.label(RichText::new(caption).weak());
-}
-
-/// Name of the generator of `effect` when it is a built-in one.
-fn generator_label(effect: &prism_core::Effect) -> Option<&'static str> {
-    prism_fx::find_generator(&effect.kind).map(|info| info.label)
 }

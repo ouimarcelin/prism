@@ -1298,6 +1298,92 @@ pub const GENERATORS: &[EffectInfo] = &[
     },
 ];
 
+/// Families of generators, for choosing one: a name and the kinds in it,
+/// in the order of [`GENERATORS`] within each family.
+pub const GENERATOR_CATEGORIES: &[(&str, &[&str])] = &[
+    (
+        "Simples",
+        &[
+            "solid", "gradient", "lines", "rings", "checker", "noise", "text",
+        ],
+    ),
+    (
+        "Bruits",
+        &[
+            "fractal_noise",
+            "cells",
+            "domain_warp",
+            "curl_noise",
+            "grain",
+            "colored_noise",
+            "gabor",
+        ],
+    ),
+    (
+        "Vagues",
+        &[
+            "plane_wave",
+            "ripples",
+            "interference",
+            "plasma",
+            "moire",
+            "spiral",
+            "line_waves",
+            "chladni",
+            "lissajous",
+            "radar",
+            "ocean",
+            "oscilloscope",
+        ],
+    ),
+    (
+        "Fluides et matières",
+        &[
+            "caustics",
+            "smoke",
+            "fire",
+            "aurora",
+            "clouds",
+            "marble",
+            "metaballs",
+            "reaction_diffusion",
+            "fluid",
+        ],
+    ),
+    (
+        "Motifs",
+        &[
+            "tunnel",
+            "vortex",
+            "truchet",
+            "tiling",
+            "rays",
+            "warped_grid",
+            "polygons",
+        ],
+    ),
+    ("Fractales", &["mandelbrot", "julia", "fold", "sierpinski"]),
+    ("Signal", &["test_bars", "analog", "blocks"]),
+    (
+        "Particules",
+        &[
+            "starfield",
+            "rain",
+            "dot_grid",
+            "flow_particles",
+            "fireworks",
+        ],
+    ),
+];
+
+/// Name of the family of the generator `kind`.
+pub fn generator_category(kind: &str) -> Option<&'static str> {
+    GENERATOR_CATEGORIES
+        .iter()
+        .find(|(_, kinds)| kinds.contains(&kind))
+        .map(|(name, _)| *name)
+}
+
 const BASE_CHOICES: &[&str] = &["Valeur", "Perlin", "Simplex"];
 const FRACTAL_CHOICES: &[&str] = &["fBm", "Turbulence", "Crêtes", "Gonflé"];
 const CELL_CHOICES: &[&str] = &[
@@ -1394,6 +1480,22 @@ pub fn find(kind: &str) -> Option<&'static EffectInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_generator_is_in_one_family() {
+        for info in GENERATORS {
+            let families = GENERATOR_CATEGORIES
+                .iter()
+                .filter(|(_, kinds)| kinds.contains(&info.kind))
+                .count();
+            assert_eq!(families, 1, "{}", info.kind);
+        }
+        for (_, kinds) in GENERATOR_CATEGORIES {
+            for kind in *kinds {
+                assert!(find_generator(kind).is_some(), "{kind}");
+            }
+        }
+    }
 
     #[test]
     fn kinds_are_unique_and_parameters_fit() {

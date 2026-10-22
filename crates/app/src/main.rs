@@ -1001,21 +1001,24 @@ impl App {
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
-        running
-            .control
-            .draw(&running.gpu, &[program], |ui, textures| {
-                let frame = FrameInfo {
-                    status: &status,
-                    preview: textures.first().copied(),
-                    screens: &screens,
-                    output_screens: &output_screens,
-                    audio: audio.clone(),
-                    midi: midi.clone(),
-                };
-                // egui may run the interface twice in one frame; only the first
-                // pass sees the input, so keep the actions of every pass.
-                actions.extend(panel.ui(ui, &frame));
-            });
+        // The previews of the generators, while the browser shows them.
+        let images: Vec<_> = std::iter::once(program)
+            .chain(running.engine.generator_previews())
+            .collect();
+        running.control.draw(&running.gpu, &images, |ui, textures| {
+            let frame = FrameInfo {
+                status: &status,
+                preview: textures.first().copied(),
+                generator_previews: textures.get(1).map(|(texture, _)| *texture),
+                screens: &screens,
+                output_screens: &output_screens,
+                audio: audio.clone(),
+                midi: midi.clone(),
+            };
+            // egui may run the interface twice in one frame; only the first
+            // pass sees the input, so keep the actions of every pass.
+            actions.extend(panel.ui(ui, &frame));
+        });
         self.handle(event_loop, actions);
         // The stage editor shows live images: drawn with the control window.
         if let Some(stage) = self

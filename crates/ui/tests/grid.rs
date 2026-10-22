@@ -67,6 +67,7 @@ fn harness_with<'a>(
                         height: 1080,
                     },
                 )),
+                generator_previews: None,
                 screens: &[],
                 output_screens: &[],
                 audio: AudioStatus::default(),

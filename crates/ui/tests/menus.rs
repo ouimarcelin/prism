@@ -20,6 +20,7 @@ fn settings_menus_stay_open_on_options() {
         let frame = FrameInfo {
             status: &status,
             preview: None,
+            generator_previews: None,
             screens: &[],
             output_screens: &[],
             audio: AudioStatus::default(),

@@ -12,6 +12,8 @@ use prism_audio::{AudioLevels, VoiceCommand};
 use prism_clock::BeatClock;
 use prism_core::{Composition, Effect, GroupId, LayerId, Resolution, ScreenId, Slot, Unit};
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
+
+use crate::previews::GeneratorPreviews;
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, SimulatedScreen, SimulationRenderer,
     StageRenderer, Transition, WORKING_FORMAT, solid_color_texture, wgpu,
@@ -118,6 +120,9 @@ pub enum Command {
     /// The timecode followed: its seconds at an instant, or `None` when it
     /// stops. Clips with a timecode start follow it.
     Timecode(Option<(f64, Instant)>),
+    /// Draws moving previews of every generator, or stops; see
+    /// [`Engine::generator_previews`].
+    ShowGeneratorPreviews(bool),
 }
 
 impl std::fmt::Debug for Command {
@@ -139,6 +144,7 @@ impl std::fmt::Debug for Command {
             Self::Timecode(timecode) => {
                 write!(f, "Timecode({:?})", timecode.map(|(seconds, _)| seconds))
             }
+            Self::ShowGeneratorPreviews(show) => write!(f, "ShowGeneratorPreviews({show})"),
         }
     }
 }
@@ -155,7 +161,7 @@ pub struct ProgramOutput {
 }
 
 impl ProgramOutput {
-    fn new(device: &wgpu::Device, resolution: Resolution) -> Self {
+    pub(crate) fn new(device: &wgpu::Device, resolution: Resolution) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("program"),
             size: wgpu::Extent3d {
@@ -169,6 +175,7 @@ impl ProgramOutput {
             format: WORKING_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                 | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::COPY_DST
                 | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         });
@@ -340,6 +347,8 @@ pub struct EngineState {
     /// Rehearsal of overlapping projectors, while the stage asks for it.
     simulation: Option<Arc<ProgramOutput>>,
     simulation_renderer: SimulationRenderer,
+    /// Previews of the generators, while the interface asks for them.
+    previews: Option<GeneratorPreviews>,
     /// Colours of the fixtures, sent over DMX.
     lighting: LightingOutput,
     outputs: Vec<(u64, Box<dyn Output>)>,
@@ -391,6 +400,7 @@ impl EngineState {
             stage_renderer,
             simulation: None,
             simulation_renderer,
+            previews: None,
             lighting,
             program,
             screens: Vec::new(),
@@ -504,6 +514,19 @@ impl EngineState {
             }
             Command::Resync { at } => self.clock.restart_bar(at),
             Command::Timecode(timecode) => self.timecode = timecode,
+            Command::ShowGeneratorPreviews(show) => {
+                if !show {
+                    self.previews = None;
+                } else if self.previews.is_none() {
+                    let seconds = Instant::now()
+                        .saturating_duration_since(self.started)
+                        .as_secs_f64();
+                    self.previews = Some(GeneratorPreviews::new(
+                        &self.gpu.device,
+                        (self.beat, seconds),
+                    ));
+                }
+            }
             Command::SetSound(sound) => {
                 self.sound = sound;
                 if self.sound.is_none() {
@@ -888,6 +911,9 @@ impl EngineState {
             &self.program.view,
             &self.composition.lighting,
         );
+        if let Some(previews) = &mut self.previews {
+            previews.encode(&self.fx, &gpu, &mut encoder, time, &self.transparent);
+        }
         self.update_sounds(elapsed, time);
         gpu.queue.submit([encoder.finish()]);
         self.lighting.send(&gpu, &self.composition.lighting);
@@ -1012,6 +1038,11 @@ impl EngineState {
     /// The simulation of overlapping projectors, while drawn.
     pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
         self.simulation.clone()
+    }
+
+    /// Previews of the generators, while drawn: see [`crate::preview_rect`].
+    pub fn generator_previews(&self) -> Option<Arc<ProgramOutput>> {
+        self.previews.as_ref().map(GeneratorPreviews::image)
     }
 
     /// Number of screen images drawn after each frame.
@@ -1180,6 +1211,7 @@ struct Shared {
     program: Mutex<Arc<ProgramOutput>>,
     screens: Mutex<Vec<(ScreenId, Arc<ProgramOutput>)>>,
     simulation: Mutex<Option<Arc<ProgramOutput>>>,
+    previews: Mutex<Option<Arc<ProgramOutput>>>,
 }
 
 /// Handle on the render thread.
@@ -1204,6 +1236,7 @@ impl Engine {
             program: Mutex::new(state.program()),
             screens: Mutex::new(Vec::new()),
             simulation: Mutex::new(None),
+            previews: Mutex::new(None),
         });
         let (commands, receiver) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
@@ -1259,6 +1292,17 @@ impl Engine {
     pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
         self.shared
             .simulation
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Moving previews of every generator, side by side, while
+    /// [`Command::ShowGeneratorPreviews`] asks for them; see
+    /// [`crate::preview_rect`].
+    pub fn generator_previews(&self) -> Option<Arc<ProgramOutput>> {
+        self.shared
+            .previews
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -1344,6 +1388,12 @@ fn run(mut state: EngineState, commands: Receiver<Command>, shared: Arc<Shared>)
             && simulation.as_ref().map(Arc::as_ptr) != state.simulation.as_ref().map(Arc::as_ptr)
         {
             *simulation = state.simulation_image();
+        }
+        if let Ok(mut previews) = shared.previews.try_lock() {
+            let latest = state.generator_previews();
+            if previews.as_ref().map(Arc::as_ptr) != latest.as_ref().map(Arc::as_ptr) {
+                *previews = latest;
+            }
         }
     }
 }

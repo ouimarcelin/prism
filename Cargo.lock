@@ -2920,6 +2920,7 @@ dependencies = [
  "prism-core",
  "prism-engine",
  "prism-fx",
+ "prism-render",
  "rfd",
  "serde",
  "serde_json",

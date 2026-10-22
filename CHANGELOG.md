@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Sélecteur de générateurs (ADR 0047) : fenêtre « Générateurs » avec recherche, huit familles, aperçus animés de chaque générateur dessinés par le moteur et grande vue du générateur survolé ; ouverte par « Générateur… » d'une case vide ou par le bouton du générateur dans l'inspecteur.
 - Mémoire d'image des générateurs (ADR 0046) et ses quatre générateurs : réaction-diffusion (Gray-Scott), fluide 2D, particules dans un flux, feux d'artifice ; pas par image et résolution (pleine, demie, quart) réglables ; mémoire libérée à l'arrêt du clip.
 - Banque de générateurs, tous ceux sans mémoire d'image (33) : bruit tourbillonnant, grain, bruit rose / brun, bruit de Gabor ; ondes stationnaires, Lissajous, balayage radar, océan, oscilloscope ; caustiques, fumée, feu, aurore, nuages, marbre / bois, métaballes ; tunnel, vortex, Truchet, pavage, rayons, grille déformée, polygones répétés ; Mandelbrot, Julia, pli fractal, Sierpinski ; mire, signal analogique, blocs numériques ; champ d'étoiles, pluie / neige, points en grille.
 - Inspecteur scindé : l'inspecteur occupe 42 % de la fenêtre au lancement et l'image du programme toute sa largeur ; bordure avec la grille tirée à la souris, qu'elle suit exactement ; l'image reste en haut, à la taille choisie en tirant la ligne qui la sépare des réglages ; les réglages défilent dessous sans la déplacer ; l'image s'adapte à la place sans se déformer.
@@ -55,6 +56,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Corrigé
 
+- Contenu de l'inspecteur plus large que son volet (les sources d'une case vide) : toute la mise en page s'élargissait hors de la fenêtre et la bordure grille / inspecteur ne suivait plus la souris. Grille et inspecteur ont désormais chacun une zone fixe ; les sources d'une case vide passent sur deux lignes.
 - Banque de générateurs : l'axe vertical était inversé (feu et fumée vers le bas, Sierpinski pointe en bas, horizon de l'océan en bas) ; il monte désormais.
 - Palettes arc-en-ciel, néon et coucher de soleil de la banque : 0 et 1 donnaient la même couleur, une onde carrée devenait unie ; elles ne parcourent plus que 80 % de leur cycle.
 

@@ -1133,3 +1133,40 @@ fn a_clip_set_on_the_timecode_plays_where_it_says() {
     }
     assert_eq!(driver.wait_for_frame().frame, Some(30));
 }
+
+#[test]
+fn generator_previews_are_drawn_while_asked_for() {
+    let Some(gpu) = gpu() else { return };
+    let mut driver = Driver::new(Arc::clone(&gpu), Composition::default());
+    assert!(driver.state.generator_previews().is_none());
+    driver.state.apply(Command::ShowGeneratorPreviews(true));
+    for _ in 0..3 {
+        driver.tick();
+    }
+    let image = driver.state.generator_previews().unwrap();
+    let pixels = read_texture(&gpu.device, &gpu.queue, image.texture()).unwrap();
+    let width = image.resolution().width as usize;
+    // Every generator draws something in its tile: not all of it black.
+    for (index, _) in prism_fx::GENERATORS.iter().enumerate() {
+        let [left, top, right, bottom] = prism_engine::preview_rect(index);
+        let height = pixels.len() / width;
+        let (x0, x1) = (
+            (left * width as f32) as usize,
+            (right * width as f32) as usize,
+        );
+        let (y0, y1) = (
+            (top * height as f32) as usize,
+            (bottom * height as f32) as usize,
+        );
+        let lit = (y0..y1)
+            .flat_map(|y| (x0..x1).map(move |x| y * width + x))
+            .any(|i| pixels[i][0] + pixels[i][1] + pixels[i][2] > 0.05);
+        assert!(
+            lit,
+            "preview {index} ({}) is black",
+            prism_fx::GENERATORS[index].kind
+        );
+    }
+    driver.state.apply(Command::ShowGeneratorPreviews(false));
+    assert!(driver.state.generator_previews().is_none());
+}

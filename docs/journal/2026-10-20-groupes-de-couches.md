@@ -104,3 +104,11 @@ Résultat : ADR 0046. `EffectChain` garde, pour un générateur marqué `memory`
 Problème trouvé en route : `bank_point` avait l'axe y vers le bas ; feu, fumée, aurore, océan, vagues de lignes en perspective et Sierpinski étaient à l'envers. Corrigé dans le socle (y vers le haut).
 
 Premier essai du test de réaction-diffusion raté : à 32 × 18 texels, les graines (1,5 texel) mouraient ; le test tourne en 192 × 108, pleine résolution.
+
+## Ticket 106 : sélecteur de générateurs (2026-10-22)
+
+Prompt : « créé des categories de générateurs et fais en sorte que l'interface de selection des générateurs comporte un panel de visualisateur ».
+
+Résultat : ADR 0047. Familles dans le catalogue ; aperçus animés dessinés par le moteur pendant que le sélecteur est ouvert ; fenêtre « Générateurs » (recherche, familles, grande vue, grille). Test moteur `generator_previews_are_drawn_while_asked_for` (chaque aperçu dessine quelque chose) ; capture `selecteur` avec les vrais aperçus lus du moteur.
+
+Bug trouvé en route, sans doute celui de la bordure « 50 px → 70 px » : avec une case vide sélectionnée (comme au lancement), la rangée des sources était plus large que l'inspecteur ; le volet egui élargissait alors toute la zone de la fenêtre, l'inspecteur sortait à droite et la bordure, placée d'après lui, se décalait. La grille et l'inspecteur sont maintenant dessinés chacun dans une zone fixe (`new_child`, contenu coupé au bord), la bordure placée d'après la largeur demandée ; les sources d'une case vide passent sur deux lignes.

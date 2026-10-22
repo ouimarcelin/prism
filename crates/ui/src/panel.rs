@@ -58,6 +58,9 @@ pub struct FrameInfo<'a> {
     pub status: &'a EngineStatus,
     /// Program image registered with the renderer, and its size.
     pub preview: Option<(egui::TextureId, Resolution)>,
+    /// Moving previews of the generators, while the generator browser is
+    /// open, laid out as [`prism_engine::preview_rect`] says.
+    pub generator_previews: Option<egui::TextureId>,
     /// Screens available for the output.
     pub screens: &'a [Screen],
     /// Screens showing a full-screen output.
@@ -180,6 +183,10 @@ pub struct ControlPanel {
     /// Width of the inspector, once set by dragging its edge; until then a
     /// share of the window.
     pub(crate) inspector_width: Option<f32>,
+    /// The generator browser, while open.
+    pub(crate) browser: Option<crate::browser::GeneratorBrowser>,
+    /// Whether the engine was last asked to draw generator previews.
+    pub(crate) previews_asked: bool,
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
@@ -215,6 +222,8 @@ impl ControlPanel {
             renaming: None,
             program_height: None,
             inspector_width: None,
+            browser: None,
+            previews_asked: false,
             dialogs: Dialogs {
                 missing,
                 ..Dialogs::default()
@@ -507,22 +516,43 @@ impl ControlPanel {
             .frame(theme::bar_frame(&style))
             .resizable(false)
             .show(ui, |ui| self.transport(ui, frame.status, &frame.audio));
-        let window = ui.available_width();
+        // The grid and the inspector share what is left, side by side. Each
+        // is drawn in a fixed area of its own: content wider than its area
+        // is clipped, never pushes the layout (an egui panel would widen the
+        // whole window's area with it).
+        let area = ui.available_rect_before_wrap();
+        let window = area.width();
         let max = (window - INSPECTOR_MIN_GRID).max(INSPECTOR_MIN);
         let width = self
             .inspector_width
             .unwrap_or(window * INSPECTOR_SHARE)
             .clamp(INSPECTOR_MIN, max);
-        let inspector = egui::Panel::right("inspector")
-            .frame(theme::side_frame(&style))
-            .resizable(false)
-            .show_separator_line(false)
-            .exact_size(width)
-            .show(ui, |ui| self.inspector(ui, frame));
+        let split = area.right() - width;
+        let inspector_rect = egui::Rect::from_min_max(egui::pos2(split, area.top()), area.max);
+        let grid_rect = egui::Rect::from_min_max(area.min, egui::pos2(split, area.bottom()));
+        ui.allocate_rect(area, egui::Sense::hover());
+        let side = theme::side_frame(&style);
+        ui.painter().rect_filled(inspector_rect, 0.0, side.fill);
+        let mut inspector_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("inspector")
+                .max_rect(inspector_rect.shrink2(side.inner_margin.sum() / 2.0))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        inspector_ui.set_clip_rect(inspector_rect.intersect(ui.clip_rect()));
+        self.inspector(&mut inspector_ui, frame);
+        let canvas = theme::canvas_frame(&style);
+        ui.painter().rect_filled(grid_rect, 0.0, canvas.fill);
+        let mut grid_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("grid")
+                .max_rect(grid_rect.shrink2(canvas.inner_margin.sum() / 2.0))
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        grid_ui.set_clip_rect(grid_rect.intersect(ui.clip_rect()));
+        self.grid(&mut grid_ui, frame.status);
         // The edge between the grid and the inspector, dragged sideways.
-        let edge = inspector.response.rect;
-        let grip =
-            egui::Rect::from_x_y_ranges(edge.left() - 4.0..=edge.left() + 4.0, edge.y_range());
+        let grip = egui::Rect::from_x_y_ranges(split - 4.0..=split + 4.0, area.y_range());
         let drag = ui.interact(grip, egui::Id::new("inspector edge"), egui::Sense::drag());
         if let Some(start) = follow_drag(ui, &drag, width) {
             self.inspector_width = Some((start - drag_offset(ui).x).clamp(INSPECTOR_MIN, max));
@@ -533,8 +563,8 @@ impl ControlPanel {
         }
         let palette = theme::palette(ui);
         ui.painter().vline(
-            edge.left(),
-            edge.y_range(),
+            split,
+            area.y_range(),
             egui::Stroke::new(
                 if active { 2.0 } else { 1.0 },
                 if active {
@@ -544,10 +574,8 @@ impl ControlPanel {
                 },
             ),
         );
-        egui::CentralPanel::default()
-            .frame(theme::canvas_frame(&style))
-            .show(ui, |ui| self.grid(ui, frame.status));
         self.dialogs(ui.ctx());
+        self.generator_browser(ui.ctx(), frame.generator_previews);
 
         self.document.commit(&before);
         std::mem::take(&mut self.actions)
