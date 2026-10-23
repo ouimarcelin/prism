@@ -350,7 +350,7 @@ pub(crate) fn generator_settings(
                 let hover =
                     file_hover(generator).map_or_else(String::new, |text| format!("{text}\n"));
                 browse = ui
-                    .button(RichText::new(format!("{} ▸", info.label)).semibold())
+                    .button(RichText::new(format!("{}…", info.label)).semibold())
                     .on_hover_text(format!(
                         "{hover}Changer de générateur : familles et aperçus"
                     ))

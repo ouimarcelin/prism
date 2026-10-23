@@ -1001,15 +1001,26 @@ impl App {
         let midi = self.midi.status.clone();
         let panel = &mut self.panel;
         let mut actions = Vec::new();
-        // The previews of the generators, while the browser shows them.
+        // The previews of the generators and effects, then the selected
+        // cell drawn apart, when the engine has them.
+        let previews = running.engine.generator_previews();
+        let slot_preview = running.engine.slot_preview();
+        let previews_index = previews.as_ref().map(|_| 1);
+        let slot_index = slot_preview
+            .as_ref()
+            .map(|_| 1 + usize::from(previews.is_some()));
         let images: Vec<_> = std::iter::once(program)
-            .chain(running.engine.generator_previews())
+            .chain(previews)
+            .chain(slot_preview)
             .collect();
         running.control.draw(&running.gpu, &images, |ui, textures| {
             let frame = FrameInfo {
                 status: &status,
                 preview: textures.first().copied(),
-                generator_previews: textures.get(1).map(|(texture, _)| *texture),
+                generator_previews: previews_index
+                    .and_then(|index| textures.get(index))
+                    .map(|(texture, _)| *texture),
+                slot_preview: slot_index.and_then(|index| textures.get(index)).copied(),
                 screens: &screens,
                 output_screens: &output_screens,
                 audio: audio.clone(),

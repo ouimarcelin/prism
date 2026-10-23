@@ -14,6 +14,7 @@ use prism_core::{Composition, Effect, GroupId, LayerId, Resolution, ScreenId, Sl
 use prism_fx::{EffectChain, EffectRenderer, FrameTime};
 
 use crate::previews::GeneratorPreviews;
+use crate::slot_preview::SlotPreview;
 use prism_render::{
     Compositor, FrameUploader, Gpu, LayerInput, ScreenTarget, SimulatedScreen, SimulationRenderer,
     StageRenderer, Transition, WORKING_FORMAT, solid_color_texture, wgpu,
@@ -123,6 +124,9 @@ pub enum Command {
     /// Draws moving previews of every generator, or stops; see
     /// [`Engine::generator_previews`].
     ShowGeneratorPreviews(bool),
+    /// Draws the cell selected in the interface apart from the program, or
+    /// stops; see [`Engine::slot_preview`].
+    PreviewSlot(Option<Slot>),
 }
 
 impl std::fmt::Debug for Command {
@@ -145,6 +149,7 @@ impl std::fmt::Debug for Command {
                 write!(f, "Timecode({:?})", timecode.map(|(seconds, _)| seconds))
             }
             Self::ShowGeneratorPreviews(show) => write!(f, "ShowGeneratorPreviews({show})"),
+            Self::PreviewSlot(slot) => write!(f, "PreviewSlot({slot:?})"),
         }
     }
 }
@@ -349,6 +354,8 @@ pub struct EngineState {
     simulation_renderer: SimulationRenderer,
     /// Previews of the generators, while the interface asks for them.
     previews: Option<GeneratorPreviews>,
+    /// The selected cell, drawn apart, while the interface asks for it.
+    slot_preview: Option<SlotPreview>,
     /// Colours of the fixtures, sent over DMX.
     lighting: LightingOutput,
     outputs: Vec<(u64, Box<dyn Output>)>,
@@ -401,6 +408,7 @@ impl EngineState {
             simulation: None,
             simulation_renderer,
             previews: None,
+            slot_preview: None,
             lighting,
             program,
             screens: Vec::new(),
@@ -514,6 +522,18 @@ impl EngineState {
             }
             Command::Resync { at } => self.clock.restart_bar(at),
             Command::Timecode(timecode) => self.timecode = timecode,
+            Command::PreviewSlot(slot) => match slot {
+                None => self.slot_preview = None,
+                Some(slot) => {
+                    if self.slot_preview.as_ref().map(SlotPreview::slot) != Some(slot) {
+                        self.slot_preview = Some(SlotPreview::new(
+                            &self.gpu.device,
+                            slot,
+                            self.composition.resolution(),
+                        ));
+                    }
+                }
+            },
             Command::ShowGeneratorPreviews(show) => {
                 if !show {
                     self.previews = None;
@@ -677,6 +697,16 @@ impl EngineState {
         self.beat = self.clock.beat_at(now);
         let tick = 1.0 / self.composition.frame_rate().as_f64();
 
+        // The selected cell, drawn apart.
+        if let Some(preview) = &mut self.slot_preview {
+            let launch = (
+                self.beat,
+                now.saturating_duration_since(self.started).as_secs_f64(),
+            );
+            preview.sync(&self.gpu.device, &self.composition, launch);
+            preview.advance(elapsed, tick, &mut self.random);
+        }
+
         // Playback.
         for runtime in &mut self.layers {
             runtime.advance_transition(elapsed);
@@ -725,6 +755,9 @@ impl EngineState {
             for stream in runtime.streams_mut() {
                 stream.upload(&gpu, &mut self.uploader, &mut encoder);
             }
+        }
+        if let Some(preview) = &mut self.slot_preview {
+            preview.upload(&gpu, &mut self.uploader, &mut encoder);
         }
         self.uploader.finish(&encoder);
 
@@ -914,6 +947,16 @@ impl EngineState {
         if let Some(previews) = &mut self.previews {
             previews.encode(&self.fx, &gpu, &mut encoder, time, &self.transparent);
         }
+        if let Some(preview) = &mut self.slot_preview {
+            preview.draw(
+                &self.fx,
+                &gpu,
+                &mut encoder,
+                &self.composition,
+                time,
+                &self.transparent,
+            );
+        }
         self.update_sounds(elapsed, time);
         gpu.queue.submit([encoder.finish()]);
         self.lighting.send(&gpu, &self.composition.lighting);
@@ -1038,6 +1081,11 @@ impl EngineState {
     /// The simulation of overlapping projectors, while drawn.
     pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
         self.simulation.clone()
+    }
+
+    /// The selected cell drawn apart, while asked for.
+    pub fn slot_preview(&self) -> Option<Arc<ProgramOutput>> {
+        self.slot_preview.as_ref().map(SlotPreview::image)
     }
 
     /// Previews of the generators, while drawn: see [`crate::preview_rect`].
@@ -1212,6 +1260,7 @@ struct Shared {
     screens: Mutex<Vec<(ScreenId, Arc<ProgramOutput>)>>,
     simulation: Mutex<Option<Arc<ProgramOutput>>>,
     previews: Mutex<Option<Arc<ProgramOutput>>>,
+    slot_preview: Mutex<Option<Arc<ProgramOutput>>>,
 }
 
 /// Handle on the render thread.
@@ -1237,6 +1286,7 @@ impl Engine {
             screens: Mutex::new(Vec::new()),
             simulation: Mutex::new(None),
             previews: Mutex::new(None),
+            slot_preview: Mutex::new(None),
         });
         let (commands, receiver) = mpsc::channel();
         let thread_shared = Arc::clone(&shared);
@@ -1292,6 +1342,16 @@ impl Engine {
     pub fn simulation_image(&self) -> Option<Arc<ProgramOutput>> {
         self.shared
             .simulation
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// The cell selected in the interface, drawn apart from the program
+    /// with its own effects, while [`Command::PreviewSlot`] asks for it.
+    pub fn slot_preview(&self) -> Option<Arc<ProgramOutput>> {
+        self.shared
+            .slot_preview
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
@@ -1388,6 +1448,12 @@ fn run(mut state: EngineState, commands: Receiver<Command>, shared: Arc<Shared>)
             && simulation.as_ref().map(Arc::as_ptr) != state.simulation.as_ref().map(Arc::as_ptr)
         {
             *simulation = state.simulation_image();
+        }
+        if let Ok(mut preview) = shared.slot_preview.try_lock() {
+            let latest = state.slot_preview();
+            if preview.as_ref().map(Arc::as_ptr) != latest.as_ref().map(Arc::as_ptr) {
+                *preview = latest;
+            }
         }
         if let Ok(mut previews) = shared.previews.try_lock() {
             let latest = state.generator_previews();

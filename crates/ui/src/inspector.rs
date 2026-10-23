@@ -28,62 +28,13 @@ use crate::slider::Slider;
 use crate::theme::{self, Emphasis};
 
 impl ControlPanel {
-    pub(crate) fn inspector(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
-        // The program on top, its height set by dragging the line under it;
-        // the settings scroll below without moving it.
-        let max = (ui.available_height() - 120.0).max(80.0);
-        let width = ui.available_width();
-        // Until dragged, the pane fits the image at the inspector's width.
-        let fit = frame.preview.map_or(width * 9.0 / 16.0, |(_, resolution)| {
-            width * resolution.height as f32 / resolution.width.max(1) as f32
-        }) + 2.0 * ui.text_style_height(&egui::TextStyle::Body)
-            + 3.0 * ui.spacing().item_spacing.y
-            + 4.0;
-        let height = self.program_height.unwrap_or(fit).clamp(80.0, max);
-        let (pane, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
-        // A child that leaves the parent's cursor under the whole pane.
-        preview(
-            &mut ui.new_child(egui::UiBuilder::new().max_rect(pane)),
-            frame,
-        );
-        let (line, drag) = ui.allocate_exact_size(Vec2::new(width, 8.0), egui::Sense::drag());
-        if let Some(start) = crate::panel::follow_drag(ui, &drag, height) {
-            let moved = start + crate::panel::drag_offset(ui).y;
-            self.program_height = Some(moved.clamp(80.0, max));
-        }
-        let active = drag.hovered() || drag.dragged();
-        if active {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeVertical);
-        }
-        let palette = theme::palette(ui);
-        ui.painter().hline(
-            line.x_range(),
-            line.center().y,
-            egui::Stroke::new(
-                if active { 2.0 } else { 1.0 },
-                if active {
-                    palette.brand
-                } else {
-                    ui.visuals().widgets.noninteractive.bg_stroke.color
-                },
-            ),
-        );
+    /// Settings of the selection: its group, its layer and its clip (their
+    /// effects are in [`ControlPanel::effects_panel`]).
+    pub(crate) fn settings_panel(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
         egui::ScrollArea::vertical()
+            .id_salt("settings panel")
             .auto_shrink([false, false])
             .show(ui, |ui| {
-                effect_section(
-                    ui,
-                    "Effets de la composition",
-                    EffectOwner::Composition,
-                    &mut self.document.composition_mut().effects,
-                    false,
-                    Tools {
-                        presets: &mut self.presets,
-                        plugins: &mut self.plugins,
-                        learn: &mut self.learn,
-                    },
-                );
-                ui.separator();
                 let Some(slot) = self.selected else {
                     ui.label(RichText::new("Sélectionnez une case de la grille.").weak());
                     return;
@@ -106,6 +57,75 @@ impl ControlPanel {
                 ui.separator();
                 self.clip_properties(ui, slot, status);
             });
+    }
+
+    /// Chains of effects of the selection, from the clip out to the
+    /// composition; an effect of the bank dropped on one joins it.
+    pub(crate) fn effects_panel(&mut self, ui: &mut egui::Ui) {
+        egui::ScrollArea::vertical()
+            .id_salt("effects panel")
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                let selected = self.selected;
+                let layer = selected.map(|slot| slot.layer);
+                let group = layer.and_then(|layer| {
+                    self.document
+                        .composition()
+                        .layer(layer)
+                        .and_then(|layer| layer.group())
+                });
+                let mut owners = Vec::new();
+                if let Some(slot) = selected
+                    && self.document.composition().clip(slot).is_some()
+                {
+                    owners.push((EffectOwner::Clip { slot }, "Effets du clip"));
+                }
+                if let Some(layer) = layer {
+                    owners.push((EffectOwner::Layer { layer }, "Effets de la couche"));
+                }
+                if let Some(group) = group {
+                    owners.push((EffectOwner::Group { group }, "Effets du groupe"));
+                }
+                owners.push((EffectOwner::Composition, "Effets de la composition"));
+                for (owner, title) in owners {
+                    let dashboard = matches!(owner, EffectOwner::Clip { .. });
+                    let response = ui
+                        .scope(|ui| {
+                            let Some(effects) = effects_in(self.document.composition_mut(), owner)
+                            else {
+                                return;
+                            };
+                            effect_section(
+                                ui,
+                                title,
+                                owner,
+                                effects,
+                                dashboard,
+                                Tools {
+                                    presets: &mut self.presets,
+                                    plugins: &mut self.plugins,
+                                    learn: &mut self.learn,
+                                },
+                            );
+                        })
+                        .response;
+                    if let Some(kind) = crate::bank::effect_dropped(ui, response.rect)
+                        && let Some(effects) = self.effects_of(owner)
+                        && let Some(info) = prism_fx::find(kind)
+                    {
+                        effects.push(info.create());
+                    }
+                    ui.separator();
+                }
+            });
+    }
+
+    /// The chain of effects of `owner`, if it still exists.
+    pub(crate) fn effects_of(
+        &mut self,
+        owner: EffectOwner,
+    ) -> Option<&mut Vec<prism_core::Effect>> {
+        effects_in(self.document.composition_mut(), owner)
     }
 
     /// Settings and effects of the group of the selected layer.
@@ -145,18 +165,6 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
-        effect_section(
-            ui,
-            "Effets du groupe",
-            EffectOwner::Group { group: id },
-            &mut group.effects,
-            false,
-            Tools {
-                presets: &mut self.presets,
-                plugins: &mut self.plugins,
-                learn: &mut self.learn,
-            },
-        );
     }
 
     fn layer_properties(&mut self, ui: &mut egui::Ui, slot: Slot) {
@@ -251,18 +259,6 @@ impl ControlPanel {
                 });
                 ui.end_row();
             });
-        effect_section(
-            ui,
-            "Effets de la couche",
-            EffectOwner::Layer { layer: slot.layer },
-            &mut layer.effects,
-            true,
-            Tools {
-                presets: &mut self.presets,
-                plugins: &mut self.plugins,
-                learn: &mut self.learn,
-            },
-        );
     }
 
     fn clip_properties(&mut self, ui: &mut egui::Ui, slot: Slot, status: Option<&LayerStatus>) {
@@ -417,18 +413,6 @@ impl ControlPanel {
                     ui.end_row();
                 });
             dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
-            effect_section(
-                ui,
-                "Effets du clip",
-                EffectOwner::Clip { slot },
-                &mut clip.effects,
-                true,
-                Tools {
-                    presets: &mut self.presets,
-                    plugins: &mut self.plugins,
-                    learn: &mut self.learn,
-                },
-            );
             return;
         }
         let mut browse = false;
@@ -447,18 +431,6 @@ impl ControlPanel {
                 browse = generator_settings(ui, generator, &mut self.learn, slot);
             }
             dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
-            effect_section(
-                ui,
-                "Effets du clip",
-                EffectOwner::Clip { slot },
-                &mut clip.effects,
-                true,
-                Tools {
-                    presets: &mut self.presets,
-                    plugins: &mut self.plugins,
-                    learn: &mut self.learn,
-                },
-            );
             if browse {
                 self.open_generator_browser(slot);
             }
@@ -630,18 +602,6 @@ impl ControlPanel {
                 ui.end_row();
             });
         dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
-        effect_section(
-            ui,
-            "Effets du clip",
-            EffectOwner::Clip { slot },
-            &mut clip.effects,
-            true,
-            Tools {
-                presets: &mut self.presets,
-                plugins: &mut self.plugins,
-                learn: &mut self.learn,
-            },
-        );
         if relocate {
             self.relocate_dialog(slot);
         }
@@ -740,7 +700,7 @@ impl ControlPanel {
 
 /// The program image, as large as its pane allows without distortion,
 /// centred, with its size and outputs under it.
-fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
+pub(crate) fn output_monitor(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
     ui.label(RichText::new("Programme").semibold());
     let Some((texture, resolution)) = frame.preview else {
         ui.label(RichText::new("Aperçu indisponible").weak());
@@ -757,9 +717,39 @@ fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
         }
     );
     let caption_height = ui.text_style_height(&egui::TextStyle::Body) + ui.spacing().item_spacing.y;
+    fit_image(ui, texture, resolution, caption_height + 4.0);
+    ui.label(RichText::new(caption).weak());
+}
+
+/// The chain of effects of `owner` in `composition`, if it still exists.
+pub(crate) fn effects_in(
+    composition: &mut prism_core::Composition,
+    owner: EffectOwner,
+) -> Option<&mut Vec<prism_core::Effect>> {
+    match owner {
+        EffectOwner::Composition => Some(&mut composition.effects),
+        EffectOwner::Layer { layer } => {
+            composition.layer_mut(layer).map(|layer| &mut layer.effects)
+        }
+        EffectOwner::Group { group } => {
+            composition.group_mut(group).map(|group| &mut group.effects)
+        }
+        EffectOwner::Clip { slot } => composition.clip_mut(slot).map(|clip| &mut clip.effects),
+        EffectOwner::Generator { .. } => None,
+    }
+}
+
+/// `texture`, of `resolution`, as large as the room left in `ui` allows
+/// (less `below`, kept for what follows) without distortion, centred.
+pub(crate) fn fit_image(
+    ui: &mut egui::Ui,
+    texture: egui::TextureId,
+    resolution: prism_core::Resolution,
+    below: f32,
+) {
     let room = Vec2::new(
         ui.available_width(),
-        (ui.available_height() - caption_height - 4.0).max(16.0),
+        (ui.available_height() - below).max(16.0),
     );
     let aspect = resolution.width.max(1) as f32 / resolution.height.max(1) as f32;
     let size = if room.x / room.y > aspect {
@@ -770,5 +760,4 @@ fn preview(ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
     let (area, _) = ui.allocate_exact_size(Vec2::new(room.x, size.y), egui::Sense::hover());
     let image = egui::Rect::from_center_size(area.center(), size);
     egui::Image::from_texture(egui::load::SizedTexture::new(texture, size)).paint_at(ui, image);
-    ui.label(RichText::new(caption).weak());
 }

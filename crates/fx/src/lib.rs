@@ -18,8 +18,8 @@ mod plugins;
 mod text;
 
 pub use catalog::{
-    CATALOG, COMMON_PARAMS, EffectInfo, GENERATOR_CATEGORIES, GENERATORS, MAX_PARAMS, ParamInfo,
-    find, find_generator, generator_category, info_for,
+    CATALOG, COMMON_PARAMS, EFFECT_CATEGORIES, EffectInfo, GENERATOR_CATEGORIES, GENERATORS,
+    MAX_PARAMS, ParamInfo, effect_category, find, find_generator, generator_category, info_for,
 };
 pub use chain::{EffectChain, EffectRenderer, FrameTime, is_active};
 pub use isf::{ISF_KIND, IsfError, IsfShader, compile as compile_isf, load as load_isf, shader_of};

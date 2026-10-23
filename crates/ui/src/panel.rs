@@ -58,9 +58,11 @@ pub struct FrameInfo<'a> {
     pub status: &'a EngineStatus,
     /// Program image registered with the renderer, and its size.
     pub preview: Option<(egui::TextureId, Resolution)>,
-    /// Moving previews of the generators, while the generator browser is
-    /// open, laid out as [`prism_engine::preview_rect`] says.
+    /// Moving previews of the generators and effects, laid out as
+    /// [`prism_engine::preview_rect`] says.
     pub generator_previews: Option<egui::TextureId>,
+    /// The selected cell drawn apart, for the preview monitor, and its size.
+    pub slot_preview: Option<(egui::TextureId, Resolution)>,
     /// Screens available for the output.
     pub screens: &'a [Screen],
     /// Screens showing a full-screen output.
@@ -164,12 +166,8 @@ pub(crate) fn drag_offset(ui: &egui::Ui) -> egui::Vec2 {
     )
 }
 
-/// Narrowest the inspector gets.
-const INSPECTOR_MIN: f32 = 260.0;
-/// Width always left to the grid beside the inspector.
-const INSPECTOR_MIN_GRID: f32 = 360.0;
-/// Share of the window the inspector takes until its edge is dragged.
-const INSPECTOR_SHARE: f32 = 0.42;
+/// Smallest size of a pane, in points.
+const PANE_MIN: f32 = 120.0;
 
 /// State of the control window around the document being edited.
 pub struct ControlPanel {
@@ -177,16 +175,16 @@ pub struct ControlPanel {
     pub(crate) selected: Option<Slot>,
     /// Layer or group whose name is being edited, with its name before.
     pub(crate) renaming: Option<(crate::grid::Target, String)>,
-    /// Height of the program image pane, at the top of the inspector, once
-    /// set by dragging; until then the image fills the inspector's width.
-    pub(crate) program_height: Option<f32>,
-    /// Width of the inspector, once set by dragging its edge; until then a
-    /// share of the window.
-    pub(crate) inspector_width: Option<f32>,
+    /// The bank of effects and generators.
+    pub(crate) bank: crate::bank::BankState,
+    /// Cell the engine was last asked to draw apart.
+    pub(crate) preview_asked: Option<Slot>,
     /// The generator browser, while open.
     pub(crate) browser: Option<crate::browser::GeneratorBrowser>,
     /// Whether the engine was last asked to draw generator previews.
     pub(crate) previews_asked: bool,
+    /// The sizes of the panes when a line between them was pressed.
+    pub(crate) layout_drag: Option<crate::preferences::Layout>,
     pub(crate) dialogs: Dialogs,
     pub(crate) actions: Vec<Action>,
     pub(crate) missing_cache: (u64, HashSet<Slot>),
@@ -220,10 +218,11 @@ impl ControlPanel {
             document,
             selected,
             renaming: None,
-            program_height: None,
-            inspector_width: None,
+            bank: crate::bank::BankState::default(),
+            preview_asked: None,
             browser: None,
             previews_asked: false,
+            layout_drag: None,
             dialogs: Dialogs {
                 missing,
                 ..Dialogs::default()
@@ -516,66 +515,15 @@ impl ControlPanel {
             .frame(theme::bar_frame(&style))
             .resizable(false)
             .show(ui, |ui| self.transport(ui, frame.status, &frame.audio));
-        // The grid and the inspector share what is left, side by side. Each
-        // is drawn in a fixed area of its own: content wider than its area
-        // is clipped, never pushes the layout (an egui panel would widen the
-        // whole window's area with it).
-        let area = ui.available_rect_before_wrap();
-        let window = area.width();
-        let max = (window - INSPECTOR_MIN_GRID).max(INSPECTOR_MIN);
-        let width = self
-            .inspector_width
-            .unwrap_or(window * INSPECTOR_SHARE)
-            .clamp(INSPECTOR_MIN, max);
-        let split = area.right() - width;
-        let inspector_rect = egui::Rect::from_min_max(egui::pos2(split, area.top()), area.max);
-        let grid_rect = egui::Rect::from_min_max(area.min, egui::pos2(split, area.bottom()));
-        ui.allocate_rect(area, egui::Sense::hover());
-        let side = theme::side_frame(&style);
-        ui.painter().rect_filled(inspector_rect, 0.0, side.fill);
-        let mut inspector_ui = ui.new_child(
-            egui::UiBuilder::new()
-                .id_salt("inspector")
-                .max_rect(inspector_rect.shrink2(side.inner_margin.sum() / 2.0))
-                .layout(egui::Layout::top_down(egui::Align::Min)),
-        );
-        inspector_ui.set_clip_rect(inspector_rect.intersect(ui.clip_rect()));
-        self.inspector(&mut inspector_ui, frame);
-        let canvas = theme::canvas_frame(&style);
-        ui.painter().rect_filled(grid_rect, 0.0, canvas.fill);
-        let mut grid_ui = ui.new_child(
-            egui::UiBuilder::new()
-                .id_salt("grid")
-                .max_rect(grid_rect.shrink2(canvas.inner_margin.sum() / 2.0))
-                .layout(egui::Layout::top_down(egui::Align::Min)),
-        );
-        grid_ui.set_clip_rect(grid_rect.intersect(ui.clip_rect()));
-        self.grid(&mut grid_ui, frame.status);
-        // The edge between the grid and the inspector, dragged sideways.
-        let grip = egui::Rect::from_x_y_ranges(split - 4.0..=split + 4.0, area.y_range());
-        let drag = ui.interact(grip, egui::Id::new("inspector edge"), egui::Sense::drag());
-        if let Some(start) = follow_drag(ui, &drag, width) {
-            self.inspector_width = Some((start - drag_offset(ui).x).clamp(INSPECTOR_MIN, max));
-        }
-        let active = drag.hovered() || drag.dragged();
-        if active {
-            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
-        }
-        let palette = theme::palette(ui);
-        ui.painter().vline(
-            split,
-            area.y_range(),
-            egui::Stroke::new(
-                if active { 2.0 } else { 1.0 },
-                if active {
-                    palette.brand
-                } else {
-                    ui.visuals().widgets.noninteractive.bg_stroke.color
-                },
-            ),
-        );
+        self.panes(ui, frame);
         self.dialogs(ui.ctx());
         self.generator_browser(ui.ctx(), frame.generator_previews);
+        // The engine draws the selected cell apart for the preview monitor.
+        if self.selected != self.preview_asked {
+            self.preview_asked = self.selected;
+            self.actions
+                .push(Action::Engine(Command::PreviewSlot(self.selected)));
+        }
 
         self.document.commit(&before);
         std::mem::take(&mut self.actions)
@@ -1594,6 +1542,206 @@ fn settings_menu(title: &str) -> egui::containers::menu::MenuButton<'_> {
         egui::containers::menu::MenuConfig::new()
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside),
     )
+}
+
+/// A line between two panes that the pointer drags along `axis` (0: x, 1:
+/// y). Returns the pointer's way since the press while dragged, and
+/// whether the drag just ended.
+fn splitter(ui: &egui::Ui, id: &str, line: egui::Rect, axis: usize) -> (Option<f32>, bool) {
+    let grip = if axis == 0 {
+        line.expand2(egui::vec2(4.0, 0.0))
+    } else {
+        line.expand2(egui::vec2(0.0, 4.0))
+    };
+    let response = ui.interact(grip, egui::Id::new(("splitter", id)), egui::Sense::drag());
+    let active = response.hovered() || response.dragged();
+    if active {
+        ui.ctx().set_cursor_icon(if axis == 0 {
+            egui::CursorIcon::ResizeHorizontal
+        } else {
+            egui::CursorIcon::ResizeVertical
+        });
+    }
+    let palette = theme::palette(ui);
+    let stroke = egui::Stroke::new(
+        if active { 2.0 } else { 1.0 },
+        if active {
+            palette.brand
+        } else {
+            ui.visuals().widgets.noninteractive.bg_stroke.color
+        },
+    );
+    if axis == 0 {
+        ui.painter().vline(line.center().x, line.y_range(), stroke);
+    } else {
+        ui.painter().hline(line.x_range(), line.center().y, stroke);
+    }
+    let moved = follow_drag(ui, &response, 0.0).map(|_| drag_offset(ui)[axis]);
+    (moved, response.drag_stopped())
+}
+
+/// A child of `ui` drawn in `rect` on `fill`, inside `margin`; content wider
+/// or taller than `rect` is clipped, never pushes the layout.
+fn pane(ui: &mut egui::Ui, id: &str, rect: egui::Rect, frame: egui::Frame) -> egui::Ui {
+    ui.painter().rect_filled(rect, 0.0, frame.fill);
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(id)
+            .max_rect(rect.shrink2(frame.inner_margin.sum() / 2.0))
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+    );
+    child.set_clip_rect(rect.intersect(ui.clip_rect()));
+    child
+}
+
+impl ControlPanel {
+    /// The panes of the window: the layers on top; under them the
+    /// monitors, the settings, the effects of the selection and the bank.
+    /// Every line between panes is dragged; the sizes are kept.
+    fn panes(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
+        let style = ui.style().clone();
+        let area = ui.available_rect_before_wrap();
+        ui.allocate_rect(area, egui::Sense::hover());
+        let layout = self.preferences.layout.clone();
+        let top_height = (area.height() * layout.layers)
+            .clamp(PANE_MIN, (area.height() - PANE_MIN).max(PANE_MIN));
+        let split_y = area.top() + top_height;
+        let layers_rect = egui::Rect::from_min_max(area.min, egui::pos2(area.right(), split_y));
+        let bottom = egui::Rect::from_min_max(egui::pos2(area.left(), split_y), area.max);
+        // Column edges from the shares.
+        let total: f32 = layout.columns.iter().sum::<f32>().max(1e-3);
+        let mut edges = [bottom.left(); 5];
+        for (index, share) in layout.columns.iter().enumerate() {
+            edges[index + 1] = edges[index] + bottom.width() * share / total;
+        }
+        edges[4] = bottom.right();
+        let column = |index: usize| {
+            egui::Rect::from_min_max(
+                egui::pos2(edges[index], bottom.top()),
+                egui::pos2(edges[index + 1], bottom.bottom()),
+            )
+        };
+        let monitors = column(0);
+        let output_height = monitors.height() * layout.output;
+        let split_monitor = monitors.top() + output_height;
+
+        let canvas = theme::canvas_frame(&style);
+        let side = theme::side_frame(&style);
+        let mut grid_ui = pane(ui, "layers", layers_rect, canvas);
+        self.grid(&mut grid_ui, frame.status);
+        let mut output_ui = pane(
+            ui,
+            "output monitor",
+            egui::Rect::from_min_max(monitors.min, egui::pos2(monitors.right(), split_monitor)),
+            side,
+        );
+        crate::inspector::output_monitor(&mut output_ui, frame);
+        let mut preview_ui = pane(
+            ui,
+            "preview monitor",
+            egui::Rect::from_min_max(egui::pos2(monitors.left(), split_monitor), monitors.max),
+            side,
+        );
+        self.preview_monitor(&mut preview_ui, frame);
+        let mut settings_ui = pane(ui, "settings", column(1), side);
+        self.settings_panel(&mut settings_ui, frame);
+        let mut effects_ui = pane(ui, "effects", column(2), side);
+        effects_ui.label(egui::RichText::new("Effets de la sélection").heading());
+        self.effects_panel(&mut effects_ui);
+        let mut bank_ui = pane(ui, "bank", column(3), side);
+        self.bank_panel(&mut bank_ui, frame.generator_previews);
+
+        // Lines between panes.
+        let mut changed = false;
+        let mut stopped = false;
+        let layout = &mut self.preferences.layout;
+        let (moved, done) = splitter(
+            ui,
+            "layers",
+            egui::Rect::from_x_y_ranges(area.x_range(), split_y..=split_y),
+            1,
+        );
+        if let Some(dy) = moved {
+            let start = self
+                .layout_drag
+                .get_or_insert_with(|| layout.clone())
+                .layers;
+            layout.layers = (start + dy / area.height()).clamp(0.15, 0.85);
+            changed = true;
+        }
+        stopped |= done;
+        for index in 0..3 {
+            let x = edges[index + 1];
+            let (moved, done) = splitter(
+                ui,
+                ["column 1", "column 2", "column 3"][index],
+                egui::Rect::from_x_y_ranges(x..=x, bottom.y_range()),
+                0,
+            );
+            if let Some(dx) = moved {
+                let start = self
+                    .layout_drag
+                    .get_or_insert_with(|| layout.clone())
+                    .columns;
+                let share = dx / bottom.width() * total;
+                let low = 0.08 * total;
+                let pair = start[index] + start[index + 1];
+                let left = (start[index] + share).clamp(low, pair - low);
+                layout.columns[index] = left;
+                layout.columns[index + 1] = pair - left;
+                changed = true;
+            }
+            stopped |= done;
+        }
+        let (moved, done) = splitter(
+            ui,
+            "monitors",
+            egui::Rect::from_x_y_ranges(monitors.x_range(), split_monitor..=split_monitor),
+            1,
+        );
+        if let Some(dy) = moved {
+            let start = self
+                .layout_drag
+                .get_or_insert_with(|| layout.clone())
+                .output;
+            layout.output = (start + dy / monitors.height()).clamp(0.15, 0.85);
+            changed = true;
+        }
+        stopped |= done;
+        if stopped {
+            self.layout_drag = None;
+            self.save_preferences();
+        }
+        let _ = changed;
+    }
+
+    /// The selected cell, drawn apart with its own effects.
+    fn preview_monitor(&mut self, ui: &mut egui::Ui, frame: &FrameInfo<'_>) {
+        let name = self
+            .selected
+            .and_then(|slot| self.document.composition().clip(slot))
+            .map(|clip| clip.name.clone());
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Aperçu").semibold());
+            if let Some(name) = &name {
+                ui.label(egui::RichText::new(name).weak());
+            }
+        });
+        match (&name, frame.slot_preview) {
+            (Some(_), Some((texture, resolution))) => {
+                crate::inspector::fit_image(ui, texture, resolution, 0.0);
+            }
+            (Some(_), None) => {
+                ui.label(egui::RichText::new("Aperçu en préparation…").weak());
+            }
+            (None, _) => {
+                ui.label(
+                    egui::RichText::new("Sélectionnez un clip pour le voir avant de le lancer.")
+                        .weak(),
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]

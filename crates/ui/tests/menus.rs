@@ -21,6 +21,7 @@ fn settings_menus_stay_open_on_options() {
             status: &status,
             preview: None,
             generator_previews: None,
+            slot_preview: None,
             screens: &[],
             output_screens: &[],
             audio: AudioStatus::default(),

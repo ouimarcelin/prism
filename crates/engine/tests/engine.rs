@@ -1170,3 +1170,30 @@ fn generator_previews_are_drawn_while_asked_for() {
     driver.state.apply(Command::ShowGeneratorPreviews(false));
     assert!(driver.state.generator_previews().is_none());
 }
+
+#[test]
+fn the_selected_cell_is_drawn_apart_from_the_program() {
+    let Some(gpu) = gpu() else { return };
+    let mut composition = Composition::default();
+    let slot = Slot::new(composition.layers()[0].id(), composition.columns()[0].id());
+    let mut clip = Clip::from_generator("Aplat", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .set_param("saturation", 1.0);
+    composition.set_clip(slot, Some(clip)).unwrap();
+    // Not launched: the program stays black, the preview shows the clip.
+    let mut driver = Driver::new(Arc::clone(&gpu), composition);
+    driver.state.apply(Command::PreviewSlot(Some(slot)));
+    for _ in 0..3 {
+        driver.tick();
+    }
+    let preview = driver.state.slot_preview().unwrap();
+    let pixel = read_texture(&gpu.device, &gpu.queue, preview.texture()).unwrap()[0];
+    assert!(pixel[0] > 0.9 && pixel[1] < 0.1, "preview {pixel:?}");
+    let program =
+        read_texture(&gpu.device, &gpu.queue, driver.state.program().texture()).unwrap()[0];
+    assert!(program[0] < 0.01, "program {program:?}");
+    driver.state.apply(Command::PreviewSlot(None));
+    assert!(driver.state.slot_preview().is_none());
+}

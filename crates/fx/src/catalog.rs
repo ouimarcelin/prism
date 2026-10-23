@@ -1376,6 +1376,38 @@ pub const GENERATOR_CATEGORIES: &[(&str, &[&str])] = &[
     ),
 ];
 
+/// Families of effects, for choosing one: a name and the kinds in it.
+pub const EFFECT_CATEGORIES: &[(&str, &[&str])] = &[
+    (
+        "Couleur",
+        &["color", "invert", "posterize", "threshold", "colorize"],
+    ),
+    (
+        "Géométrie",
+        &[
+            "transform",
+            "mirror",
+            "kaleidoscope",
+            "tile",
+            "swirl",
+            "wave",
+        ],
+    ),
+    (
+        "Flou et détails",
+        &["blur", "pixelate", "edges", "vignette"],
+    ),
+    ("Glitch et rythme", &["rgb_split", "glitch", "strobe"]),
+];
+
+/// Name of the family of the effect `kind`.
+pub fn effect_category(kind: &str) -> Option<&'static str> {
+    EFFECT_CATEGORIES
+        .iter()
+        .find(|(_, kinds)| kinds.contains(&kind))
+        .map(|(name, _)| *name)
+}
+
 /// Name of the family of the generator `kind`.
 pub fn generator_category(kind: &str) -> Option<&'static str> {
     GENERATOR_CATEGORIES
@@ -1480,6 +1512,22 @@ pub fn find(kind: &str) -> Option<&'static EffectInfo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_effect_is_in_one_family() {
+        for info in CATALOG {
+            let families = EFFECT_CATEGORIES
+                .iter()
+                .filter(|(_, kinds)| kinds.contains(&info.kind))
+                .count();
+            assert_eq!(families, 1, "{}", info.kind);
+        }
+        for (_, kinds) in EFFECT_CATEGORIES {
+            for kind in *kinds {
+                assert!(find(kind).is_some(), "{kind}");
+            }
+        }
+    }
 
     #[test]
     fn every_generator_is_in_one_family() {
