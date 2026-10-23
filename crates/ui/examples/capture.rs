@@ -53,6 +53,7 @@ fn main() {
             status: &status,
             preview: None,
             generator_previews: previews_texture.as_ref().map(egui::TextureHandle::id),
+            slot_preview: None,
             screens: &screens,
             output_screens: &[],
             audio: AudioStatus::default(),
@@ -87,12 +88,12 @@ fn main() {
     capture.run_steps(4);
     save(&mut capture, &folder, "generateur");
     // The generator browser, its previews drawn by the engine.
-    capture.get_by_label("Distorsion ▸").click();
+    capture.get_by_label("Distorsion…").click();
     capture.run_steps(6);
     capture.get_by_label("Fluides et matières (9)").click();
     capture.run_steps(4);
-    let tile = capture.get_by_label("Générateurs").rect().center();
-    capture.hover_at(tile + Vec2::new(-100.0, 120.0));
+    let family = capture.get_by_label("Fluides et matières (9)").rect();
+    capture.hover_at(family.left_top() + Vec2::new(380.0, 200.0));
     capture.run_steps(4);
     save(&mut capture, &folder, "selecteur");
     capture.key_press(egui::Key::Escape);

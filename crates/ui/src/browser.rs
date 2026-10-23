@@ -96,14 +96,15 @@ impl ControlPanel {
         self.browser = Some(GeneratorBrowser::new(slot, current.as_deref()));
     }
 
-    /// The generator browser, when open; asks the engine for previews
-    /// while it is.
+    /// The generator browser, when open; asks the engine for the previews
+    /// of the generators and effects, which the bank always shows.
     pub(crate) fn generator_browser(
         &mut self,
         ctx: &egui::Context,
         previews: Option<egui::TextureId>,
     ) {
-        let wanted = self.browser.is_some();
+        // The bank always shows them.
+        let wanted = true;
         if wanted != self.previews_asked {
             self.previews_asked = wanted;
             self.actions
@@ -137,7 +138,7 @@ impl ControlPanel {
 
     /// Puts generator `info` in cell `slot`: a new clip in an empty cell,
     /// the generator of the clip changed otherwise.
-    fn use_generator(&mut self, slot: Slot, info: &'static EffectInfo) {
+    pub(crate) fn use_generator(&mut self, slot: Slot, info: &'static EffectInfo) {
         let composition = self.document.composition_mut();
         match composition.clip_mut(slot) {
             Some(clip) => {

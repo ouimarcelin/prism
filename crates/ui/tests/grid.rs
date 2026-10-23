@@ -68,6 +68,7 @@ fn harness_with<'a>(
                     },
                 )),
                 generator_previews: None,
+                slot_preview: None,
                 screens: &[],
                 output_screens: &[],
                 audio: AudioStatus::default(),
@@ -152,31 +153,90 @@ fn a_double_click_renames_a_layer() {
     assert_eq!(composition.layer(ids[2]).unwrap().name, "Couche 3");
 }
 
+/// Drags from `from` by `by`, a quick hand: already part of the way on
+/// the first frame of the drag.
+fn quick_drag(harness: &mut Harness<'_>, from: Pos2, by: Vec2) {
+    harness.hover_at(from);
+    harness.run_steps(1);
+    harness.drag_at(from);
+    harness.run_steps(1);
+    for share in [0.4, 0.7, 1.0] {
+        harness.hover_at(from + by * share);
+        harness.run_steps(1);
+    }
+    harness.drop_at(from + by);
+    harness.run_steps(2);
+}
+
 #[test]
-fn the_inspector_edge_follows_the_pointer() {
+fn the_lines_between_panes_follow_the_pointer() {
     for twice in [false, true] {
         let status = EngineStatus::default();
         let mut panel = ControlPanel::new(Document::new(Composition::default()), Vec::new());
         let mut harness = harness_with(&mut panel, &status, twice);
-        let before = harness.get_by_label("Programme").rect().left();
-        // The inspector takes 42 % of the 1440-point window at first.
-        let edge = Pos2::new(1440.0 * (1.0 - 0.42), 500.0);
-        // A quick hand: already 20 points away on the first frame of the
-        // drag.
-        harness.hover_at(edge);
-        harness.run_steps(1);
-        harness.drag_at(edge);
-        harness.run_steps(1);
-        for x in [20.0, 35.0, 50.0] {
-            harness.hover_at(edge - Vec2::new(x, 0.0));
-            harness.run_steps(1);
-        }
-        harness.drop_at(edge - Vec2::new(50.0, 0.0));
-        harness.run_steps(2);
-        let after = harness.get_by_label("Programme").rect().left();
+
+        // Between the settings and the effects: the effects pane starts
+        // 16 points (its margin) right of the line.
+        let before = harness.get_by_label("Effets de la sélection").rect();
+        let line = Pos2::new(before.left() - 16.0, before.top() + 40.0);
+        quick_drag(&mut harness, line, Vec2::new(-50.0, 0.0));
+        let after = harness.get_by_label("Effets de la sélection").rect().left();
         assert!(
-            (before - after - 50.0).abs() < 2.0,
-            "two passes: {twice}, {before} → {after}"
+            (before.left() - after - 50.0).abs() < 2.0,
+            "two passes: {twice}, column {} → {after}",
+            before.left()
+        );
+
+        // Under the layers: the program monitor starts 8 points under it.
+        let before = harness.get_by_label("Programme").rect();
+        let line = Pos2::new(before.left() + 40.0, before.top() - 8.0);
+        quick_drag(&mut harness, line, Vec2::new(0.0, 40.0));
+        let after = harness.get_by_label("Programme").rect().top();
+        assert!(
+            (after - before.top() - 40.0).abs() < 2.0,
+            "two passes: {twice}, layers {} → {after}",
+            before.top()
         );
     }
+}
+
+#[test]
+fn effects_and_generators_come_from_the_bank_by_drag_and_drop() {
+    let status = EngineStatus::default();
+    let mut composition = Composition::default();
+    let layer = composition.layers()[0].id();
+    let column = composition.columns()[0].id();
+    let slot = prism_core::Slot::new(layer, column);
+    composition
+        .set_clip(
+            slot,
+            Some(prism_core::Clip::from_generator("Aplat", "solid")),
+        )
+        .unwrap();
+    let mut panel = ControlPanel::new(Document::new(composition), Vec::new());
+    let mut harness = harness(&mut panel, &status);
+
+    // An effect onto the clip.
+    let from = harness.get_by_label("Inversion").rect().center();
+    let to = harness.get_by_label("Aplat").rect().center();
+    drag(&mut harness, from, to);
+    // A generator onto an empty cell of the same layer, next to it.
+    harness.get_by_label("Générateurs").click();
+    harness.run_steps(2);
+    let from = harness.get_by_label("Dégradé").rect().center();
+    drag(&mut harness, from, to + Vec2::new(172.0, 0.0));
+    drop(harness);
+
+    let composition = panel.document().composition();
+    let clip = composition.clip(slot).unwrap();
+    assert_eq!(clip.effects.len(), 1);
+    assert_eq!(clip.effects[0].kind, "invert");
+    let next = prism_core::Slot::new(layer, composition.columns()[1].id());
+    let generated = composition
+        .clip(next)
+        .and_then(|clip| clip.source.generator());
+    assert_eq!(
+        generated.map(|generator| generator.kind.as_str()),
+        Some("gradient")
+    );
 }

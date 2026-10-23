@@ -69,6 +69,33 @@ pub struct Preferences {
     pub api_code: String,
     /// Whether the interface is light rather than dark.
     pub light_theme: bool,
+    /// Sizes of the panes of the window.
+    pub layout: Layout,
+}
+
+/// Sizes of the panes of the control window, as shares: they follow the
+/// window when it is resized.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Layout {
+    /// Share of the height taken by the layers, at the top.
+    pub layers: f32,
+    /// Shares of the width of the four columns under the layers: monitors,
+    /// settings, effects of the selection, bank.
+    pub columns: [f32; 4],
+    /// Share of the monitors column taken by the output monitor, on top of
+    /// the preview monitor.
+    pub output: f32,
+}
+
+impl Default for Layout {
+    fn default() -> Self {
+        Self {
+            layers: 0.5,
+            columns: [0.22, 0.26, 0.26, 0.26],
+            output: 0.5,
+        }
+    }
 }
 
 impl Default for Preferences {
@@ -99,6 +126,7 @@ impl Default for Preferences {
             api_port: prism_control::DEFAULT_API_PORT,
             api_code: String::new(),
             light_theme: false,
+            layout: Layout::default(),
         }
     }
 }

@@ -112,3 +112,9 @@ Prompt : « créé des categories de générateurs et fais en sorte que l'interf
 Résultat : ADR 0047. Familles dans le catalogue ; aperçus animés dessinés par le moteur pendant que le sélecteur est ouvert ; fenêtre « Générateurs » (recherche, familles, grande vue, grille). Test moteur `generator_previews_are_drawn_while_asked_for` (chaque aperçu dessine quelque chose) ; capture `selecteur` avec les vrais aperçus lus du moteur.
 
 Bug trouvé en route, sans doute celui de la bordure « 50 px → 70 px » : avec une case vide sélectionnée (comme au lancement), la rangée des sources était plus large que l'inspecteur ; le volet egui élargissait alors toute la zone de la fenêtre, l'inspecteur sortait à droite et la bordure, placée d'après lui, se décalait. La grille et l'inspecteur sont maintenant dessinés chacun dans une zone fixe (`new_child`, contenu coupé au bord), la bordure placée d'après la largeur demandée ; les sources d'une case vide passent sur deux lignes.
+
+## Ticket 107 : nouvelle structure de la fenêtre (2026-10-23)
+
+Prompt : schéma de la nouvelle structure (calques ; moniteurs sortie et aperçu ; réglages de composition ; réglages d'effets ; banque d'effets). Questions posées et réponses : aperçu = clip sélectionné ; réglages = tout sauf effets ; banque = effets et générateurs à glisser ; séparations toutes tirables.
+
+Résultat : ADR 0048. Moteur : `Command::PreviewSlot` et `SlotPreview` (flux à part, effets du clip, mis à l'échelle par un compositeur) ; aperçus des effets sur un plasma, familles d'effets, aperçus à mi-cadence. Interface : `panes` (volets fixes, séparations, `Layout` dans les préférences), `settings_panel`, `effects_panel` (dépôt d'un effet sur une chaîne), `bank` (onglets, familles, recherche, glisser-déposer, double-clic), dépôts sur les cases et les en-têtes de couche. Tests : aperçu de la case sélectionnée (moteur), séparations qui suivent le pointeur (avec deux passes), glisser-déposer depuis la banque.

@@ -56,6 +56,8 @@ pub(crate) struct GeneratorPreviews {
     picture_view: wgpu::TextureView,
     /// Engine time when the previews started, as a launch.
     launched: (f64, f64),
+    /// Frames drawn; previews move at half the frame rate, to spare the GPU.
+    frames: u64,
 }
 
 impl GeneratorPreviews {
@@ -116,6 +118,7 @@ impl GeneratorPreviews {
             picture_chain: EffectChain::default(),
             picture_view,
             launched,
+            frames: 0,
         }
     }
 
@@ -134,6 +137,10 @@ impl GeneratorPreviews {
         time: FrameTime,
         blank: &wgpu::TextureView,
     ) {
+        self.frames += 1;
+        if self.frames.is_multiple_of(2) {
+            return;
+        }
         let mut time = time;
         (time.launch_beat, time.launch_seconds) = self.launched;
         self.picture_chain.apply_into(

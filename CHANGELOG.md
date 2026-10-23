@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Nouvelle structure de la fenêtre (ADR 0048) : calques en haut ; en bas, moniteurs (programme et aperçu de la case sélectionnée avant lancement), réglages de la sélection, effets de la sélection, banque d'effets et de générateurs ; séparations tirées à la souris, tailles gardées. Banque : familles d'effets, aperçus animés, glisser-déposer sur les cases, les couches et les chaînes d'effets, double-clic vers la sélection.
 - Sélecteur de générateurs (ADR 0047) : fenêtre « Générateurs » avec recherche, huit familles, aperçus animés de chaque générateur dessinés par le moteur et grande vue du générateur survolé ; ouverte par « Générateur… » d'une case vide ou par le bouton du générateur dans l'inspecteur.
 - Mémoire d'image des générateurs (ADR 0046) et ses quatre générateurs : réaction-diffusion (Gray-Scott), fluide 2D, particules dans un flux, feux d'artifice ; pas par image et résolution (pleine, demie, quart) réglables ; mémoire libérée à l'arrêt du clip.
 - Banque de générateurs, tous ceux sans mémoire d'image (33) : bruit tourbillonnant, grain, bruit rose / brun, bruit de Gabor ; ondes stationnaires, Lissajous, balayage radar, océan, oscilloscope ; caustiques, fumée, feu, aurore, nuages, marbre / bois, métaballes ; tunnel, vortex, Truchet, pavage, rayons, grille déformée, polygones répétés ; Mandelbrot, Julia, pli fractal, Sierpinski ; mire, signal analogique, blocs numériques ; champ d'étoiles, pluie / neige, points en grille.

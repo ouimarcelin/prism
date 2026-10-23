@@ -190,6 +190,7 @@ fn main() -> ExitCode {
         status: &status,
         preview: None,
         generator_previews: None,
+        slot_preview: None,
         screens: &screens,
         output_screens: &[],
         audio: prism_ui::AudioStatus {

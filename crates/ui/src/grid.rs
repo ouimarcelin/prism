@@ -268,10 +268,20 @@ impl ControlPanel {
                 ui.add_space(indent);
                 width -= indent + ui.spacing().item_spacing.x;
             }
-            ui.allocate_ui(Vec2::new(width, CELL_SIZE.y), |ui| {
-                ui.set_min_size(Vec2::new(width, CELL_SIZE.y));
-                self.layer_header(ui, layer, layer_status.map(|s| &s.state));
-            });
+            let header = ui
+                .allocate_ui(Vec2::new(width, CELL_SIZE.y), |ui| {
+                    ui.set_min_size(Vec2::new(width, CELL_SIZE.y));
+                    self.layer_header(ui, layer, layer_status.map(|s| &s.state));
+                })
+                .response
+                .rect;
+            // An effect of the bank dropped on the header joins the layer.
+            if let Some(kind) = crate::bank::effect_dropped(ui, header)
+                && let Some(info) = prism_fx::find(kind)
+                && let Some(layer) = self.document.composition_mut().layer_mut(layer)
+            {
+                layer.effects.push(info.create());
+            }
             let columns: Vec<ColumnId> = self
                 .document
                 .composition()
@@ -544,6 +554,23 @@ impl ControlPanel {
             cell.paint(ui, rect);
         }
 
+        // From the bank: a generator makes or changes the clip of an empty or
+        // generated cell, an effect joins the clip.
+        let generated = clip.is_some_and(|clip| clip.source.generator().is_some());
+        if let Some(kind) = crate::bank::generator_dropped(ui, rect)
+            && (clip_name.is_none() || generated)
+            && let Some(info) = prism_fx::find_generator(kind)
+        {
+            self.use_generator(slot, info);
+            self.selected = Some(slot);
+        }
+        if let Some(kind) = crate::bank::effect_dropped(ui, rect)
+            && let Some(info) = prism_fx::find(kind)
+            && let Some(clip) = self.document.composition_mut().clip_mut(slot)
+        {
+            clip.effects.push(info.create());
+            self.selected = Some(slot);
+        }
         if clip_name.is_some() {
             self.learn
                 .cover(ui, response.rect, ControlTarget::Clip { slot });
