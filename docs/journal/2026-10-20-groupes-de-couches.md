@@ -118,3 +118,10 @@ Bug trouvé en route, sans doute celui de la bordure « 50 px → 70 px » : ave
 Prompt : schéma de la nouvelle structure (calques ; moniteurs sortie et aperçu ; réglages de composition ; réglages d'effets ; banque d'effets). Questions posées et réponses : aperçu = clip sélectionné ; réglages = tout sauf effets ; banque = effets et générateurs à glisser ; séparations toutes tirables.
 
 Résultat : ADR 0048. Moteur : `Command::PreviewSlot` et `SlotPreview` (flux à part, effets du clip, mis à l'échelle par un compositeur) ; aperçus des effets sur un plasma, familles d'effets, aperçus à mi-cadence. Interface : `panes` (volets fixes, séparations, `Layout` dans les préférences), `settings_panel`, `effects_panel` (dépôt d'un effet sur une chaîne), `bank` (onglets, familles, recherche, glisser-déposer, double-clic), dépôts sur les cases et les en-têtes de couche. Tests : aperçu de la case sélectionnée (moteur), séparations qui suivent le pointeur (avec deux passes), glisser-déposer depuis la banque.
+
+## Ticket 108 : CI de nouveau en marche (2026-11-01)
+
+La CI GitHub tourne de nouveau (facturation réglée) et a trouvé trois échecs anciens :
+- cargo-deny : `clipboard-win` 5.4.1 retiré de crates.io ; passé à 5.4.3 (`cargo update -p clipboard-win`).
+- Windows : `relativize_only_inside_base` écrivait des chemins absolus Unix, qui n'en sont pas sous Windows ; le test prend `C:/` sur Windows.
+- macOS : `a_midi_clock_gives_the_tempo` ne lisait aucun tempo sur la machine de GitHub. Hypothèse : le pilote MIDI y donne parfois le même horodatage à deux impulsions, et `MidiClock::pulse` repartait de zéro sur un temps égal. Il ne repart plus que sur un temps qui recule ou un long silence ; test unitaire `pulses_handed_together_still_count`. À confirmer par la CI.

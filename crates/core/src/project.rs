@@ -278,16 +278,22 @@ mod tests {
 
     #[test]
     fn relativize_only_inside_base() {
-        let base = Path::new("/shows/tour");
+        // Absolute paths need a drive on Windows.
+        let root = if cfg!(windows) { "C:/" } else { "/" };
+        let absolute = |path: &str| PathBuf::from(format!("{root}{path}"));
+        let base = absolute("shows/tour");
         assert_eq!(
-            relativize(Path::new("/shows/tour/media/a.mov"), base),
+            relativize(&absolute("shows/tour/media/a.mov"), &base),
             PathBuf::from("media/a.mov")
         );
         assert_eq!(
-            relativize(Path::new("/Volumes/Media/b.mov"), base),
-            PathBuf::from("/Volumes/Media/b.mov")
+            relativize(&absolute("Volumes/Media/b.mov"), &base),
+            absolute("Volumes/Media/b.mov")
         );
-        assert_eq!(relativize(Path::new("c.mov"), base), PathBuf::from("c.mov"));
+        assert_eq!(
+            relativize(Path::new("c.mov"), &base),
+            PathBuf::from("c.mov")
+        );
     }
 
     #[test]
