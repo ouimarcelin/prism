@@ -57,6 +57,8 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Corrigé
 
+- Horloge MIDI : des impulsions horodatées au même instant (pilote qui les livre ensemble) ne remettent plus la mesure du tempo à zéro.
+- CI : test de chemins valable sous Windows ; `clipboard-win` retiré de crates.io remplacé par 5.4.3.
 - Contenu de l'inspecteur plus large que son volet (les sources d'une case vide) : toute la mise en page s'élargissait hors de la fenêtre et la bordure grille / inspecteur ne suivait plus la souris. Grille et inspecteur ont désormais chacun une zone fixe ; les sources d'une case vide passent sur deux lignes.
 - Banque de générateurs : l'axe vertical était inversé (feu et fumée vers le bas, Sierpinski pointe en bas, horizon de l'océan en bas) ; il monte désormais.
 - Palettes arc-en-ciel, néon et coucher de soleil de la banque : 0 et 1 donnaient la même couleur, une onde carrée devenait unie ; elles ne parcourent plus que 80 % de leur cycle.

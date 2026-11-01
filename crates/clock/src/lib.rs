@@ -128,10 +128,12 @@ pub struct MidiClock {
 
 impl MidiClock {
     /// Records a pulse at `micros`; returns the tempo once a beat of pulses
-    /// came in.
+    /// came in. Pulses stamped at the same time as the one before (a driver
+    /// handing several at once) still count; a time going back, or a long
+    /// silence, starts over.
     pub fn pulse(&mut self, micros: u64) -> Option<f64> {
         if let Some(&last) = self.pulses.last()
-            && (micros <= last || micros - last > CLOCK_TIMEOUT_MICROS)
+            && (micros < last || micros - last > CLOCK_TIMEOUT_MICROS)
         {
             self.pulses.clear();
         }
@@ -212,6 +214,20 @@ impl TapTempo {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pulses_handed_together_still_count() {
+        // 125 BPM, the driver stamping pulses two by two.
+        let mut clock = MidiClock::default();
+        let mut bpm = None;
+        for pulse in 0..60u64 {
+            bpm = clock.pulse(pulse / 2 * 40_000);
+        }
+        let bpm = bpm.unwrap();
+        assert!((bpm - 125.0).abs() < 3.0, "{bpm}");
+        // A time going back starts over.
+        assert_eq!(clock.pulse(0), None);
+    }
 
     #[test]
     fn midi_clock_pulses_give_the_tempo() {
