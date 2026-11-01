@@ -125,3 +125,7 @@ La CI GitHub tourne de nouveau (facturation réglée) et a trouvé trois échecs
 - cargo-deny : `clipboard-win` 5.4.1 retiré de crates.io ; passé à 5.4.3 (`cargo update -p clipboard-win`).
 - Windows : `relativize_only_inside_base` écrivait des chemins absolus Unix, qui n'en sont pas sous Windows ; le test prend `C:/` sur Windows.
 - macOS : `a_midi_clock_gives_the_tempo` ne lisait aucun tempo sur la machine de GitHub. Hypothèse : le pilote MIDI y donne parfois le même horodatage à deux impulsions, et `MidiClock::pulse` repartait de zéro sur un temps égal. Il ne repart plus que sur un temps qui recule ou un long silence ; test unitaire `pulses_handed_together_still_count`. À confirmer par la CI.
+
+## Ticket 109 : chemins de projet sous Windows
+
+Le job Windows de la CI (non bloquant) échouait sur `project_io` : un chemin relatif enregistré avec `/` revenait au chargement avec des séparateurs mêlés (`…\media/tunnel.mov`), et les tests écrivaient des chemins absolus Unix. `resolve` reconstruit le chemin partie par partie (séparateurs du système) ; les tests prennent des chemins absolus du système (`OUTSIDE`, `OUTSIDE_SHADER`).

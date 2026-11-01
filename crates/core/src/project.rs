@@ -241,7 +241,13 @@ fn relativize(path: &Path, base: &Path) -> PathBuf {
 
 fn resolve(path: &Path, base: &Path) -> PathBuf {
     if path.is_relative() {
-        base.join(path)
+        // Stored with `/` whatever the system: joined part by part, so the
+        // path gets this system's separators.
+        let mut resolved = base.to_path_buf();
+        for part in path.to_string_lossy().split('/') {
+            resolved.push(part);
+        }
+        resolved
     } else {
         path.to_path_buf()
     }

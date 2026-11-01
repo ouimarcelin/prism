@@ -10,6 +10,20 @@ use prism_core::{
     ProjectError, Slot, Unit,
 };
 
+/// A file outside the project folder: an absolute path of this system.
+const OUTSIDE: &str = if cfg!(windows) {
+    r"C:\Volumes\Show\strobe.mov"
+} else {
+    "/Volumes/Show/strobe.mov"
+};
+
+/// A shader outside the project folder.
+const OUTSIDE_SHADER: &str = if cfg!(windows) {
+    r"C:\Shaders\glow.fs"
+} else {
+    "/Shaders/glow.fs"
+};
+
 fn slot(comp: &Composition, layer: usize, column: usize) -> Slot {
     Slot::new(comp.layers()[layer].id(), comp.columns()[column].id())
 }
@@ -26,7 +40,7 @@ fn sample_project(dir: &Path) -> Project {
     clip.playback.speed = 1.5;
     clip.playback.cue_points[2] = Some(4.25);
     comp.set_clip(inside, Some(clip)).unwrap();
-    comp.set_clip(outside, Some(Clip::from_file("/Volumes/Show/strobe.mov")))
+    comp.set_clip(outside, Some(Clip::from_file(OUTSIDE)))
         .unwrap();
 
     let layer = comp.layer_mut(inside.layer).unwrap();
@@ -68,7 +82,7 @@ fn media_inside_project_folder_is_stored_relative() {
         .filter(|clip| !clip.is_null())
         .map(|clip| clip["source"]["path"].as_str().unwrap().to_owned())
         .collect();
-    assert_eq!(paths, ["media/tunnel.mov", "/Volumes/Show/strobe.mov"]);
+    assert_eq!(paths, ["media/tunnel.mov", OUTSIDE]);
 }
 
 #[test]
@@ -106,7 +120,7 @@ fn missing_media_is_reported_with_its_slot() {
 
     assert_eq!(missing.len(), 1);
     assert_eq!(missing[0].slot, slot(&project.composition, 2, 3));
-    assert_eq!(missing[0].path, Path::new("/Volumes/Show/strobe.mov"));
+    assert_eq!(missing[0].path, Path::new(OUTSIDE));
 }
 
 #[test]
@@ -186,7 +200,7 @@ fn effect_files_inside_project_folder_are_stored_relative() {
     *generator.source.generator_mut().unwrap() = shader;
     comp.set_clip(slot(comp, 1, 1), Some(generator)).unwrap();
     let mut outside = prism_core::Effect::new("isf");
-    outside.file = Some("/Shaders/glow.fs".into());
+    outside.file = Some(OUTSIDE_SHADER.into());
     comp.clip_mut(slot(comp, 0, 0))
         .unwrap()
         .effects
@@ -199,7 +213,8 @@ fn effect_files_inside_project_folder_are_stored_relative() {
         2,
         "{json}"
     );
-    assert!(json.contains(r#""file": "/Shaders/glow.fs""#), "{json}");
+    let quoted = serde_json::to_string(OUTSIDE_SHADER).unwrap();
+    assert!(json.contains(&format!(r#""file": {quoted}"#)), "{json}");
     assert_eq!(Project::load(&file).unwrap(), project);
 }
 #[test]

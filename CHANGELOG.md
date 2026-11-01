@@ -57,6 +57,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Corrigé
 
+- Windows : les chemins relatifs d'un projet reprennent au chargement les séparateurs du système.
 - Horloge MIDI : des impulsions horodatées au même instant (pilote qui les livre ensemble) ne remettent plus la mesure du tempo à zéro.
 - CI : test de chemins valable sous Windows ; `clipboard-win` retiré de crates.io remplacé par 5.4.3.
 - Contenu de l'inspecteur plus large que son volet (les sources d'une case vide) : toute la mise en page s'élargissait hors de la fenêtre et la bordure grille / inspecteur ne suivait plus la souris. Grille et inspecteur ont désormais chacun une zone fixe ; les sources d'une case vide passent sur deux lignes.
