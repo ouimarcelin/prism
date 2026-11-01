@@ -240,7 +240,7 @@ fn relativize(path: &Path, base: &Path) -> PathBuf {
 }
 
 fn resolve(path: &Path, base: &Path) -> PathBuf {
-    if path.is_relative() {
+    if path.is_relative() && !path.has_root() {
         // Stored with `/` whatever the system: joined part by part, so the
         // path gets this system's separators.
         let mut resolved = base.to_path_buf();
@@ -248,6 +248,9 @@ fn resolve(path: &Path, base: &Path) -> PathBuf {
             resolved.push(part);
         }
         resolved
+    } else if path.is_relative() {
+        // Rooted without a drive (Windows): on the drive of the base.
+        base.join(path)
     } else {
         path.to_path_buf()
     }
@@ -304,14 +307,16 @@ mod tests {
 
     #[test]
     fn resolve_keeps_absolute_paths() {
-        let base = Path::new("/shows/tour");
+        let root = if cfg!(windows) { "C:/" } else { "/" };
+        let absolute = |path: &str| PathBuf::from(format!("{root}{path}"));
+        let base = absolute("shows/tour");
         assert_eq!(
-            resolve(Path::new("media/a.mov"), base),
-            PathBuf::from("/shows/tour/media/a.mov")
+            resolve(Path::new("media/a.mov"), &base),
+            base.join("media").join("a.mov")
         );
         assert_eq!(
-            resolve(Path::new("/Volumes/Media/b.mov"), base),
-            PathBuf::from("/Volumes/Media/b.mov")
+            resolve(&absolute("Volumes/Media/b.mov"), &base),
+            absolute("Volumes/Media/b.mov")
         );
     }
 }
