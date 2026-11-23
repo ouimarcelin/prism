@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::clip::MediaSource;
 use crate::{
     BAND_COUNT, Bpm, Clip, ColumnId, Crossfader, Effect, Group, GroupId, Layer, LayerId, Lighting,
     Mapping, Moment, Slot, Stage, Timeline, Unit,
@@ -873,7 +874,12 @@ impl Composition {
                 let Clip {
                     source, effects, ..
                 } = clip;
-                source.generator_mut().into_iter().chain(effects.iter_mut())
+                // A patch holds effects in its nodes.
+                let drawn: Box<dyn Iterator<Item = &mut Effect>> = match source {
+                    MediaSource::Patch { patch } => Box::new(patch.effects_mut()),
+                    other => Box::new(other.generator_mut().into_iter()),
+                };
+                drawn.chain(effects.iter_mut())
             });
             layer.effects.iter_mut().chain(clips)
         });

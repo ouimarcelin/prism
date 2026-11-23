@@ -43,7 +43,7 @@ pub struct StageFrame<'a> {
 /// Selection and drag of the stage editor.
 #[derive(Debug, Default)]
 pub(crate) struct StageEditor {
-    screen: Option<ScreenId>,
+    pub(crate) screen: Option<ScreenId>,
     slice: Option<SliceId>,
     /// Point of the selected slice last touched, moved by the arrow keys.
     point: Option<Picked>,
@@ -307,7 +307,11 @@ impl ControlPanel {
                 .resizable(true)
                 .default_size(260.0)
                 .show(ui, |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| self.stage_slices(ui));
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        self.stage_slices(ui);
+                        ui.separator();
+                        self.stage_objects(ui);
+                    });
                 });
         }
         egui::CentralPanel::default()

@@ -56,8 +56,8 @@ pub use project::{
     load_stage, save_stage,
 };
 pub use stage::{
-    Area, EdgeBlend, Flip, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, Point, Quad, Screen, ScreenId,
-    Simulation, Slice, SliceId, Stage,
+    Area, EdgeBlend, Flip, MAX_MASK_POINTS, MAX_SCREEN_SIZE, Mask, MeshSource, Object3d, Point,
+    Projector, Quad, Screen, ScreenId, Simulation, Slice, SliceId, Stage,
 };
 pub use value::{Bpm, MAX_BPM, MIN_BPM, Unit};
 pub use warp::{Handles, MAX_WARP_CELLS, Warp, WarpCurve};

@@ -98,6 +98,11 @@ impl Project {
                     *file = relativize(file, base);
                 }
             }
+            for object in composition.stage.objects_mut() {
+                if let crate::MeshSource::File { path } = &mut object.mesh {
+                    *path = relativize(path, base);
+                }
+            }
         }
         let document = DocumentOut {
             format_version: FORMAT_VERSION,
@@ -129,6 +134,11 @@ impl Project {
             for effect in composition.all_effects_mut() {
                 if let Some(file) = &mut effect.file {
                     *file = resolve(file, base);
+                }
+            }
+            for object in composition.stage.objects_mut() {
+                if let crate::MeshSource::File { path } = &mut object.mesh {
+                    *path = resolve(path, base);
                 }
             }
         }

@@ -275,6 +275,19 @@ fn demo() -> Composition {
         group.effects.push(Effect::new("color"));
     }
     if let Ok(screen) = composition.stage.add_screen("Façade", 1920, 1080)
+        && let Some(screen_data) = composition.stage.screen_mut(screen)
+    {
+        // A cube turned towards the projector.
+        let mut cube = prism_core::Object3d::new("Socle", prism_core::MeshSource::Cube);
+        cube.rotation = [20.0, 35.0, 0.0];
+        screen_data.objects.push(cube);
+        let _ = screen_data;
+    }
+    if let Some(screen) = composition
+        .stage
+        .screens()
+        .first()
+        .map(prism_core::Screen::id)
         && let Some(slice) = composition
             .stage
             .screen_mut(screen)

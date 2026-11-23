@@ -1238,3 +1238,32 @@ fn a_patch_mixes_its_nodes_into_the_clip() {
         "{pixel:?}"
     );
 }
+
+#[test]
+fn a_3d_object_shows_the_program_as_its_projector_sees_it() {
+    use prism_core::{MeshSource, Object3d};
+    let Some(gpu) = gpu() else { return };
+    let mut clip = Clip::from_generator("Aplat", "solid");
+    clip.source
+        .generator_mut()
+        .unwrap()
+        .set_param("saturation", 1.0);
+    let (mut comp, slot) = composition_with(clip);
+    comp.trigger_clip(slot).unwrap();
+    let screen = comp.stage.add_screen("Objet", 64, 36).unwrap();
+    let screen = comp.stage.screen_mut(screen).unwrap();
+    // No slice: only the cube, in the middle of the projector's image.
+    screen.slices.clear();
+    screen.objects.push(Object3d::new("Cube", MeshSource::Cube));
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    for _ in 0..3 {
+        driver.tick();
+    }
+    let images = driver.state.screen_images();
+    let (_, image) = images.first().unwrap();
+    let pixels = read_texture(&gpu.device, &gpu.queue, image.texture()).unwrap();
+    let centre = pixels[18 * 64 + 32];
+    let corner = pixels[0];
+    assert!(centre[0] > 0.9 && centre[1] < 0.1, "centre {centre:?}");
+    assert!(corner[0] < 0.01, "corner {corner:?}");
+}

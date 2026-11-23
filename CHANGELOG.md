@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Objets 3D (ADR 0051) : chaque écran a un projecteur virtuel (position, visée, champ, décentrement) et des objets (cube, plan ou fichier OBJ) couverts par la composition selon leurs coordonnées de texture, dessinés avec profondeur par-dessus les découpes.
 - Éditeur nodal (ADR 0050) : un clip « patch » est un graphe de générateurs, d'effets et de mélanges câblés jusqu'à une sortie ; onglet « Nodal », bouton « Patch… » d'une case vide.
 - Timeline à points clés (ADR 0049) : onglet « Timeline » ; chaque réglage du clip sélectionné et de sa couche peut devenir une piste de points clés (courbes linéaire, douce, entrée ou sortie lente, palier), en boucle ou une fois, au tempo ou en secondes.
 - Nouvelle structure de la fenêtre (ADR 0048) : calques en haut ; en bas, moniteurs (programme et aperçu de la case sélectionnée avant lancement), réglages de la sélection, effets de la sélection, banque d'effets et de générateurs ; séparations tirées à la souris, tailles gardées. Banque : familles d'effets, aperçus animés, glisser-déposer sur les cases, les couches et les chaînes d'effets, double-clic vers la sélection.

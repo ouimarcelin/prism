@@ -7,6 +7,8 @@
 //! put in perspective. Positions are fractions of the composition or of
 //! the screen, from the top left corner: they survive a change of size.
 
+use std::path::PathBuf;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{ModelError, Warp};
@@ -368,6 +370,101 @@ pub struct Screen {
     /// « Prism – » and its name.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub syphon: bool,
+    /// Where the projector of this screen stands, for its 3D objects.
+    #[serde(default, skip_serializing_if = "Projector::is_default")]
+    pub projector: Projector,
+    /// Objects in 3D, drawn over the slices as the projector sees them,
+    /// covered by the composition.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub objects: Vec<Object3d>,
+}
+
+/// The projector of a screen, in the space of its 3D objects (in metres,
+/// y up): where it stands, what it aims at, how wide it throws.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Projector {
+    /// Position of the lens.
+    pub position: [f32; 3],
+    /// Point at the centre of the image.
+    pub target: [f32; 3],
+    /// Vertical angle of the image, in degrees.
+    pub fov: f32,
+    /// Shift of the image, in fractions of its size (lens shift): `[0, 0.5]`
+    /// throws the image half its height up.
+    #[serde(default)]
+    pub shift: [f32; 2],
+}
+
+impl Default for Projector {
+    fn default() -> Self {
+        Self {
+            position: [0.0, 0.0, 4.0],
+            target: [0.0, 0.0, 0.0],
+            fov: 30.0,
+            shift: [0.0, 0.0],
+        }
+    }
+}
+
+impl Projector {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// The shape of a 3D object.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MeshSource {
+    /// A cube of one metre, each face showing the whole of its area of the
+    /// composition.
+    Cube,
+    /// A flat square of one metre, facing the projector at rest.
+    Plane,
+    /// A Wavefront OBJ file, its texture coordinates placing the
+    /// composition on it.
+    File {
+        /// Location of the file.
+        path: PathBuf,
+    },
+}
+
+/// A 3D object of a screen.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Object3d {
+    /// Name shown in the interface.
+    pub name: String,
+    /// Its shape.
+    pub mesh: MeshSource,
+    /// Position of its origin.
+    pub position: [f32; 3],
+    /// Turns around x, then y, then z, in degrees.
+    pub rotation: [f32; 3],
+    /// Size, a factor on the shape's own.
+    pub scale: f32,
+    /// Area of the composition laid on the shape's texture coordinates:
+    /// left, top, width and height in fractions.
+    pub area: [f32; 4],
+    /// Opacity.
+    pub opacity: f32,
+    /// Whether it is drawn.
+    pub enabled: bool,
+}
+
+impl Object3d {
+    /// An object of `mesh` at the origin, the whole composition on it.
+    pub fn new(name: impl Into<String>, mesh: MeshSource) -> Self {
+        Self {
+            name: name.into(),
+            mesh,
+            position: [0.0; 3],
+            rotation: [0.0; 3],
+            scale: 1.0,
+            area: [0.0, 0.0, 1.0, 1.0],
+            opacity: 1.0,
+            enabled: true,
+        }
+    }
 }
 
 impl Screen {
@@ -529,6 +626,13 @@ impl Stage {
         id
     }
 
+    /// Every 3D object of every screen, mutable.
+    pub fn objects_mut(&mut self) -> impl Iterator<Item = &mut Object3d> {
+        self.screens
+            .iter_mut()
+            .flat_map(|screen| screen.objects.iter_mut())
+    }
+
     /// Adds a screen of `width` × `height` pixels with one slice showing the
     /// whole composition on the whole screen.
     pub fn add_screen(
@@ -549,6 +653,8 @@ impl Stage {
             flip: Flip::default(),
             test_pattern: false,
             syphon: false,
+            projector: Projector::default(),
+            objects: Vec::new(),
         });
         self.add_slice(id, "Découpe 1");
         Ok(id)

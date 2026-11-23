@@ -24,6 +24,7 @@ mod labels;
 mod learn;
 mod lighting;
 mod nodal;
+mod objects3d;
 mod panel;
 mod plugins;
 mod preferences;

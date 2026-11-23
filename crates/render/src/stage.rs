@@ -236,6 +236,8 @@ pub struct StageRenderer {
     no_mask: wgpu::BindGroup,
     masks: HashMap<SliceId, MaskImage>,
     meshes: HashMap<SliceId, SliceMesh>,
+    /// The 3D objects of the screens.
+    objects: crate::objects::ObjectRenderer,
 }
 
 impl StageRenderer {
@@ -387,6 +389,7 @@ impl StageRenderer {
             no_mask,
             masks: HashMap::new(),
             meshes: HashMap::new(),
+            objects: crate::objects::ObjectRenderer::new(device),
         }
     }
 
@@ -616,6 +619,25 @@ impl StageRenderer {
                 pass.draw(0..mesh.count, index..index + 1);
             }
         }
+        // 3D objects over the slices.
+        for target in targets {
+            self.objects.encode(
+                device,
+                queue,
+                encoder,
+                program,
+                target.screen.size(),
+                &target.screen.projector,
+                &target.screen.objects,
+                target.view,
+            );
+        }
+    }
+
+    /// Why the shape of `mesh` could not be read, once a screen tried to
+    /// draw it.
+    pub fn mesh_error(&self, mesh: &prism_core::MeshSource) -> Option<&str> {
+        self.objects.error(mesh)
     }
 }
 
