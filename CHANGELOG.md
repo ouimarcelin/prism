@@ -7,6 +7,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Ajouté
 
+- Éditeur nodal (ADR 0050) : un clip « patch » est un graphe de générateurs, d'effets et de mélanges câblés jusqu'à une sortie ; onglet « Nodal », bouton « Patch… » d'une case vide.
 - Timeline à points clés (ADR 0049) : onglet « Timeline » ; chaque réglage du clip sélectionné et de sa couche peut devenir une piste de points clés (courbes linéaire, douce, entrée ou sortie lente, palier), en boucle ou une fois, au tempo ou en secondes.
 - Nouvelle structure de la fenêtre (ADR 0048) : calques en haut ; en bas, moniteurs (programme et aperçu de la case sélectionnée avant lancement), réglages de la sélection, effets de la sélection, banque d'effets et de générateurs ; séparations tirées à la souris, tailles gardées. Banque : familles d'effets, aperçus animés, glisser-déposer sur les cases, les couches et les chaînes d'effets, double-clic vers la sélection.
 - Sélecteur de générateurs (ADR 0047) : fenêtre « Générateurs » avec recherche, huit familles, aperçus animés de chaque générateur dessinés par le moteur et grande vue du générateur survolé ; ouverte par « Générateur… » d'une case vide ou par le bouton du générateur dans l'inspecteur.
@@ -58,6 +59,7 @@ Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Num
 
 ### Corrigé
 
+- Dépendances : `url` 2.5.9 (faille RUSTSEC-2026-0592).
 - Windows : les chemins relatifs d'un projet reprennent au chargement les séparateurs du système.
 - Horloge MIDI : des impulsions horodatées au même instant (pilote qui les livre ensemble) ne remettent plus la mesure du tempo à zéro.
 - CI : test de chemins valable sous Windows ; `clipboard-win` retiré de crates.io remplacé par 5.4.3.

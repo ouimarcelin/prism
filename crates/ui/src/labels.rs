@@ -9,6 +9,7 @@ pub(crate) fn source_kind(source: &MediaSource) -> &'static str {
         MediaSource::File { .. } => "Vidéo",
         MediaSource::ImageSequence { .. } => "Séquence",
         MediaSource::Generator { .. } => "Générateur",
+        MediaSource::Patch { .. } => "Patch",
         MediaSource::Camera { .. } => "Caméra",
         MediaSource::Syphon { .. } => "Syphon",
         MediaSource::Ndi { .. } => "NDI®",

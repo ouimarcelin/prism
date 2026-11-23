@@ -21,6 +21,7 @@ mod group;
 mod ids;
 mod layer;
 mod lighting;
+mod patch;
 mod preset;
 mod project;
 mod stage;
@@ -46,6 +47,7 @@ pub use group::Group;
 pub use ids::{ColumnId, GroupId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};
 pub use lighting::{ColorOrder, DmxProtocol, Fixture, FixtureId, Lighting, MAX_FIXTURE_PIXELS};
+pub use patch::{Link, Node, NodeId, NodeKind, Patch};
 pub use preset::{
     LayerPreset, PRESET_EXTENSION, PRESET_FORMAT_VERSION, Preset, PresetContent, preset_file_name,
 };

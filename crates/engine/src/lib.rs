@@ -13,6 +13,7 @@
 mod engine;
 mod lighting;
 mod live;
+mod patch;
 mod playhead;
 mod previews;
 mod priority;

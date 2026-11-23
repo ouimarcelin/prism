@@ -173,6 +173,8 @@ pub(crate) enum TopView {
     Layers,
     /// The keys of the selected clip's settings.
     Timeline,
+    /// The node editor of the selected clip's patch.
+    Nodal,
 }
 
 /// Smallest size of a pane, in points.
@@ -188,6 +190,8 @@ pub struct ControlPanel {
     pub(crate) bank: crate::bank::BankState,
     /// What the top pane shows.
     pub(crate) top_view: TopView,
+    /// The node editor, while it shows a patch.
+    pub(crate) nodal: Option<crate::nodal::NodalView>,
     /// Cell the engine was last asked to draw apart.
     pub(crate) preview_asked: Option<Slot>,
     /// The generator browser, while open.
@@ -232,6 +236,7 @@ impl ControlPanel {
             bank: crate::bank::BankState::default(),
             preview_asked: None,
             top_view: TopView::Layers,
+            nodal: None,
             browser: None,
             previews_asked: false,
             layout_drag: None,
@@ -1644,6 +1649,7 @@ impl ControlPanel {
             for (view, label) in [
                 (TopView::Layers, "Calques"),
                 (TopView::Timeline, "Timeline"),
+                (TopView::Nodal, "Nodal"),
             ] {
                 if ui.selectable_label(self.top_view == view, label).clicked() {
                     self.top_view = view;
@@ -1654,6 +1660,7 @@ impl ControlPanel {
         match self.top_view {
             TopView::Layers => self.grid(&mut top_ui, frame.status),
             TopView::Timeline => self.keyframes_panel(&mut top_ui, frame.status),
+            TopView::Nodal => self.nodal_panel(&mut top_ui),
         }
         let mut output_ui = pane(
             ui,

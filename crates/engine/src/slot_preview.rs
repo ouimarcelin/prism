@@ -122,24 +122,39 @@ impl SlotPreview {
         let mut time = time;
         time.dashboard = clip.dashboard.map(prism_core::Unit::get);
         (time.launch_beat, time.launch_seconds) = stream.launched();
-        match clip.source.generator() {
-            Some(generator) if stream.is_generator() => {
-                let effects: Vec<&Effect> =
-                    std::iter::once(generator).chain(&clip.effects).collect();
-                let size = self.image.resolution();
-                stream.generate(
-                    renderer,
-                    gpu,
-                    encoder,
-                    &effects,
-                    time,
-                    blank,
-                    (size.width, size.height),
-                );
-            }
-            _ => {
-                let effects: Vec<&Effect> = clip.effects.iter().collect();
-                stream.apply_effects(renderer, gpu, encoder, &effects, time);
+        if let Some(patch) = clip.source.patch() {
+            let effects: Vec<&Effect> = clip.effects.iter().collect();
+            let size = self.image.resolution();
+            stream.draw_patch(
+                renderer,
+                gpu,
+                encoder,
+                patch,
+                &effects,
+                time,
+                blank,
+                (size.width, size.height),
+            );
+        } else {
+            match clip.source.generator() {
+                Some(generator) if stream.is_generator() => {
+                    let effects: Vec<&Effect> =
+                        std::iter::once(generator).chain(&clip.effects).collect();
+                    let size = self.image.resolution();
+                    stream.generate(
+                        renderer,
+                        gpu,
+                        encoder,
+                        &effects,
+                        time,
+                        blank,
+                        (size.width, size.height),
+                    );
+                }
+                _ => {
+                    let effects: Vec<&Effect> = clip.effects.iter().collect();
+                    stream.apply_effects(renderer, gpu, encoder, &effects, time);
+                }
             }
         }
         if let Some(view) = stream.view() {

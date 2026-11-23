@@ -23,6 +23,7 @@ mod keyframes;
 mod labels;
 mod learn;
 mod lighting;
+mod nodal;
 mod panel;
 mod plugins;
 mod preferences;

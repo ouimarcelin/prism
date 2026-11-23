@@ -42,6 +42,11 @@ pub enum MediaSource {
         /// What to draw and how.
         generator: Effect,
     },
+    /// An image drawn by a graph of generators, effects and mixes.
+    Patch {
+        /// The graph.
+        patch: crate::patch::Patch,
+    },
     /// A camera of the computer (or a capture device seen as one), live.
     Camera {
         /// Identifier of the device, stable across restarts.
@@ -74,6 +79,7 @@ impl MediaSource {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
             Self::Generator { .. }
+            | Self::Patch { .. }
             | Self::Camera { .. }
             | Self::Syphon { .. }
             | Self::Ndi { .. }
@@ -86,6 +92,7 @@ impl MediaSource {
         match self {
             Self::File { path } | Self::ImageSequence { path, .. } => Some(path),
             Self::Generator { .. }
+            | Self::Patch { .. }
             | Self::Camera { .. }
             | Self::Syphon { .. }
             | Self::Ndi { .. }
@@ -110,6 +117,22 @@ impl MediaSource {
         }
     }
 
+    /// The patch, for a clip drawn by a graph of nodes.
+    pub fn patch(&self) -> Option<&crate::patch::Patch> {
+        match self {
+            Self::Patch { patch } => Some(patch),
+            _ => None,
+        }
+    }
+
+    /// The patch, mutable.
+    pub fn patch_mut(&mut self) -> Option<&mut crate::patch::Patch> {
+        match self {
+            Self::Patch { patch } => Some(patch),
+            _ => None,
+        }
+    }
+
     /// The generator, mutable.
     pub fn generator_mut(&mut self) -> Option<&mut Effect> {
         match self {
@@ -121,6 +144,10 @@ impl MediaSource {
     /// Whether both sources play the same thing: the same file or folder,
     /// or generators of the same kind, whatever their settings.
     pub fn same_media(&self, other: &Self) -> bool {
+        // A patch stays the same clip while its graph is edited.
+        if self.patch().is_some() && other.patch().is_some() {
+            return true;
+        }
         match (self.generator(), other.generator()) {
             (Some(a), Some(b)) => a.kind == b.kind,
             (None, None) => self == other,
@@ -296,6 +323,15 @@ impl Clip {
             playback: Playback::default(),
             effects: Vec::new(),
             dashboard: [Unit::ZERO; DASHBOARD_SIZE],
+        }
+    }
+
+    /// Creates a clip drawn by `patch`.
+    pub fn from_patch(name: impl Into<String>, patch: crate::patch::Patch) -> Self {
+        Self {
+            name: name.into(),
+            source: MediaSource::Patch { patch },
+            ..Self::from_generator("", "solid")
         }
     }
 

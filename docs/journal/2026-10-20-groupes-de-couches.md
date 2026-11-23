@@ -135,3 +135,7 @@ Le job Windows de la CI (non bloquant) échouait sur `project_io` : un chemin re
 Prompt (objectif) : « intègres : éditeur nodal, objet 3D et timeline avec points clés temporelles, utilises context7… ». Fait dans l'ordre timeline, nodal, 3D.
 
 Résultat : ADR 0049. `Shape::Keyframes`, `Keyframe`, `Ease`, `Keys` (capacité fixe, liste en JSON) dans `prism-core` ; vue `keyframes.rs` (pistes, menu « + Piste », points glissés, menu contextuel) ; onglets « Calques | Timeline » du volet du haut. Tests : `keys_stay_in_order_and_ease_between`, `the_timeline_animates_a_setting_by_keys` ; capture `timeline`.
+
+## Ticket 112 : éditeur nodal
+
+Résultat : ADR 0050. `prism-core::patch` (graphe, refus des boucles, ordre), `MediaSource::Patch` ; `prism-engine::patch::PatchRender` et `ClipStream::draw_patch` (programme et aperçu) ; `prism-ui::nodal` avec `egui-snarl` (documentation lue avec Context7, ligne dans SOURCES). Tests : `wires_refuse_loops_and_order_follows_them`, `a_patch_mixes_its_nodes_into_the_clip` (rouge + bleu additionnés = magenta), `a_patch_is_made_and_edited_in_the_node_editor` ; capture `nodal`. En route : `url` 2.5.9 pour une faille signalée par cargo-deny.
