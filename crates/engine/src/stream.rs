@@ -74,6 +74,8 @@ pub(crate) struct ClipStream {
     shown: Option<usize>,
     texture: Option<VideoTexture>,
     effects: EffectChain,
+    /// For a patch: the images of its nodes.
+    patch: Option<crate::patch::PatchRender>,
     late_frames: u64,
     frame_errors: u64,
     pending_seek: Option<(f64, bool)>,
@@ -95,7 +97,7 @@ impl ClipStream {
         playback: Playback,
         launched: (f64, f64),
     ) -> Self {
-        let (worker, phase) = if source.generator().is_some() {
+        let (worker, phase) = if source.generator().is_some() || source.patch().is_some() {
             (None, Phase::Generating)
         } else if let MediaSource::Camera { id, .. } = &source {
             (None, Phase::Live(Live::open(id.clone())))
@@ -151,6 +153,7 @@ impl ClipStream {
             shown: None,
             texture: None,
             effects: EffectChain::default(),
+            patch: None,
             late_frames: 0,
             frame_errors: 0,
             pending_seek: None,
@@ -237,7 +240,7 @@ impl ClipStream {
 
     /// Whether a frame is on screen.
     pub(crate) fn has_frame(&self) -> bool {
-        self.shown.is_some() || (self.is_generator() && self.effects.output().is_some())
+        self.shown.is_some() || (self.is_generator() && self.view().is_some())
     }
 
     pub(crate) fn has_failed(&self) -> bool {
@@ -248,7 +251,11 @@ impl ClipStream {
     /// the effects of the clip and of its layer.
     pub(crate) fn view(&self) -> Option<&wgpu::TextureView> {
         if self.is_generator() {
-            return self.effects.output();
+            let patch = self
+                .patch
+                .as_ref()
+                .and_then(crate::patch::PatchRender::output);
+            return self.effects.output().or(patch);
         }
         let (view, _) = self.source_image()?;
         Some(self.effects.output().unwrap_or(view))
@@ -288,6 +295,47 @@ impl ClipStream {
             encoder,
             effects,
             blank,
+            size,
+            time,
+        );
+    }
+
+    /// Records the image of a patch clip: the graph, then `effects` (those of
+    /// the clip and its layer) over its output, at `size` pixels.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn draw_patch(
+        &mut self,
+        renderer: &EffectRenderer,
+        gpu: &Gpu,
+        encoder: &mut wgpu::CommandEncoder,
+        patch: &prism_core::Patch,
+        effects: &[&Effect],
+        time: FrameTime,
+        blank: &wgpu::TextureView,
+        size: (u32, u32),
+    ) {
+        let render = self.patch.get_or_insert_with(Default::default);
+        render.render(renderer, gpu, encoder, patch, time, blank, size);
+        let Some(image) = render.output().cloned() else {
+            self.effects.apply(
+                renderer,
+                &gpu.device,
+                &gpu.queue,
+                encoder,
+                &[],
+                blank,
+                size,
+                time,
+            );
+            return;
+        };
+        self.effects.apply(
+            renderer,
+            &gpu.device,
+            &gpu.queue,
+            encoder,
+            effects,
+            &image,
             size,
             time,
         );

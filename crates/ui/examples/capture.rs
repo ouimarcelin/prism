@@ -125,6 +125,11 @@ fn main() {
     capture.key_press(egui::Key::Escape);
     capture.run_steps(4);
     save(&mut capture, &folder, "controle-clair");
+    capture.get_by_label("Patch démo").click();
+    capture.run_steps(2);
+    capture.get_by_label("Nodal").click();
+    capture.run_steps(4);
+    save(&mut capture, &folder, "nodal");
     drop(capture);
 
     let mut capture = harness(Vec2::new(1280.0, 800.0), |ui| {
@@ -218,6 +223,46 @@ fn demo() -> Composition {
             clip.effects.push(blur);
             let _ = composition.set_clip(Slot::new(layer, column), Some(clip));
         }
+    }
+    // A patch: plasma through a kaleidoscope, lines added over it.
+    if let (Some(&layer), Some(&column)) = (layers.get(2), columns.get(5)) {
+        use prism_core::{BlendMode, NodeKind, Patch, Unit};
+        let mut patch = Patch::default();
+        let output = patch.output().unwrap_or_default();
+        let plasma = patch.source_of(output, 0).unwrap_or_default();
+        let kaleidoscope = patch.add(
+            NodeKind::Effect {
+                effect: Effect::new("kaleidoscope"),
+            },
+            [380.0, 0.0],
+        );
+        let lines = patch.add(
+            NodeKind::Generator {
+                generator: Effect::new("lines"),
+            },
+            [0.0, 300.0],
+        );
+        let mix = patch.add(
+            NodeKind::Mix {
+                blend: BlendMode::Add,
+                amount: Unit::new(0.6),
+            },
+            [780.0, 160.0],
+        );
+        patch.connect(plasma, kaleidoscope, 0);
+        patch.connect(kaleidoscope, mix, 0);
+        patch.connect(lines, mix, 1);
+        patch.connect(mix, output, 0);
+        if let Some(node) = patch.node_mut(plasma) {
+            node.position = [0.0, 0.0];
+        }
+        if let Some(node) = patch.node_mut(output) {
+            node.position = [1180.0, 180.0];
+        }
+        let _ = composition.set_clip(
+            Slot::new(layer, column),
+            Some(Clip::from_patch("Patch démo", patch)),
+        );
     }
     if let (Some(&layer), Some(&column)) = (layers.first(), columns.get(1)) {
         let _ = composition.trigger_clip(Slot::new(layer, column));

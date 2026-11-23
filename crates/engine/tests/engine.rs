@@ -1197,3 +1197,44 @@ fn the_selected_cell_is_drawn_apart_from_the_program() {
     driver.state.apply(Command::PreviewSlot(None));
     assert!(driver.state.slot_preview().is_none());
 }
+
+#[test]
+fn a_patch_mixes_its_nodes_into_the_clip() {
+    use prism_core::{BlendMode, Effect, NodeKind, Patch, Unit};
+    let Some(gpu) = gpu() else { return };
+    let solid = |hue: f32| {
+        let mut generator = Effect::new("solid");
+        generator.set_param("hue", hue);
+        generator.set_param("saturation", 1.0);
+        NodeKind::Generator { generator }
+    };
+    let mut patch = Patch::default();
+    let output = patch.output().unwrap();
+    let plasma = patch.source_of(output, 0).unwrap();
+    patch.remove(plasma);
+    let red = patch.add(solid(0.0), [0.0, 0.0]);
+    let blue = patch.add(solid(240.0), [0.0, 0.0]);
+    let mix = patch.add(
+        NodeKind::Mix {
+            blend: BlendMode::Add,
+            amount: Unit::new(1.0),
+        },
+        [0.0, 0.0],
+    );
+    assert!(patch.connect(red, mix, 0));
+    assert!(patch.connect(blue, mix, 1));
+    assert!(patch.connect(mix, output, 0));
+    let (mut comp, slot) = composition_with(Clip::from_patch("Patch", patch));
+    comp.trigger_clip(slot).unwrap();
+    let mut driver = Driver::new(Arc::clone(&gpu), comp);
+    for _ in 0..3 {
+        driver.tick();
+    }
+    let program = driver.state.program();
+    let pixel = read_texture(&gpu.device, &gpu.queue, program.texture()).unwrap()[0];
+    // Red plus blue: magenta.
+    assert!(
+        pixel[0] > 0.9 && pixel[2] > 0.9 && pixel[1] < 0.1,
+        "{pixel:?}"
+    );
+}

@@ -272,6 +272,13 @@ impl ControlPanel {
                     self.import_dialog(Some(slot));
                 }
                 if ui
+                    .button("Patch…")
+                    .on_hover_text("Une image faite d'un graphe de nœuds : générateurs, effets, mélanges")
+                    .clicked()
+                {
+                    self.new_patch(slot);
+                }
+                if ui
                     .button("Générateur…")
                     .on_hover_text("Choisir parmi les générateurs, par famille, avec un aperçu")
                     .clicked()
@@ -413,6 +420,31 @@ impl ControlPanel {
                     ui.end_row();
                 });
             dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
+            return;
+        }
+        // A patch: its name; its graph is edited in the node editor.
+        let mut open_nodal = false;
+        if let Some(clip) = self.document.composition_mut().clip_mut(slot)
+            && clip.source.patch().is_some()
+        {
+            egui::Grid::new("patch clip")
+                .num_columns(2)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label("Nom");
+                    ui.text_edit_singleline(&mut clip.name);
+                    ui.end_row();
+                    ui.label("Patch");
+                    let nodes = clip.source.patch().map_or(0, |patch| patch.nodes.len());
+                    open_nodal = ui
+                        .button(format!("{nodes} nœuds : ouvrir l'éditeur"))
+                        .clicked();
+                    ui.end_row();
+                });
+            dashboard_section(ui, slot, &mut clip.dashboard, &mut self.learn);
+            if open_nodal {
+                self.top_view = crate::panel::TopView::Nodal;
+            }
             return;
         }
         let mut browse = false;

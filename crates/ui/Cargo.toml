@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 egui = "0.36.2"
+egui-snarl = { version = "0.12.0", default-features = false }
 prism-audio = { path = "../audio" }
 prism-clock = { path = "../clock" }
 prism-control = { path = "../control" }

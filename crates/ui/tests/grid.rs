@@ -289,3 +289,29 @@ fn the_timeline_animates_a_setting_by_keys() {
     assert_eq!(animation.shape, prism_core::Shape::Keyframes);
     assert_eq!(animation.keys.len(), 3, "{:?}", animation.keys);
 }
+
+#[test]
+fn a_patch_is_made_and_edited_in_the_node_editor() {
+    let status = EngineStatus::default();
+    let composition = Composition::default();
+    let layer = composition.layers()[0].id();
+    let slot = prism_core::Slot::new(layer, composition.columns()[0].id());
+    let mut panel = ControlPanel::new(Document::new(composition), Vec::new());
+    let mut harness = harness(&mut panel, &status);
+    // The selected cell is empty at first: make a patch there.
+    harness.get_by_label("Patch…").click();
+    harness.run_steps(3);
+    // The editor shows its two nodes.
+    harness.get_by_label("Sortie du patch");
+    harness.get_by_label("Plasma");
+    drop(harness);
+    let selected = panel.document().composition().layers().last().unwrap().id();
+    let cell = prism_core::Slot::new(selected, slot.column);
+    let patch = panel
+        .document()
+        .composition()
+        .clip(cell)
+        .and_then(|clip| clip.source.patch())
+        .unwrap();
+    assert_eq!(patch.nodes.len(), 2);
+}

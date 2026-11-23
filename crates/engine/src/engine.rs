@@ -784,6 +784,21 @@ impl EngineState {
                 }
                 (time.launch_beat, time.launch_seconds) = stream.launched();
                 let generator = clip.and_then(|clip| clip.source.generator());
+                if let Some(patch) = clip.and_then(|clip| clip.source.patch()) {
+                    let effects: Vec<&Effect> = clip_effects.iter().chain(layer_effects).collect();
+                    let size = self.composition.resolution();
+                    stream.draw_patch(
+                        &self.fx,
+                        &gpu,
+                        &mut encoder,
+                        patch,
+                        &effects,
+                        time,
+                        &self.transparent,
+                        (size.width, size.height),
+                    );
+                    continue;
+                }
                 match generator {
                     // A generated clip is drawn at the composition size.
                     Some(generator) if stream.is_generator() => {
