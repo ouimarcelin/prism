@@ -690,8 +690,13 @@ impl ControlPanel {
             .num_columns(4)
             .spacing([8.0, 4.0])
             .show(ui, |ui| {
-                for index in 0..CUE_POINT_COUNT {
-                    let cue = &mut clip.playback.cue_points[index];
+                for (index, cue) in clip
+                    .playback
+                    .cue_points
+                    .iter_mut()
+                    .enumerate()
+                    .take(CUE_POINT_COUNT)
+                {
                     ui.label(format!("{}", index + 1));
                     ui.label(cue.map_or_else(|| "–".to_owned(), labels::time));
                     ui.horizontal(|ui| {
