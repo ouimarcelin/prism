@@ -87,6 +87,18 @@ fn main() {
     capture.get_by_label("Distorsion").click();
     capture.run_steps(4);
     save(&mut capture, &folder, "generateur");
+    // The timeline of the clip: two tracks.
+    capture.get_by_label("Timeline").click();
+    capture.run_steps(2);
+    for name in ["Générateur · Force", "Couche · Opacité"] {
+        capture.get_by_label("+ Piste").click();
+        capture.run_steps(2);
+        capture.get_by_label(name).click();
+        capture.run_steps(2);
+    }
+    save(&mut capture, &folder, "timeline");
+    capture.get_by_label("Calques").click();
+    capture.run_steps(2);
     // The generator browser, its previews drawn by the engine.
     capture.get_by_label("Distorsion…").click();
     capture.run_steps(6);

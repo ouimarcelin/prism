@@ -38,7 +38,10 @@ pub use composition::{
 pub use control::{ControlSource, ControlTarget, EffectOwner, Mapping};
 pub use crossfader::{Crossfader, CrossfaderCurve, CrossfaderSide};
 pub use cues::{Cue, CueTarget, MAX_TIMECODE_STEP, TimecodeSource, Timeline};
-pub use effect::{Animation, BAND_COUNT, Band, Effect, MIN_PERIOD, Moment, Period, Shape};
+pub use effect::{
+    Animation, BAND_COUNT, Band, Ease, Effect, Keyframe, Keys, MAX_KEYS, MIN_PERIOD, Moment,
+    Period, Shape,
+};
 pub use group::Group;
 pub use ids::{ColumnId, GroupId, LayerId, Slot};
 pub use layer::{BlendMode, Layer};

@@ -124,7 +124,7 @@ impl PresetStore {
             if let Some(name) = self.name_field(ui, id, true, "Enregistrer la couche") {
                 self.save(Preset {
                     name,
-                    content: PresetContent::Layer(LayerPreset::of(layer)),
+                    content: PresetContent::Layer(Box::new(LayerPreset::of(layer))),
                 });
             }
         });
@@ -184,7 +184,7 @@ mod tests {
         let layer = comp.layer_mut(comp.layers()[0].id()).unwrap();
         store.save(Preset {
             name: "Couche douce".into(),
-            content: PresetContent::Layer(LayerPreset::of(layer)),
+            content: PresetContent::Layer(Box::new(LayerPreset::of(layer))),
         });
         assert_eq!(store.error, None);
         assert_eq!(store.effects.len(), 1);
