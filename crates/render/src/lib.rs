@@ -12,6 +12,7 @@
 
 mod compositor;
 mod gpu;
+mod objects;
 mod pixels;
 mod plan;
 pub mod reference;
@@ -23,6 +24,7 @@ pub use compositor::{Compositor, LayerInput, Transition};
 pub use gpu::{
     Gpu, GpuError, ReadbackError, WORKING_FORMAT, pixels_texture, read_texture, solid_color_texture,
 };
+pub use objects::{MeshData, MeshVertex, object_matrix, project, projector_matrix};
 pub use pixels::PixelSampler;
 pub use plan::{LayerPlan, plan_layers};
 pub use simulation::{SimulatedScreen, SimulationRenderer};

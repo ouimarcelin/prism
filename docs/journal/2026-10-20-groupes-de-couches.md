@@ -139,3 +139,9 @@ Résultat : ADR 0049. `Shape::Keyframes`, `Keyframe`, `Ease`, `Keys` (capacité 
 ## Ticket 112 : éditeur nodal
 
 Résultat : ADR 0050. `prism-core::patch` (graphe, refus des boucles, ordre), `MediaSource::Patch` ; `prism-engine::patch::PatchRender` et `ClipStream::draw_patch` (programme et aperçu) ; `prism-ui::nodal` avec `egui-snarl` (documentation lue avec Context7, ligne dans SOURCES). Tests : `wires_refuse_loops_and_order_follows_them`, `a_patch_mixes_its_nodes_into_the_clip` (rouge + bleu additionnés = magenta), `a_patch_is_made_and_edited_in_the_node_editor` ; capture `nodal`. En route : `url` 2.5.9 pour une faille signalée par cargo-deny.
+
+## Ticket 113 : objets 3D
+
+Résultat : ADR 0051. `Projector`, `Object3d`, `MeshSource` dans `prism-core::stage` (chemins relatifs au projet) ; `prism-render::objects` (maillages cube, plan, OBJ par `tobj`, documentation lue avec Context7 ; matrices ; passe avec profondeur après les découpes) ; panneau « Objets 3D » de l'éditeur de scène. Tests : `the_projector_sees_what_it_aims_at`, `objects_turn_and_move`, `a_3d_object_shows_the_program_as_its_projector_sees_it` (cube rouge au centre, coins noirs).
+
+Fin de l'objectif « éditeur nodal, objet 3D et timeline à points clés » : tickets 111 à 113.
