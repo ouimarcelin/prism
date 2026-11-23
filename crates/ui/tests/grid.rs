@@ -240,3 +240,52 @@ fn effects_and_generators_come_from_the_bank_by_drag_and_drop() {
         Some("gradient")
     );
 }
+
+#[test]
+fn the_timeline_animates_a_setting_by_keys() {
+    let status = EngineStatus::default();
+    let mut composition = Composition::default();
+    let layer = composition.layers()[0].id();
+    let slot = prism_core::Slot::new(layer, composition.columns()[0].id());
+    composition
+        .set_clip(
+            slot,
+            Some(prism_core::Clip::from_generator("Aplat", "solid")),
+        )
+        .unwrap();
+    let mut panel = ControlPanel::new(Document::new(composition), Vec::new());
+    let mut harness = harness(&mut panel, &status);
+    harness.get_by_label("Aplat").click();
+    harness.run_steps(2);
+    harness.get_by_label("Timeline").click();
+    harness.run_steps(2);
+    harness.get_by_label("+ Piste").click();
+    harness.run_steps(2);
+    harness.get_by_label("Couche · Opacité").click();
+    harness.run_steps(2);
+    // A click in the middle of the lane adds a key on the curve.
+    let name = harness.get_by_label("Couche · Opacité").rect();
+    let lane = egui::pos2(name.left() + 228.0 + 300.0, name.top() + 20.0);
+    harness.hover_at(lane);
+    harness.run_steps(1);
+    for pressed in [true, false] {
+        harness.event(egui::Event::PointerButton {
+            pos: lane,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.run_steps(1);
+    }
+    drop(harness);
+
+    let animation = panel
+        .document()
+        .composition()
+        .layer(layer)
+        .unwrap()
+        .opacity_animation
+        .unwrap();
+    assert_eq!(animation.shape, prism_core::Shape::Keyframes);
+    assert_eq!(animation.keys.len(), 3, "{:?}", animation.keys);
+}

@@ -119,17 +119,195 @@ pub enum Shape {
     Square,
     /// A new random value at every cycle, held until the next.
     Random,
+    /// Through the points of [`Animation::keys`], placed on the cycle.
+    Keyframes,
 }
 
 impl Shape {
     /// Every shape, in display order.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Sine,
         Self::Triangle,
         Self::Ramp,
         Self::Square,
         Self::Random,
+        Self::Keyframes,
     ];
+}
+
+/// How a value goes from one key to the next.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Ease {
+    /// In a straight line.
+    #[default]
+    Linear,
+    /// Slow at both ends.
+    Smooth,
+    /// Slow at the start.
+    In,
+    /// Slow at the end.
+    Out,
+    /// Held, then a jump at the next key.
+    Hold,
+}
+
+impl Ease {
+    /// Every easing, in display order.
+    pub const ALL: [Self; 5] = [Self::Linear, Self::Smooth, Self::In, Self::Out, Self::Hold];
+
+    /// Share of the way at `t` (0 to 1) of the way between two keys.
+    pub fn apply(self, t: f32) -> f32 {
+        let t = t.clamp(0.0, 1.0);
+        match self {
+            Self::Linear => t,
+            Self::Smooth => t * t * (3.0 - 2.0 * t),
+            Self::In => t * t,
+            Self::Out => 1.0 - (1.0 - t) * (1.0 - t),
+            Self::Hold => 0.0,
+        }
+    }
+}
+
+/// A point of an animation by keys: a value at a place of the cycle.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Keyframe {
+    /// Place on the cycle, from 0 (its start) to 1 (its end).
+    pub time: f32,
+    /// Value of the setting there.
+    pub value: f32,
+    /// How the value goes on to the next key.
+    #[serde(default, skip_serializing_if = "is_linear")]
+    pub ease: Ease,
+}
+
+fn is_linear(ease: &Ease) -> bool {
+    *ease == Ease::Linear
+}
+
+/// Most keys an animation holds.
+pub const MAX_KEYS: usize = 32;
+
+/// The keys of an animation, in time order, at most [`MAX_KEYS`]: kept in
+/// place so that an animation stays a plain value.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(from = "Vec<Keyframe>", into = "Vec<Keyframe>")]
+pub struct Keys {
+    keys: [Keyframe; MAX_KEYS],
+    len: u8,
+}
+
+impl Default for Keys {
+    fn default() -> Self {
+        Self {
+            keys: [Keyframe::default(); MAX_KEYS],
+            len: 0,
+        }
+    }
+}
+
+impl From<Vec<Keyframe>> for Keys {
+    fn from(list: Vec<Keyframe>) -> Self {
+        let mut keys = Self::default();
+        for key in list {
+            keys.insert(key);
+        }
+        keys
+    }
+}
+
+impl From<Keys> for Vec<Keyframe> {
+    fn from(keys: Keys) -> Self {
+        keys.as_slice().to_vec()
+    }
+}
+
+impl Keys {
+    /// The keys, in time order.
+    pub fn as_slice(&self) -> &[Keyframe] {
+        &self.keys[..usize::from(self.len)]
+    }
+
+    /// Number of keys.
+    pub fn len(&self) -> usize {
+        usize::from(self.len)
+    }
+
+    /// Whether there is no key.
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Adds `key` in time order (its time brought within 0 to 1); a key at
+    /// the same time is replaced. Returns its index, or `None` when full.
+    pub fn insert(&mut self, key: Keyframe) -> Option<usize> {
+        let key = Keyframe {
+            time: if key.time.is_nan() {
+                0.0
+            } else {
+                key.time.clamp(0.0, 1.0)
+            },
+            ..key
+        };
+        let keys = self.as_slice();
+        if let Some(index) = keys
+            .iter()
+            .position(|old| (old.time - key.time).abs() < 1e-6)
+        {
+            self.keys[index] = key;
+            return Some(index);
+        }
+        if self.len() >= MAX_KEYS {
+            return None;
+        }
+        let index = keys
+            .iter()
+            .position(|old| old.time > key.time)
+            .unwrap_or(keys.len());
+        let len = self.len();
+        self.keys.copy_within(index..len, index + 1);
+        self.keys[index] = key;
+        self.len += 1;
+        Some(index)
+    }
+
+    /// Removes the key at `index`.
+    pub fn remove(&mut self, index: usize) {
+        let len = self.len();
+        if index < len {
+            self.keys.copy_within(index + 1..len, index);
+            self.len -= 1;
+        }
+    }
+
+    /// Moves the key at `index` to `time` and `value`, keeping the keys in
+    /// time order; returns its new index.
+    pub fn set(&mut self, index: usize, time: f32, value: f32) -> Option<usize> {
+        let mut key = *self.as_slice().get(index)?;
+        self.remove(index);
+        key.time = time;
+        key.value = value;
+        self.insert(key)
+    }
+
+    /// Value at place `t` of the cycle: the first key's value before it,
+    /// the last one's after it, eased between.
+    pub fn value_at(&self, t: f32) -> Option<f32> {
+        let keys = self.as_slice();
+        let first = keys.first()?;
+        if t <= first.time {
+            return Some(first.value);
+        }
+        for pair in keys.windows(2) {
+            let (a, b) = (pair[0], pair[1]);
+            if t < b.time {
+                let span = (b.time - a.time).max(1e-6);
+                let share = a.ease.apply((t - a.time) / span);
+                return Some(a.value + (b.value - a.value) * share);
+            }
+        }
+        keys.last().map(|last| last.value)
+    }
 }
 
 /// Length of one cycle of an animation.
@@ -204,6 +382,9 @@ pub struct Animation {
     /// value, instead of looping.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub once: bool,
+    /// Points the value goes through, for [`Shape::Keyframes`].
+    #[serde(default, skip_serializing_if = "Keys::is_empty")]
+    pub keys: Keys,
 }
 
 impl Animation {
@@ -216,6 +397,7 @@ impl Animation {
             to,
             phase: 0.0,
             once: false,
+            keys: Keys::default(),
         }
     }
 
@@ -252,6 +434,10 @@ impl Animation {
                 }
             }
             Shape::Random => random(seed),
+            Shape::Keyframes => {
+                // Keys hold values of the setting itself.
+                return self.keys.value_at(t as f32).unwrap_or(self.from);
+            }
         };
         self.from + (self.to - self.from) * level as f32
     }
@@ -273,6 +459,76 @@ mod tests {
 
     fn close(a: f32, b: f32) -> bool {
         (a - b).abs() < 1e-5
+    }
+
+    #[test]
+    fn keys_stay_in_order_and_ease_between() {
+        let mut keys = Keys::default();
+        keys.insert(Keyframe {
+            time: 0.5,
+            value: 10.0,
+            ease: Ease::Linear,
+        });
+        keys.insert(Keyframe {
+            time: 0.0,
+            value: 0.0,
+            ease: Ease::Linear,
+        });
+        keys.insert(Keyframe {
+            time: 1.0,
+            value: 0.0,
+            ease: Ease::Hold,
+        });
+        assert_eq!(keys.len(), 3);
+        assert!(close(keys.value_at(0.25).unwrap(), 5.0));
+        assert!(close(keys.value_at(0.75).unwrap(), 5.0));
+        // Same time: replaced.
+        keys.insert(Keyframe {
+            time: 0.5,
+            value: 20.0,
+            ease: Ease::Hold,
+        });
+        assert_eq!(keys.len(), 3);
+        assert!(close(keys.value_at(0.75).unwrap(), 20.0));
+        // Moved past another: still in order.
+        let index = keys.set(0, 0.9, 1.0).unwrap();
+        assert_eq!(index, 1);
+        assert!(
+            keys.as_slice()
+                .windows(2)
+                .all(|pair| pair[0].time <= pair[1].time)
+        );
+        keys.remove(0);
+        assert_eq!(keys.len(), 2);
+
+        // In an animation of four beats, looping.
+        let mut animation = Animation {
+            shape: Shape::Keyframes,
+            period: Period::Beats(4.0),
+            ..Animation::new(0.0, 1.0)
+        };
+        animation.keys = Keys::from(vec![
+            Keyframe {
+                time: 0.0,
+                value: 2.0,
+                ease: Ease::Linear,
+            },
+            Keyframe {
+                time: 0.5,
+                value: 4.0,
+                ease: Ease::Linear,
+            },
+        ]);
+        assert!(close(animation.value_at(Moment::new(1.0, 0.0)), 3.0));
+        assert!(close(animation.value_at(Moment::new(7.0, 0.0)), 4.0));
+        // Saved as a list.
+        let json = serde_json::to_string(&animation).unwrap();
+        assert!(
+            json.contains(r#""keys":[{"time":0.0,"value":2.0}"#),
+            "{json}"
+        );
+        let back: Animation = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, animation);
     }
 
     #[test]

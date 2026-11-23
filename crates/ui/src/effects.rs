@@ -77,7 +77,7 @@ pub(crate) fn pick_isf_file() -> Option<PathBuf> {
 }
 
 /// What an effect is: its description, or why it is not rendered.
-fn describe(effect: &Effect) -> Result<&'static EffectInfo, String> {
+pub(crate) fn describe(effect: &Effect) -> Result<&'static EffectInfo, String> {
     if effect.kind == ISF_KIND {
         return shader_of(effect)
             .map(|shader| shader.info)
@@ -598,6 +598,7 @@ fn shape_label(shape: Shape) -> &'static str {
         Shape::Ramp => "Rampe",
         Shape::Square => "Carré",
         Shape::Random => "Aléatoire",
+        Shape::Keyframes => "Points clés",
     }
 }
 
@@ -667,6 +668,29 @@ pub(crate) fn animation_settings(ui: &mut egui::Ui, param: &ParamInfo, animation
                 animation.once = !animation.once;
             }
         });
+        if animation.shape == Shape::Keyframes {
+            // Starting from the wave's two ends.
+            if animation.keys.is_empty() {
+                animation.keys.insert(prism_core::Keyframe {
+                    time: 0.0,
+                    value: animation.from,
+                    ease: prism_core::Ease::Linear,
+                });
+                animation.keys.insert(prism_core::Keyframe {
+                    time: 1.0,
+                    value: animation.to,
+                    ease: prism_core::Ease::Linear,
+                });
+            }
+            ui.label(
+                RichText::new(format!(
+                    "{} points clés : à placer dans la timeline",
+                    animation.keys.len()
+                ))
+                .weak(),
+            );
+            return;
+        }
         ui.horizontal(|ui| {
             ui.spacing_mut().slider_width = 70.0;
             ui.label("de");

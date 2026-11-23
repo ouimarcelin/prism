@@ -166,6 +166,15 @@ pub(crate) fn drag_offset(ui: &egui::Ui) -> egui::Vec2 {
     )
 }
 
+/// What the top pane of the window shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TopView {
+    /// The grid of layers and clips.
+    Layers,
+    /// The keys of the selected clip's settings.
+    Timeline,
+}
+
 /// Smallest size of a pane, in points.
 const PANE_MIN: f32 = 120.0;
 
@@ -177,6 +186,8 @@ pub struct ControlPanel {
     pub(crate) renaming: Option<(crate::grid::Target, String)>,
     /// The bank of effects and generators.
     pub(crate) bank: crate::bank::BankState,
+    /// What the top pane shows.
+    pub(crate) top_view: TopView,
     /// Cell the engine was last asked to draw apart.
     pub(crate) preview_asked: Option<Slot>,
     /// The generator browser, while open.
@@ -220,6 +231,7 @@ impl ControlPanel {
             renaming: None,
             bank: crate::bank::BankState::default(),
             preview_asked: None,
+            top_view: TopView::Layers,
             browser: None,
             previews_asked: false,
             layout_drag: None,
@@ -1627,8 +1639,22 @@ impl ControlPanel {
 
         let canvas = theme::canvas_frame(&style);
         let side = theme::side_frame(&style);
-        let mut grid_ui = pane(ui, "layers", layers_rect, canvas);
-        self.grid(&mut grid_ui, frame.status);
+        let mut top_ui = pane(ui, "layers", layers_rect, canvas);
+        top_ui.horizontal(|ui| {
+            for (view, label) in [
+                (TopView::Layers, "Calques"),
+                (TopView::Timeline, "Timeline"),
+            ] {
+                if ui.selectable_label(self.top_view == view, label).clicked() {
+                    self.top_view = view;
+                }
+            }
+        });
+        top_ui.add_space(4.0);
+        match self.top_view {
+            TopView::Layers => self.grid(&mut top_ui, frame.status),
+            TopView::Timeline => self.keyframes_panel(&mut top_ui, frame.status),
+        }
         let mut output_ui = pane(
             ui,
             "output monitor",

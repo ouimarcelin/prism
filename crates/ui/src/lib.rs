@@ -19,6 +19,7 @@ mod document;
 mod effects;
 mod grid;
 mod inspector;
+mod keyframes;
 mod labels;
 mod learn;
 mod lighting;

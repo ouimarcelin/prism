@@ -28,7 +28,7 @@ pub enum PresetContent {
         effects: Vec<Effect>,
     },
     /// The mixing settings and effects of a layer.
-    Layer(LayerPreset),
+    Layer(Box<LayerPreset>),
 }
 
 /// The settings of a layer a preset keeps: not its name, clips or state.
@@ -239,7 +239,7 @@ mod tests {
         layer.effects.push(Effect::new("invert"));
         let layer_preset = Preset {
             name: "Écran: moitié".into(),
-            content: PresetContent::Layer(LayerPreset::of(layer)),
+            content: PresetContent::Layer(Box::new(LayerPreset::of(layer))),
         };
         let path = layer_preset.save(dir.path()).unwrap();
         assert_eq!(path.file_name().unwrap(), "Écran- moitié.json");

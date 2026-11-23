@@ -129,3 +129,9 @@ La CI GitHub tourne de nouveau (facturation réglée) et a trouvé trois échecs
 ## Ticket 109 : chemins de projet sous Windows
 
 Le job Windows de la CI (non bloquant) échouait sur `project_io` : un chemin relatif enregistré avec `/` revenait au chargement avec des séparateurs mêlés (`…\media/tunnel.mov`), et les tests écrivaient des chemins absolus Unix. `resolve` reconstruit le chemin partie par partie (séparateurs du système), sauf un chemin enraciné sans lecteur (Windows), posé sur le lecteur du dossier du projet ; les tests prennent des chemins absolus du système (`OUTSIDE`, `OUTSIDE_SHADER`).
+
+## Ticket 111 : timeline à points clés (2026-11-23)
+
+Prompt (objectif) : « intègres : éditeur nodal, objet 3D et timeline avec points clés temporelles, utilises context7… ». Fait dans l'ordre timeline, nodal, 3D.
+
+Résultat : ADR 0049. `Shape::Keyframes`, `Keyframe`, `Ease`, `Keys` (capacité fixe, liste en JSON) dans `prism-core` ; vue `keyframes.rs` (pistes, menu « + Piste », points glissés, menu contextuel) ; onglets « Calques | Timeline » du volet du haut. Tests : `keys_stay_in_order_and_ease_between`, `the_timeline_animates_a_setting_by_keys` ; capture `timeline`.
